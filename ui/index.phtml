@@ -1,0 +1,79 @@
+<!doctype html>
+<html class="h-100">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        
+    <link rel="stylesheet" href="resources/vendor/bootstrap/bootstrap-4.3.1.min.css">
+    <link rel="stylesheet" href="resources/vendor/bootstrap/bootstrap-dialog-1.33.4.min.css">
+    <link rel="stylesheet" href="resources/styles.css">
+    <link rel="stylesheet" href="app.css">
+    
+    <script type="text/javascript" src="resources/vendor/jquery/jquery-3.5.1.min.js"></script>
+    <script type="text/javascript" src="resources/vendor/bootstrap/bootstrap-4.3.1.bundle.min.js"></script>
+    <script type="text/javascript" src="resources/vendor/bootstrap/bootstrap-dialog-1.33.4.min.js"></script>
+    <! 33- OK >
+    <script type="text/javascript" src="resources/vendor/paho-mqtt/paho-mqtt-1.1.0.min.js"></script>
+     
+    <script type="text/javascript" src="resources/vendor/d3/d3-5.7.0.min.js"></script>
+    <script type="text/javascript" src="app.js"></script>
+    
+    <title>{{ title }}</title>
+
+</head>
+
+<body class="d-flex"> 
+    <main class= "flex-1 d-flex flex-column overflow-auto"> 
+        <header > 
+            <nav class="navbar navbar-expand-md fixed-top bg-dark text-white py-1">
+                <div class="navbar-brand text-success" href="#">{{ title }}</div>
+                <ul class="nav nav-tabs mr-auto">
+                    <li class="nav-item nav-link active" data-href="/render/gqa" >Auswertungen</li> 
+                    <li class="nav-item nav-link" data-href="/api/system?format=html" >Systeminfo</li>
+                    <li class="nav-item nav-link" data-href="/docs" >Dokumentation</li>
+                    <li class="nav-item nav-link" data-href="/apiframe" >API-Schnittstelle</li>
+                    {% if api.DBADMIN %}
+                        <li class="nav-item nav-link" data-href="/dbadminframe" >DB-Admin</li>
+                    {% endif %}
+                    {% if api.COVERAGE %}
+                        <li class="nav-item nav-link" data-href="/coverage" >Coverage</li>
+                    {% endif %}
+                    <li class="nav-item nav-link" data-href="/api/gqa/matrix?format=html" >Testmatrix</li>
+                    <li class="nav-item nav-link" data-href="/api/gqa/configs?format=html" >Configmatrix</li>
+                    <li class="nav-item nav-link" data-href="/api/gqa/tagging?art=full&format=html" >Tags (full)</li>
+                    <li class="nav-item nav-link" data-href="/api/gqa/tagging?art=sum&format=html" >Tags (sum)</li>
+                    <li class="nav-item nav-link" data-href="/api/gqa/tagging?art=test&format=html" >Tags (test)</li>
+                    <li class="nav-item nav-link" data-href="/api/gqa/tagging?art=tags&format=html" >Tags (tags)</li>
+                </ul>
+            </nav>
+        </header>
+
+        <content id="dynamic" class="flex-1 d-flex ml-1"></content> 
+    
+        <footer > 
+            <span class="text-muted">{{ title }} - {{ version }}</span>
+        </footer>
+    </main>
+    <script>
+    $(document).ready(function(){
+        $(document).on({
+            ajaxStart: function(){
+                app.splashLoading( true );
+            },
+            ajaxStop: function(){ 
+                app.splashLoading( false );
+            }    
+        });
+        $('[data-href]').click(function(e){
+            e.preventDefault();
+            $(".nav").find(".active").removeClass("active");
+            $(this).addClass("active");  
+            $("#dynamic").load($(this).attr('data-href'));
+        });
+        // preload active nav-link
+        $("#dynamic").load( $(".nav").find(".active").attr('data-href') );
+        
+    });
+    </script>
+</body>
+</html>

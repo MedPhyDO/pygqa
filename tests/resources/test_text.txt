@@ -1,0 +1,4 @@
+Die Datei "test_text.txt"
+Ein einfacher text
+mit mehreren 
+Zeilen

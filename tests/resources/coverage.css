@@ -1,0 +1,16 @@
+.pyfile #footer {
+    margin: 1rem 1rem;
+    position: fixed !important;
+    top: -17px;
+    position: absolute;
+    background: lightgrey ;
+}
+.pyfile #footer a:first-child{
+    font-size: 1.5em;
+    border: 1px solid royalblue;
+    background: royalblue;
+    color: white;
+    border-radius: 8px;
+    box-shadow: 0 3px 5px rgba(0, 0, 0, 0.18);
+    padding:2px
+}

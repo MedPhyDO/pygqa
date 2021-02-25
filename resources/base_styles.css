@@ -1,0 +1,188 @@
+/*
+    Allgemeine styles für ui und mpdf 
+
+*/
+
+
+@import url(vendor/pygment/codehilite.css);
+
+@import url(vendor/material/materialize-colors.css);    /* color from https://materializecss.com */
+
+@import url(vendor/material/materialdesignicons.min.css);	/* https://materialdesignicons.com/ */
+
+/*
+	in materialdesignicons ist font-family: "Material Design Icons" 
+	für die Klasse .mdi:before, .mdi-set gesetzt
+*/
+.mdi,
+.md-icons,
+.material-icons {
+  font-family: 'Material Design Icons';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 1.2em; /* 24px; */  /* Preferred icon size */
+  display: inline-block;
+  vertical-align: middle;
+  width: 1em;
+  height: 1em;
+  line-height: 1em;
+  text-transform: none;
+  letter-spacing: normal;
+  word-wrap: normal;
+
+  /* Support for all WebKit browsers. */
+  -webkit-font-smoothing: antialiased;
+  /* Support for Safari and Chrome. */
+  text-rendering: optimizeLegibility;
+
+  /* Support for Firefox. */
+  -moz-osx-font-smoothing: grayscale;
+
+  /* Support for IE. */
+  font-feature-settings: 'liga';
+  
+  /* zusätzlich */
+  cursor:pointer;
+}
+
+/* eigene fontawesome Ähnliche einstellungen */
+.x2 {
+  font-size: 2em;
+}
+.x3 {
+  font-size: 3em;
+}
+.x4 {
+  font-size: 4em;
+}
+.x5 {
+  font-size: 5em;
+}
+.x6 {
+  font-size: 6em;
+}
+
+/* Rules for sizing the icon. */
+.md-icons.md-12, .material-icons.md-12 { font-size: 12px; line-height: 1em; }
+.md-icons.md-15, .material-icons.md-15 { font-size: 15px; line-height: 1em; }
+.md-icons.md-18, .material-icons.md-18 { font-size: 18px; line-height: 1em; }
+.md-icons.md-21, .material-icons.md-21 { font-size: 21px; line-height: 1em; }
+.md-icons.md-24, .material-icons.md-24 { font-size: 24px; line-height: 1em; }
+.md-icons.md-30, .material-icons.md-30 { font-size: 30px; line-height: 1em; }
+.md-icons.md-36, .material-icons.md-36 { font-size: 36px; line-height: 1em; }
+.md-icons.md-42, .material-icons.md-42 { font-size: 42px; line-height: 1em; }
+.md-icons.md-48, .material-icons.md-48 { font-size: 48px; line-height: 1em; }
+
+/* Rules for using icons as black on a light background */
+.md-icons.md-dark, .material-icons.md-dark { color: rgba(0, 0, 0, 0.54); }
+.md-icons.md-dark.md-inactive, .material-icons.md-dark.md-inactive { color: rgba(0, 0, 0, 0.26); }
+
+/* Rules for using icons as white on a dark background */
+.md-icons.md-light, .material-icons.md-light { color: rgba(255, 255, 255, 1); }
+.md-icons.md-light.md-inactive, .material-icons.md-light.md-inactive { color: rgba(255, 255, 255, 0.3); }
+
+.opacity-100{
+	opacity: 1;
+}
+.opacity-25{
+	opacity: 0.25;
+}
+.opacity-50{
+	opacity: 0.5;
+}
+.opacity-75{
+	opacity: 0.75;
+}
+
+  
+/*
+
+ material chips elemente 
+
+*/ 
+
+.md-chip {
+    border-radius: 6px;
+    display: inline-flex;
+    padding: 0;
+    
+	box-shadow: 0 2px 3px 0 rgba(0, 0, 0, 0.16), 0 2px 6px 0 rgba(0, 0, 0, 0.12);
+	-webkit-transition: .2s ease-out;
+          transition: .2s ease-out;
+}
+
+.md-chip:hover {
+  box-shadow: 0 3px 6px 0 rgba(0, 0, 0, 0.18), 0 3px 8px 0 rgba(0, 0, 0, 0.15);
+  cursor: default;
+}
+
+.md-chip i{
+    margin-top: -2px;
+}
+
+.md-chip-text {
+    color: rgba(0, 0, 0, 0.87);
+    display: inline-block;
+    padding: 0 1px;
+}
+
+.md-field{
+	background-color: #FCFCFC;
+	color: black;
+	border: 1px solid #D3D3D3;
+/*	font-size: 1em; */
+	border-radius: 3px;
+	padding: 0 5px;
+	min-height: 1.5em;
+}
+.md-field-text {
+    color: rgba(0, 0, 0, 0.87);
+    display: inline-block;
+    padding: 0 1px;
+}
+
+.ui-btn-icon-notext{
+	width: 1em;
+}
+
+.md-chip .kbd{
+	display: inline-block;
+	margin: 0 .1em;
+	padding: .1em .6em;
+	font-family: Arial,"Helvetica Neue",Helvetica,sans-serif;
+	font-size: 11px;
+	line-height: 1.4;
+	color: #242729;
+	text-shadow: 0 1px 0 #FFF;
+	background-color: #e1e3e5;
+	border: 1px solid #adb3b9;
+	border-radius: 3px;
+	box-shadow: 0 1px 0 rgba(12,13,14,0.2),0 0 0 2px #FFF inset;
+	white-space: nowrap;
+}
+
+.md-chip .menu {
+    background-color: gainsboro;
+}
+
+.md-chip.apps,
+a .md-chip {
+	display: -webkit-box;
+	display: -webkit-inline-flex;
+	display: -ms-inline-flexbox;
+	display: inline-flex;
+	
+	-webkit-box-orient: vertical;
+    -webkit-flex-direction: column;
+    flex-direction: column;
+	
+	-webkit-justify-content: center;
+	justify-content: center;
+
+	-webkit-box-align: center;
+	-webkit-align-items: center;
+	align-items: center;
+	-webkit-align-content: center;
+	align-content: center;
+	overflow:hidden;
+}

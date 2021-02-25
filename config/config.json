@@ -1,0 +1,70 @@
+{
+   "server": {
+        "webserver":{
+            "host": "127.0.0.1",
+            "port": 5000,
+            "name": "gqa",
+            "title" : "GQA - Geräte-QA"
+        },
+        "api":{
+            "resources" : "{{BASE_DIR}}/resources/",
+            "DBADMIN" : true,
+            "COVERAGE" : true
+        },
+        "logging":{
+            "__level__" : "0 - NOTSET, 10 - DEBUG, 20 - INFO, 30 - WARNING, 40 - ERROR, 50 - CRITICAL",
+            "safrs": 30,
+            "webapp": 30,
+            "sqlalchemy" : 40
+        }
+    },
+    "database": {
+        "servername" : "variansystem", 
+        "variansystem" : {
+            "host": "",
+            "dbname": "",
+            "user": "",
+            "password": ""
+        },
+        "main": "gqa",
+        "gqa" : {
+            "name" : "gqa.json",
+            "connection": "sqlite:///{{BASE_DIR}}/gqa.db"
+        }
+    },
+    "dicom": {
+        "servername" : "VMSDBD", 
+        "VMSDBD" : {
+            "aec": "VMSDBD",
+            "server_ip": "",
+            "server_port": 105,
+            "aet": "GQA",
+            "listen_port": 50300,
+            "local_dir": "files/DICOM"
+        }
+    },
+    "resultsPath" : "files/results",
+    "units": {
+        "_QA Linac1" : "Linac-1",
+        "_QA Linac2" : "Linac-2"
+    },
+    "pdf": {
+        "style" : "mpdf_style.css",
+        "overlay" : "mpdf_overlay.css"
+    },
+    "templates":{
+        "PDF-JT-filename": "{{'%04d' % AcquisitionYear}} - {{unit}} - {{energy}} - {{testId}}.pdf",
+        "PDF-JT-Titel": "GQA Jahrestest - {{testTag}} - {{unit}} - {{energy}}",
+        "PDF-JT-Betreff": "für: {{'%04d' % AcquisitionYear}}",
+        "PDF-MT-filename": "{{'%04d' % AcquisitionYear}}{{ '%02d' % AcquisitionMonth}} - {{unit}} - {{energy}} - {{testId}}.pdf",
+        "PDF-MT-Titel": "GQA Monatstest - {{testTag}} - {{unit}} - {{energy}}",
+        "PDF-MT-Betreff": "für: {{'%04d' % AcquisitionYear}}/{{ '%02d' % AcquisitionMonth}}"
+    },
+    "version": "0.1.0",
+    "variables" : {
+        "Version" : "0.1.0",
+        "Klinik" : "",
+        "Abteilung" : "",
+        "logo": "Logo.png"
+    }
+}

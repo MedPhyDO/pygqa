@@ -1,0 +1,328 @@
+/*
+Allgemeine styles für mpdf 
+
+*/
+
+@import url(base_styles.css);
+
+/* 
+    Seiteneinstellungen für Weasyprint
+*/
+
+body { 
+  font-family: DejaVuSerif;
+}
+
+body, .pageContent{
+    border: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+div {
+    border: 0;
+    margin: 0;
+    padding: 0;
+}
+
+*, *:before, *:after {
+    box-sizing: border-box !important;
+}
+
+.page--two-col {
+    column-count: 2;
+    column-gap: 10mm;
+    column-fill: auto;
+}
+
+.topline{
+    top:-2mm;
+    position:relative;
+}
+
+para{
+    
+}
+
+.auswertung { 
+    float:right;
+    font-weight: bold;
+}
+
+.tip { 
+    float:left;
+    font-size:8px
+}
+.text {
+    border:0;
+    margin:0;
+    padding:0;
+    float:left;
+}
+.html {
+    border:0;
+    margin:0;
+    padding:0;
+    float:left;
+}
+.image {
+    border:0;
+    margin:0;
+    padding:0;
+    float:left;
+}
+  
+.resultIcon{
+    margin-bottom: 0mm;   
+}
+.tableIcon{
+    margin-bottom: 0mm;   
+}
+  
+/* 
+    Layout einstellungen
+*/
+.layout-100-width,
+.layout-fill-width {
+    width: 100%; 
+    float:left;
+    margin:0;
+}
+.layout-75-width {
+    width: 75%; 
+    float:left;
+    margin:0;
+}
+.layout-50-width {
+    width: 50%; 
+    float:left;
+    margin:0;
+}
+.layout-25-width {
+    width: 25%; 
+    float:left;
+    margin:0;
+}
+.layout-10-width {
+    width: 10%; 
+    float:left;
+    margin:0;
+}
+.layout-20-width {
+    width: 20%; 
+    float:left;
+    margin:0;
+}
+.layout-30-width {
+    width: 30%; 
+    float:left;
+    margin:0;
+}
+.layout-40-width {
+    width: 40%; 
+    float:left;
+    margin:0;
+}
+.layout-50-width {
+    width: 50%; 
+    float:left;
+    margin:0;
+}
+.layout-60-width {
+    width: 60%; 
+    float:left;
+    margin:0;
+}
+.layout-70-width {
+    width: 70%; 
+    float: left;
+    margin: 0;
+}
+.layout-80-width {
+    width: 70%; 
+    float: left;
+    margin: 0;
+}
+.layout-90-width {
+    width: 70%; 
+    float: left;
+    margin: 0;
+}
+
+/* flexbox
+https://css-tricks.com/snippets/css/a-guide-to-flexbox
+
+All the flex-*, align-*, justify-* and order properties are supported. 
+The flex and flex-flow shorthands are supported too.
+-------------------------------------------------------------- */
+.layout-row{
+    display: flex; 
+    flex-direction: row;
+    background-color:lime;
+    align-content: space-between;
+    justify-content: space-between;
+}
+
+.layout-column{
+    display: flex; 
+    flex-direction: column;
+}
+
+.flex-wrap{
+    flex-wrap: wrap;
+}
+
+.flex,
+.flex-item {
+
+	background: tomato;
+
+/*	
+    padding: 5px;
+    width: 200px;
+    height: 150px;
+    margin-top: 10px;
+      
+    line-height: 150px;
+    color: white;
+    font-weight: bold;
+    font-size: 3em;
+    text-align: center;
+    */
+}
+/* 
+	child element's 
+	normale Inhalte über inline-flex und align-items
+*/
+
+
+
+
+/* anpassungen standard Elemente
+ weasyprint/css/html5_ua.css
+-------------------------------------------------------------- */
+p {
+    margin-top: 0.5em !important;
+    margin-bottom: 0.5em !important;
+    border: 0px !important;
+    padding-bottom: 0 !important;
+    /*  
+    border: 1px solid silver !important;  
+    background: #FCFCFC; 
+    */                                                                                                                                                                                        
+}
+
+h1 { 
+    font-size: 1.25em; 
+    margin-top: .25em; 
+    margin-bottom: .25em; 
+}
+h2 { 
+    font-size: 1.1em; 
+    margin-top: .1em; 
+    margin-bottom: .1em; 
+}
+h3 { 
+    font-size: 1.0em; 
+    margin-top: .1em; 
+    margin-bottom: .1em; 
+}
+h4 { 
+    font-size: 0.9em; 
+    margin-top: .1em; 
+    margin-bottom: .1em; 
+}
+h5 { 
+    font-size: 0.8em; 
+    margin-top: .1em; 
+    margin-bottom: .1em; 
+}
+h6 { 
+    font-size: 0.7em; 
+    margin-top: .1em; 
+    margin-bottom: .1em; 
+}
+
+ol, ul { 
+    margin-bottom: 0.25em; 
+    margin-top: 0.25em;
+}
+
+
+/* Tabellen
+<table><thead>
+<tr>
+ <th class="blank level0" ></th>
+ <th class="col_heading level0 col0" >Header Spalte 0</th>
+</tr>
+<thead><tbody>
+<tr>
+ <th class="row_heading level0 row0" ></th>
+ <td class="data row0 col0" >Inhalt Spalte 0</td>
+</tr>
+</tbody></table>
+-------------------------------------------------------------- */
+
+table {
+    color: #333;
+    font-family: Helvetica, Arial, sans-serif;
+    min-width: 100px;
+    border-collapse: collapse; 
+    border-spacing: 0;
+    font-size: 10px;
+}
+td, th { 
+    border: 1px solid gray; 
+    text-align: center;
+    vertical-align: middle;
+}
+th { 
+    font-weight: bold;
+}
+thead th, tbody th { 
+    background: #FCFCFC; 
+}
+
+th,td,caption { 
+    padding: 2px 2px 2px 2px;
+}
+
+/*
+  You can zebra-stripe your tables in outdated browsers by adding
+  the class "even" to every other table row.
+ */
+tbody tr:nth-child(even) td,
+tbody tr.even td  {
+  background: #FAFAFA;
+}
+tfoot       { font-style: italic; }
+caption     { background: #eee; }
+
+/* Angaben auch für pivot
+*/
+table { 
+    empty-cells: show;
+}
+
+table .index_name{
+    
+}
+table .blank{
+    
+}
+ 
+/* spezielle Elemente
+-------------------------------------------------------------- */
+  
+.infobox {
+    margin:0;
+    border: 1px solid silver;
+    border-radius: 4px;
+    padding: 5px;
+}     
+       
+
+
+/* Misc classes
+-------------------------------------------------------------- */
+

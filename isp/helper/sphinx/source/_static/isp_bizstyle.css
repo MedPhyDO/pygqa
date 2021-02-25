@@ -1,0 +1,40 @@
+
+.bodywrapper .body{
+    max-width: unset;
+}
+
+div.related {
+    position: sticky;
+    top: 0px;
+}
+div.sphinxsidebar {
+    position: sticky;
+    top: 30px;
+}
+
+dl.class > dt {
+    background-color: powderblue;
+}
+
+dl.method > dt{
+    background-color: aliceblue;
+}
+
+dl.function > dt{
+    background-color: aliceblue;
+}
+
+dl.attribute .sig-name{
+    background-color: #F2F2F2 !important;
+    font-size: 1em;
+}
+
+.admonition-todo .admonition-title{
+    background-color: orange !important;
+}
+
+dl.field-list dt,
+dl.field-list dd
+{
+    margin-bottom: 10px;
+}

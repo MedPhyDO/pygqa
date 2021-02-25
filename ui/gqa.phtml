@@ -1,0 +1,593 @@
+<div class="">
+    <div class="GQA " id="{{ id }}" ></div>
+    <div>Erklärung: 
+        <span class="gqa-help md-chip green lighten-4">Test ausgewertet und PDF erstellt</span>
+        <span class="gqa-help md-chip yellow lighten-3">Test gemacht. Auswertung starten durch anklicken</span>
+        <span class="gqa-help md-chip grey lighten-1">Test noch nicht vollständig</span>
+    </div>
+</div>
+<style>
+
+	.gqa_table{
+		border-collapse: collapse;
+		width: 100%;
+		margin-bottom: 5px;
+	}
+
+	.gqa_table, .gqa_table th, .gqa_table td {
+		border: 1px solid silver;
+	}
+	.gqa_table th.row_0 {
+    	width: 160px;
+	}
+	.gqa_table th.row_0, .gqa_table td {
+		padding: 5px;
+		min-width: 175px;
+	}
+	.gqa_table th, .gqa_table td {
+		padding: 5px;
+		min-width: 90px;
+	}
+	.gqa_table tr:nth-child(even) {
+		background-color: #f2f2f2;
+	}
+	.gqa_table .md-chip{
+		padding: 2px;
+		margin: 2px;
+	}
+	.gqa_table .year{
+		margin: 5px;
+	}
+    .gqa_table .info{
+    
+    }
+    
+	.gqa-help{
+		padding: 2px;
+		margin: 2px;
+	}
+	.gqa_table .tip{
+		font-size: smaller;
+		max-width: 350px;
+	}
+	.gqa_table .optional{
+		background-color: cornflowerblue;
+		color: antiquewhite;
+		border-radius: 6px;
+		padding: 1px;
+		margin-left: 3px;
+		line-height: 10px;	
+		max-width: 350px;
+		font-size: smaller;
+		width: max-content;
+	}
+	.gqa_table .need{
+		background-color: cornflowerblue;
+		color: antiquewhite;
+		border-radius: 6px;
+		padding: 1px;
+		margin-left: 3px;
+		line-height: 10px;	
+		max-width: 350px;
+		font-size: smaller;
+		width: max-content;
+	}	
+	.gqa_table .resultIcon{
+		border-radius: 6px;
+		margin-top: 2px;
+		margin-left: 2px;
+	}
+	.gqa_table .pdfIcon{
+		margin-top: 2px;
+		border-radius: 6px;
+	}
+	
+</style>
+
+<script>
+
+var gqaServer = "http://{{ serverHost }}"; 
+
+var gqaMQTT = {{ mqtt|tojson|safe }}
+
+//var gqaMQTTbase = " gqaMQTTbase "; // gqa oder gqa_dev
+
+// console.info("gqaMQTT", gqaMQTT );
+
+// gqaMQTT["password"] = "";
+
+localMqtt = app.mqtt( gqaMQTT );
+
+localMqtt.unsubscribe( gqaMQTT["basetopic"] + "/stat/progress/#" ); // unsubscribe zum testen
+localMqtt.subscribe( gqaMQTT["basetopic"] + "/stat/progress/#", function( msg ){ 
+    // console.info("progress callback", msg );
+    
+    // <AcquisitionYear>-<AcquisitionMonth>-<unit>-<testId>-<energy>
+	var key = "";
+	// key zusammenstallen
+		
+	if ( typeof msg.payload === "object" ){
+
+		var p = msg.payload;
+
+		key = (p.AcquisitionYear||"") + "-" + (p.AcquisitionMonth||0);
+		key += "-" + (p.unit||"") + "-" + (p.testId||"") + "-" + (p.energy||"");
+
+		// progress angaben (maxprogress und progress)
+		var progress = p.progress / p.maxprogress * 100;
+				
+		// console.info("gqaMQTTbase subscribe", key, progress);
+			
+		var style = "background-color:#fff176 !important;";
+			
+		style += "background:linear-gradient(to right, #81C784 " + progress + "% , #fff176 0%) !important;";
+		style += "background:-ms-linear-gradient(left, #81C784 " + progress + "% , #fff176 0%) !important;";
+		// das Element ändern. Gelb als Farbe setzen falls gradient nicht unterstützt wird
+		// 
+		$("[data-key='" + key + "']").attr("style", style ); 
+
+	}
+} );
+
+
+var resultIcons = {
+	999: "mdi-block-helper",
+	0: "mdi-block-helper",
+	1: "mdi-close-outline red-text",
+	2: "mdi-alert-circle-outline orange-text",
+	3: "mdi-alert-circle-outline amber-text",
+	4: "mdi-check-outline lime-text",
+	5: "mdi-check-outline green-text"
+}
+var pdfClass = "mdi-file-pdf-box green-text";
+
+function getCell( year, month, unit, type, key, data, fullData, flatResults ){
+	/**
+	 * 
+	 * year : int - das Ausgabe Jahr
+	 * month : int - der Ausgabe Monat bei 0 ist ein Jahreseintrag
+	 * unit : string - Der Gerätename
+	 * type - MT | JT
+	 * key - der Tag keyname des Tests
+	 * data -
+	 * fullData - 
+	 * flatResults - nur wenn result seperat angegeben wurde 
+	 * 
+	 * Elementeigenschaft
+	 * 
+	 * data-key = <year>-<month>-<unit>-<testId>-<energy>
+	 *     wird für die MQTT Indentifizierung verwendet 
+	 * 
+	 */
+
+	var cell = {
+		"html": "",
+		"class": ""
+	};
+	html = '';
+	
+	title = key + " : " + unit;
+	
+	if (month > 0) {
+    	title += " - Monat: " +  month;
+	} else {
+    	title += " - Jahrestest";
+	}
+	
+	var maxFields = data["fields"];
+	var energyFields = d3.entries( data["energyFields"] );
+	
+
+	var ready = d3.map( data["ready"] );
+	// fehlermanchen = data["value"]["results"]
+    // return '<div title="' + title + '" >' + html + '</div>';
+	// check all for ready
+	if ( ready.get( 'all' ) !== 1 ){
+		cell.class = "all-not-ready";
+	}  else {
+		cell.class = "all-ready";
+	}
+	
+	energyFields.map( function(d, i, a){
+    	// d = { key, value)
+    	// 
+    	// a alles items
+    	
+    	// console.info("energyFields", d, d.key, d.value);
+    	
+    	// fehlermanchen = data["value"]["results"]
+		
+		var energy = d.key;
+		// Monat oder Jahr (0)
+		// var month = 0;
+		// if (type === "MT") {
+		//	month = key;
+		// }
+		var proEnergy = d.value; // ( energy in energyFields ) ? energyFields[energy] : 0;
+		
+		var isReady = false;
+		var count = 0;
+		var hasPdf = false;
+		var hasResult = false;
+		var results = [];
+		// gibt es in data Ergebnisse für den Monat und die Energie
+		if ( (month in data) && ( energy in data[month]) ) {
+    		testResults = data[month][energy];
+
+    		count = ( "counts" in testResults) ? testResults["counts"] : 0;
+    		
+    		hasPdf = ( "pdf" in testResults) ? testResults["pdf"] : false;
+    		
+    		isReady = ( "ready" in testResults) ? testResults["ready"] : false;
+    		 
+    		// results = ( "results" in testResults) ? testResults["results"] : [];
+    		
+    // console.info("getCell testResults", testResults, count, hasPdf, isReady );
+		}
+		
+		//  year, month, unitName, testId, energy, isReady, hasPdf
+		var params = year + "," + month + ",'" + unit + "','" + fullData.key + "','" + energy + "'," + isReady + "," + hasPdf;
+		
+		var dataKey = year + "-" + month + "-" + unit + "-" + fullData.key + "-" + energy;
+		
+		// result vorhanden ? reihenfolge <year>|<unit>|<test>|<energy>|<month>
+		if ( "index" in flatResults ) {
+    		var resultKey = year + "|" + unit + "|" + fullData.value["tag"] + "|" + energy + "|" + month
+   		
+    		var idx = flatResults["index"].indexOf(resultKey);
+			while (idx != -1) {
+				results.push( {"acceptance" : flatResults["data"][ idx ][0] } );
+				idx = flatResults["index"].indexOf(resultKey, idx + 1);
+			}
+    	}
+
+		
+		var cls = "_" + energy + " ";
+		if ( hasPdf === true ){
+			cls += "green lighten-4";
+			// console.info("energyNames.map", data );
+		} else {
+			if ( isReady === true ) {
+				cls += "yellow lighten-3";
+			} else {
+				cls += "grey lighten-1";
+			}
+		}
+
+		// console.info( type, energy, key, count, isReady, hasPdf );
+		// 
+		html += '<span class="md-chip ' + cls + '" onClick="gqaEnergyClick( this, ' + params + ') " data-key="' + dataKey + '" >';
+		html += energy;
+		if ( hasPdf  ) {
+			html += '<i class="mdi ' + pdfClass + ' pdfIcon"></i>';
+		} else {
+			html += ' (' + count + '/' + proEnergy + ')';
+		}
+		if ( results.length > 0) {
+			for (i = 0; i < results.length; i++) { 
+				acceptance = results[i]["acceptance"];
+				if ( !acceptance ){
+					acceptance = 0
+				}
+				html += '<i class="mdi ' + resultIcons[ acceptance ] + ' white resultIcon"></i>'; 
+			}
+		}
+		html += '</span>';
+	});
+	cell.html = '<div title="' + title + '" >' + html + '</div>';
+	return cell;
+}
+
+function GQA_view( data, param ){
+    // summary:
+    //     sw
+	// gqa: object 
+	//     - info
+	//     - results
+	//     - units
+	
+	var id = "{{ id }}";
+		
+	// gibt es schon eine tabelle zuerst entfernen dann neu erzeugen
+	var div = d3.select("#" + id);
+    div.selectAll('table').remove();
+	div.selectAll('H3').remove();
+	
+	var titles = [ param.year, "Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+
+	// alle info zum anzeigen durchgehen und inhalte von units für die Daten verwenden
+	var flatResults = data["results"]
+	
+	var units = d3.keys( data["units"] );	
+	var tags = ("tags" in data) ? data["tags"] : {} ;	
+	
+	units.map( function( unit ){
+		var unitName = data["units"][unit];
+		
+		div.append( 'H3' ).html( unitName ).attr('class', 'm-0 text-white bg-secondary');
+		
+	    var table = div.append('table')
+			.attr("class", "gqa_table");	
+
+		var headers = table.append('thead').append('tr')
+			.selectAll('th')
+			.data( titles ).enter()
+			.append('th')
+			.attr('class', function(d, i) {
+				return "row_" + i;
+			})
+			.html(function(d, i) {
+				var s = "";
+				if (i === 0) {
+					s += '<span class="md-chip mdi mdi-arrow-left-drop-circle-outline" onClick="gqaChange( ' + d + ', -1)" ></span>';
+					s += '<span class="year">' + d + '</span>';
+					s += '<span class="md-chip mdi mdi-arrow-right-drop-circle-outline" onClick="gqaChange( ' + d + ', 1)"></span>';
+				} else {
+					// Monatsnamen
+					s = d;
+				}
+				return s;
+			});
+			
+        
+        tests = d3.entries( data["GQA"] );  
+		var rows = table.append('tbody').selectAll('tr')
+			.data( tests ).enter()
+			.append('tr')
+		;
+
+		var cells = rows.selectAll('td')
+			.data( function (d) {
+    			if ( !(unitName in d.value) ) {
+        			return false;
+    			}
+				return titles.map(function(k, i) {
+    				// d = eintrag ( key, value)
+    				// k = Monatsname
+    				// i = Monat (0 = Jahrestest)
+    				   	
+					var cell = {
+						"colspan": 1,
+						"html": "",
+						"class": ""
+					};
+            		
+   					if (i > 0) {
+   						// die Eigentlichen tests
+   						if (d.key.slice(0, 2) === "JT") {
+       						// für die Jahrestest die Spalten zusammenfassen (colspan)
+   							// und nur im ersten Durchlauf (i=0 für Jahr)
+   							if (i === 1 ) {
+   								cell = getCell( parseInt(param.year), 0, unitName, "JT", d.key, d.value[ unitName ], d, flatResults);
+   								cell.colspan = 12;
+   							} else {
+   								cell.html = "";
+   								cell.class = "remove";
+   							}
+   				
+   						} else if (d.key.slice(0,2) === "MT") {
+   							cell = getCell( parseInt(param.year), i, unitName, "MT", d.key, d.value[ unitName ], d, flatResults );
+   						}
+   
+   					} else {
+   						// die erste Spalte
+   						// 				
+   						title = "";
+   						tip = "";
+   						need = "";
+   						optional = "";		
+   						
+   						if ( d.value[ "tag" ] ) {
+       						
+   							if ( d.value["info"]["optional"] ) {
+   								optional = '<div class="badge badge-pill badge-primary" >Optional wenn ' + d.value["info"]["optional"] + ' OK</div>';
+   							}
+   							if ( d.value["info"]["tip"] ) {
+       							title = d.value["info"]["tip"];
+   								tip = '<div class="tip" >' + d.value["info"]["tip"] + '</div>';
+   							}
+   							if ( d.value["info"]["need"] ) {
+   								need = '<div class="badge badge-pill badge-info" >benötigt: ' + d.value["info"]["need"] + '</div>';
+   							}
+   						}
+   						
+   						params = param.year + ",0 ,'" + unitName + "','" + d.key + "'";
+
+   						s = "";
+   						test = d.key;
+   						if ("tag" in d.value ){
+       						test = d.value["tag"];
+   						}
+   						test = '<div>' + test + '</div>';
+   						s += '<div class="info" title="' + title + '">' + test + need + optional + tip + '</div>';
+   						cell.html = s;
+   					}
+					return cell;
+				});
+			} ).enter()
+			.append('td')
+			.html(function (d) {
+				//console.info("html", arguments );
+				return d.html;
+			})
+			.attr('colspan', function(d, i) {
+				return d.colspan;
+			})
+			.attr('class', function(d, i) {
+				return d.class;
+			})
+		;
+		
+		// alle mit remove gekennzeichneten Zellen wieder entfernen
+		table.selectAll('.remove').remove();
+    });
+	
+	return div;
+}
+
+// zum testen data global anlegen 
+var data = null;
+
+function gqaChange( year, plus ){
+    // summary:
+    //      change visible year
+    
+	if (!plus) plus = 0;
+	
+	var id = "{{ id }}";
+	var div = d3.select("#" + id);
+    div.selectAll('table').remove();
+	div.selectAll('H3').remove();
+	
+	var load = year + plus;
+	// console.info( year, plus, load );
+	
+	// daten laden
+	GQA_loaddata( { "action":"gqa", "year": load } );
+}
+
+function gqaEnergyClick( self, year, month, unitName, testId, energy, isReady, hasPdf ){
+    // summary:
+	//     perform action on selected element
+	
+	// console.info("gqaEnergyClick", isReady, hasPdf, self, self.parentElement, arguments);
+	var param = {
+		"year" : year,
+		"month" : month,
+		"unit" : unitName,
+		"testid" : testId,
+		"energy" : energy,	
+	};
+	
+	if ( hasPdf ) {
+		//var url = app.phypedia.api + "?action=varian&format=json&module=gqa&mode=main&json=" + JSON.stringify(param); 
+		// param action = view verwenden?
+		param["uid"] = (new Date().getTime()).toString(36);
+		
+		var url = gqaServer + "/api/gqa/pdf?" + $.param( param ); //  isp.objectToQuery( param ) ;
+
+        dlgParams = {
+    		cssClass: 'pdf-preview-dialog',
+            title: 'Testauswertung - ' + year + '/' + unitName + ' - ' + energy + ' - ' + testId,
+            message: $('<iframe src="' + url + '"></iframe>'), // $('<div class="test"></div>').load( url ),
+            buttons: [{
+                label: 'Testauswertung erneut durchführen',
+                cssClass: 'btn-secondary',
+                action: function( dialog ) {
+                       dialog.close();
+                       param["action"] = "gqa/run";
+        			   GQA_loaddata( param );
+                }
+            },{
+                label: 'Abbruch',
+                cssClass: 'btn-primary',
+                action: function( dialog ){
+                    dialog.close();
+                }
+            }]
+        };
+        
+		BootstrapDialog.show(dlgParams);
+
+	} else {
+		// kein pdf aber isReady dann test auswertung starten
+		if ( isReady ) {
+			param["action"] = "gqa/run";
+			GQA_loaddata( param );	
+		} else {
+
+			BootstrapDialog.show({
+                title: 'Testauswertung - ' + year + '/' + unitName + ' - ' + energy + ' - ' + testId,
+                message: 'Zu wenig Aufnahmen!<br><br>Testauswertung trotzdem versuchen?',
+                buttons: [{
+                    label: 'Ja',
+                    cssClass: 'btn-secondary',
+                    action: function(dialog) {
+                        dialog.close();
+                        param["action"] = "gqa/run";
+        				GQA_loaddata( param );
+                    }
+                },{
+                    label: 'Nein',
+                    cssClass: 'btn-primary',
+                    action: function(dialog){
+                        dialog.close();
+                    }
+                }]
+            });
+            
+		}
+	}
+}
+
+function gqaTestClick( year, month, unitName, testArt, energy ){
+	// Ein Test soll ausgewertet werden
+	// 
+	//console.info("gqaTestClick", self, unitName, year, testArt);
+
+	var param = {
+		"action" : "gqa/run",
+		"year" : year,
+		"month" : month,
+		"unit" : unitName,
+		"test" : testArt,
+		"energy" : energy
+	};
+	
+	GQA_loaddata( param );
+	
+}
+
+function GQA_loaddata( param ){
+    // summary:
+	//     load data over api
+	// 
+	// param:
+	//		action: gqa|gqa/run
+	//		year
+	//		month
+	//		unit
+	//		energy
+	//		test
+	//
+    var url = gqaServer + "/api/"
+
+    if ( param["action"] == "gqa") {
+        // einfach nur /gqa/<jahr>
+        url += param["action"] + "/" + param["year"];
+        // url += param["action"] + "/info?year=" + param["year"];
+    } else { 
+         // /gqa/<action>?<queryparams>
+        url += param["action"];
+        delete param["action"];
+        url += "?" + $.param( param ); // isp.objectToQuery( param ) ;
+    }
+    
+    // console.info("GQA_loaddata");
+    
+	app.splashLoading( true );
+
+	return d3.json(url).then( function( odata ){
+    	var tests = 0;
+		if ( odata.data && odata.data.GQA ) {
+    		// tests = Object.keys( odata.data.GQA ).length; // .info.length;
+			GQA_view( odata.data, param );
+		} else {
+			// console.info( "GQA_loaddata: wrong data", odata, param, url);
+			
+			BootstrapDialog.show({
+    			type: BootstrapDialog.TYPE_WARNING,
+                title: 'GQA Serverfehler',
+                message: 'Beim durchführen der Abfrage ist ein Fehler aufgetreten',
+            });
+		}
+		app.splashLoading( false );
+		// console.info("GQA_loaddata - ready ", tests);
+	} );
+}
+
+// start with current year
+gqaChange( new Date().getFullYear() );
+
+
+</script>

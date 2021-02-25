@@ -1,0 +1,78 @@
+/*
+
+ 
+
+*/ 
+
+html, body {
+    font-size: 0.9rem;
+    min-height: 100%;
+    position: relative;
+    
+}
+body {
+    overflow: hidden;
+    max-width: 100%;
+    min-width: 100%;
+    max-height: 100%;
+    
+}
+        
+header {
+    height: 45px;
+    max-height: 45px;
+}
+
+footer {
+    height: 20px;
+    max-height: 20px;
+    background-color: #cecece;
+}
+
+.flex-1 {
+    -webkit-flex: 1;
+    -ms-flex: 1;
+    flex: 1;
+    box-sizing: border-box;
+}  
+    
+content{
+    display: block;
+    position: relative;
+    overflow: auto;
+}
+
+iframe {
+    border: none;
+    height: 100%;
+    width: 100%;
+    
+}
+
+.md-chip{
+   box-sizing: unset; 
+}
+
+.pdf-preview-dialog .modal-dialog {
+	width: 90%;
+	height: 90% !important;
+	max-width: unset !important;
+    margin: 1.75rem auto;
+	}
+	
+.pdf-preview-dialog .modal-content {
+	height: 100%;
+}
+
+.pdf-preview-dialog .modal-body, 
+.pdf-preview-dialog .bootstrap-dialog-body,
+.pdf-preview-dialog .bootstrap-dialog-message{
+	box-sizing: border-box;
+    display: -webkit-flex;
+    display: -ms-flexbox;
+	display: flex;
+	flex: 1;
+	padding: unset;
+}
+    
+       
