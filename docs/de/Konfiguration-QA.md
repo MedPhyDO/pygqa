@@ -58,7 +58,7 @@ Zusätzliche Templates für die PDF Erstellung. Default::
 
 ## Optionen `GQA`    
  
-Eine Benannte Liste mit Tests und deren Parametern. [Hier](docs/de/GQA-Tests.md) ist eine Beschreibung der einzelnen Tests zu finden. 
+Eine Benannte Liste mit Tests und deren Parametern. [Hier](/docs/de/GQA-Tests.md) ist eine Beschreibung der einzelnen Tests zu finden. 
 
 - `testId:`
   - `tag:` Der in Aria Bestrahlungsfeld unter `Feldeigenschaften Kommentar` einzugebende Tag für diesen Test. 
