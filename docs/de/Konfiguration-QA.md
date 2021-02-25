@@ -91,7 +91,7 @@ Eine Benannte Liste mit Tests und deren Parametern. [Hier](/docs/de/GQA-Tests.md
  
 Beispiel für die LeafSpeed Konfiguration::
    
-   "MT-LeafSpeed":{
+    "MT-LeafSpeed":{
         "tag": "MT_LeafSpeed",
         "info": {    
             "tip": "Geschwindigkeit der Lamellen DIN 6875-3, Teil 4.2.6 (mit Gating)",
