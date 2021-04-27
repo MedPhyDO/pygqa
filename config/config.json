@@ -26,7 +26,7 @@
             "user": "",
             "password": ""
         },
-        "main": "gqa",
+        "main": ["gqa"],
         "gqa" : {
             "name" : "gqa.json",
             "connection": "sqlite:///{{BASE_DIR}}/gqa.db"

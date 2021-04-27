@@ -940,8 +940,8 @@ class PdfGenerator:
             self._html( element_html )     
         return element_html
                 
-    def text( self, text="", area:dict={}, attrs:dict={}, render=None, replaceNewLine=True  ):
-        r"""Einen Textabsatz einfügen babei ``\n`` duch ``<br>`` ersetzen.
+    def text( self, text="", area:dict={}, attrs:dict={}, render=None, replaceNewLine=True, mode:str="text" ):
+        r"""Einen Textabsatz einfügen dabei ``\n`` durch ``<br>`` ersetzen.
         
         Parameters
         ----------
@@ -955,15 +955,20 @@ class PdfGenerator:
             sofort rendern oder nur zurückgeben ohne Angabe wird self.autoRender verwendet
         replaceNewLine : bool - True
              nur doppelte ``\n\n`` durch ``<br>`` ersetzten oder alle newLine ``\n`` ersetzen
-             
+        mode :  str - text
+            Bei angabe von `markdown` als nicht als einfachen text sondern als markdown rendern 
+        
         Returns
         -------
         element_html: str
             HTML des erzeugten Elements
         """
-        return self._text( text, area, attrs, render, replaceNewLine )
+        if mode == "markdown":
+            return self.markdown( text, area, attrs, render )
+        else:
+            return self._text( text, area, attrs, render, replaceNewLine )
      
-    def textFile( self, filename, area:dict={}, attrs:dict={}, render=None, replaceNewLine=False ):
+    def textFile( self, filename:str=None, area:dict={}, attrs:dict={}, render=None, replaceNewLine=False ):
         r"""Lädt aus self._data["resources"] eine Datei und zeigt sie wie bei add_text an.
         
         Bei der Dateiendung .txt wird eine Ersetztung von ``\n`` zu ``<br>`` vorgenommen
@@ -986,8 +991,11 @@ class PdfGenerator:
         element_html: str
             HTML des erzeugten Elements
         """
+        
+        if not filename:
+            return
+        
         text = None
-       
         filepath = osp.join( self._variables["resources"], filename )
         if osp.exists( filepath ):
             with open( filepath, 'r', encoding="utf-8") as myfile:
@@ -1212,7 +1220,6 @@ class PdfGenerator:
             
         # Felder holen
         pf = self._getPandasFields( df, fields )
-        
         
         if pf:
             html = self.html( df[ pf["names"] ].rename(columns=pf["columns"]).style

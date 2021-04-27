@@ -15,7 +15,7 @@ from app import run
 # ----------------------------------------------------------------------------- 
 if __name__ == '__main__':
        
-    version_info = (1, 2, 0)
+    version_info = (0, 1, 1)
     version = '.'.join(str(c) for c in version_info)
 
     # Initialisieren des parsers und setzen des Hilfetextes

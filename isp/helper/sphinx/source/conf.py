@@ -30,7 +30,7 @@ __author__ = "R. Bauer"
 __copyright__ = "2020, MedPhyDO - Machbarkeitsstudien im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund und Klinikum Dortmund"
 __credits__ = ["R. Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.0.1"
+__version__ = "0.1.1"
 __status__ = "Prototype"
 
 import os

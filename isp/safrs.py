@@ -50,7 +50,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R. Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __status__ = "Prototype"
 
 import json
@@ -204,10 +204,11 @@ class RQLQuery(BaseQuery, RQLQueryMixIn):
         _rql_where_clause
 
         """
+        
+        
         if len(self._entities) > 1: # pragma: no cover
             raise NotImplementedError("Query must have a single entity")
         
-        # rql = 'eq(link_sid,22) and eq(link_art,haus)'
         expr = rql
 
         if not expr:
@@ -331,11 +332,14 @@ def ispSAFRS_decorator( fn ):
             safrs_obj.__name__ - gqadb
             safrs_obj._api.prefix - /api
         """
+   
+        
         # das verwendete Object bestimmen um SAFRSRestRelationshipAPI zu erkennen
         q = fn.__qualname__.split(".")
         # die Aufruf Methode: get,post,patch,delete
         method = q[1]
-
+        
+        
         # mit SAFRSRestRelationshipAPI dessen target verwenden
         if q[0] == "SAFRSRestRelationshipAPI":
             # eine SAFRSRestRelationshipAPI hat keine _int_init funktion
@@ -346,7 +350,8 @@ def ispSAFRS_decorator( fn ):
             
         else:
             safrs_obj = fn.SAFRSObject
-         
+        
+        
         #
         # Das SAFRSObject vor jedem Aufruf Vorbereiten
         #
@@ -359,8 +364,11 @@ def ispSAFRS_decorator( fn ):
         func_name = None
                
         swagger_path = ""
+        
+        #print("wrapped_fn", q )
         # nur bei get parameter prüfen
         if method == "get":
+          
             # Merker für Variante b: objectId wird später wieder eingefügt
             objectId = None     
             # Argumente parsen
@@ -473,6 +481,10 @@ def ispSAFRS_decorator( fn ):
                 if objectId:
                     kwargs[ safrs_obj._s_object_id ] = objectId       
 
+        elif method == "post":
+            
+            pass
+    
         request.groups = {}
         # Parse the jsonapi groups and groups[] args
         for arg, val in request.args.items():
@@ -523,6 +535,10 @@ def ispSAFRS_decorator( fn ):
             #
             # die ursprüngliche Funktion aufrufen
             #
+            
+            # print(args)
+            # log.error("wrapped_fn - post:"  )
+            # print("wrapped_fn", q, args, kwargs, fn )
             status_code = 200
             try:
                 result = fn(*args, **kwargs) 
@@ -533,6 +549,7 @@ def ispSAFRS_decorator( fn ):
                 status_code = 404
                 message = "Not Found"   
             except Exception as exc:  # pragma: no cover
+                
                 status_code = getattr(exc, "status_code", 500)
                 message = getattr(exc, "message", "unbekannter Fehler") 
                 
@@ -645,13 +662,29 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
                 return sqlalchemy.__dict__[key]
         return None
     
+    @classmethod
+    def getConnection(cls):
+        """Get connetion from session bind or config binds.
+        Returns
+        -------
+        connection: str
+            connetion string
+        """
+        query = cls.query
+        if hasattr(cls, "__bind_key__"):
+            binds = query.session.app.config.get("SQLALCHEMY_BINDS")
+            connection = binds[cls.__bind_key__]
+        else:
+            connection = query.session.bind
+        return connection
+            
     @classproperty
     def _s_column_names(cls):
         """
             :return: list of column names
         """
         return [c.name for c in cls._s_columns]    
-    
+       
     @classmethod
     def _int_init( cls ):
         """Initialisierung vor jedem Aufruf.
@@ -1005,18 +1038,23 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         rql._set_entities( cls )
         
         # rql_filter auswerten
+        #rql.rql_parse( qs )
         try:
             rql.rql_parse( qs )
+        except NotImplementedError as exc:
+            cls.appError("_int_filter", "NotImplementedError: {}".format( exc ) )
+            query = query.filter( text("1=2") ) 
+            return query
         except Exception as exc:
-            #log.error("rql_filter {}".format( exc ) )
-            cls.appError("_int_filter",  str( exc ) )
+            cls.appError("_int_filter", "rql-error: {}".format( exc ) )
             query = query.filter( text("1=2") ) 
             return query
                 
         # die Bedingung an die query anfügen
         if rql._rql_where_clause is not None:
             query = query.filter( rql._rql_where_clause )    
-                                
+        
+            cls.appInfo("_int_filter",  str( rql._rql_where_clause ) )                        
         return query
  
        
@@ -1244,14 +1282,19 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         
         # alle durchgehen
         for name in cls._s_column_names: 
-            column = getattr(cls, name, None )            
-            key = column.key
-            # nur in attributes ablegen id ist mit undefined vorbelegt
-            if not key == "id":                
-                if key in defaults:
-                    empty_record["attributes"][ name ] = defaults[ key ]
-                else:
-                    empty_record["attributes"][ name ] = None # c.server_default
+            column = getattr(cls, name, None )
+            if column:
+        
+                key = column.key
+                # nur in attributes ablegen id ist mit undefined vorbelegt
+                if not key == "id":                
+                    if key in defaults:
+                        empty_record["attributes"][ name ] = defaults[ key ]
+                    else:
+                        empty_record["attributes"][ name ] = None # c.server_default
+            else:
+                 empty_record["attributes"][ name ] = None
+                 
         return empty_record    
     
     
@@ -1537,7 +1580,7 @@ class ispSAFRSDummy( ispSAFRS ):
 
         """
         return cls
-     
+
 
 class system( ispSAFRSDummy ):
     """.. restdoc::

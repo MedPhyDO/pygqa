@@ -11,7 +11,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R. Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __status__ = "Prototype"
 
 import uuid
@@ -154,6 +154,10 @@ class ispBaseWebApp():
 
     api: SAFRSAPI
         initialisierte SAFRSAPI
+        
+    apiurl: string
+        url zur api
+        
     """
 
     def __init__(self, config=None, db=None, name:str=None, webconfig=None, apiconfig=None, overlay:dict={}):
@@ -226,20 +230,26 @@ class ispBaseWebApp():
         #
         # Hauptdatenbank festlegen
         #
-        db_uri = None
+        db_names = []
+        db_binds = {}
         # name für die Main Datenbank 
         if not name:
-            name = self._config.get("database.main", None)
-                    
-            if name:
+            name = self._config.get("database.main", [] )
+           
+            if type( name ) == str:
+                db_names.append( name )
+            elif type( name ) == list:
+                db_names = name
+                
+            for name in db_names:
                 # versuchen eine passende datenbank config zu finden, wenn ja diese verwenden 
                 #db_uri = self._config.get("database." + name + ".connection", "").format( **{"BASE_DIR": self._config.BASE_DIR } )
-                db_uri = self._config.get("database." + name + ".connection", "", replaceVariables=True)
+                db_binds[name] = self._config.get("database." + name + ".connection", "", replaceVariables=True)
              
         #
         # App erzeugen mit SQLAlchemy() und DatabaseUri
         #
-        app = self._create_app( db, db_uri )
+        app = self._create_app( db, db_binds )
 
         # logger für safrs
         log.setLevel( self._config.get("server.logging.safrs", logging.WARNING ) ) # logging.DEBUG
@@ -283,11 +293,14 @@ class ispBaseWebApp():
             if self._config.get("server.webserver.TESTING"):
                 mode = "TESTING"
                 
-            # Webserver startparameter anzeigen
-            print("Starting 'http://{}:{}{}' in '{}' Mode".format(
+            self.apiurl = "http://{}:{}{}".format(
                 self._config.get("server.webserver.host"),
                 self._config.get("server.webserver.port"),
-                self._config.get("server.api.prefix", ""),
+                self._config.get("server.api.prefix", "")
+            )
+            # Webserver startparameter anzeigen
+            print("Starting '{}' in '{}' Mode".format(
+                self.apiurl,
                 mode
             ))
             #return
@@ -313,7 +326,7 @@ class ispBaseWebApp():
                      debug=self._config.get("server.webserver.debug")
                 )
         
-    def _create_app(self, db=None, db_uri:str=None ):
+    def _create_app(self, db=None, binds:dict={} ):
         """Erzeugt die Flask App.
         
         Ruft create_api auf um die Datenbank api bereitzustellen
@@ -342,13 +355,14 @@ class ispBaseWebApp():
         self.app.jinja_options['extensions'].append('jinja_markdown.MarkdownExtension')
         
         # Konfigurationen für SQLAlchemy setzen
-        if db_uri:
-            self.app.config.update( SQLALCHEMY_DATABASE_URI=db_uri )
+
+        self.app.config.update( SQLALCHEMY_BINDS=binds )
         
         # debug modus 
         #self.app.config.update( DEBUG=True )
         self.app.config.update( SQLALCHEMY_TRACK_MODIFICATIONS=False)
         
+        # print("_create_app-bind", binds, binds.keys() )
         if db:
             # SQLAlchemy mit app initialisieren
             db.init_app( self.app )
@@ -356,7 +370,7 @@ class ispBaseWebApp():
             # Datenbank und Datenbank Api
             with self.app.app_context( ):
                 try:
-                    db.create_all()
+                    db.create_all( bind=binds.keys() )
                 except Exception as exc: # pragma: no cover
                     print( "[webapp] _create_app error" , exc)
                 self._create_api( )
@@ -450,6 +464,7 @@ class ispBaseWebApp():
             if hasattr( model, "no_flask_admin") and model.no_flask_admin == True:
                 expose_object(self.api, model)
             model._api = self.api
+            
         
     def _checkNetarea( self ): # pragma: no cover
         """Simple check whether the access is from the same subnetwork.
@@ -544,8 +559,8 @@ class ispBaseWebApp():
                 params.update( urlContentParams )
 
         #print( "params>", params)
-        return params
-        
+        return params    
+    
     def routeIndex(self, filepath="" ):
         """Verarbeitet normale Aufrufe.
         
@@ -574,7 +589,7 @@ class ispBaseWebApp():
             Inhalt der geladenen Datei
             
         """
-        # print( filepath )
+        #print( filepath )
      
         if filepath[:10] == "resources/":
             root = self._config.get("server.webserver.resources", "", replaceVariables = True)
@@ -583,7 +598,6 @@ class ispBaseWebApp():
             root = self._config.get("server.webserver.resources", "", replaceVariables = True)
         elif filepath[:8] == "globals/":
             root = self._config.get("server.webserver.globals", "", replaceVariables = True)
-            filepath = filepath[8:]
         elif filepath[:12] == "apiframe":
             return self.routeIFrame( "/api" )
         elif filepath[:12] == "dbadminframe":

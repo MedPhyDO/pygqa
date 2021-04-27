@@ -41,7 +41,8 @@ if runCoverage:
         "*/docs/*",
         "*/.docs/*",
         "*/.htmlcov/*",
-        "*/tests/*"
+        "*/tests/*",
+        "*/files/*"
     ])
     
     # Regexes for lines to exclude from consideration
