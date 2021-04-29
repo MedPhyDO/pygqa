@@ -13,7 +13,7 @@ __credits__ = ["R. Bauer", "K.Loot"]
 __license__ = "MIT"
 __version__ = "0.1.1"
 __status__ = "Prototype"
-
+        
 import uuid
 import os
 import os.path as osp
@@ -834,18 +834,25 @@ class ispBaseWebApp():
              '../',           # module_path
              '../tests*',     # exclude_pattern tests
              '../ui*'       # weitere exclude_pattern
-             
         ]
         
         apidoc.main( api_cmd )
         
         # ---- 2. html aus rst Dateien in build erzeugen
+        # 
+        
+        # get project information from main version file
+        import version as v
+        
         build_cmd = [
             'source',
             'build',
-            # '-a'
-            '-Dproject={}'.format( self._config.get("server.webserver.title", "webapp") )
-            ]
+            '-Dcopyright={}'.format( v.__copyright__ ),
+            '-Dauthor={}'.format( v.__author__ ),
+            '-Dproject={}'.format( self._config.get("server.webserver.title", v.__project__) ),
+            '-Dversion={}'.format( v.__version__ ),
+            '-Drelease={}'.format( v.__version__ )
+        ]
         
         build.main( build_cmd )
         

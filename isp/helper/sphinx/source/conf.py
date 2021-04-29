@@ -5,12 +5,6 @@
 # http://www.sphinx-doc.org/en/master/config
 
 
-'''
-
-
-
-'''
-
 # -- Path setup --------------------------------------------------------------
 
 # If extensions (or modules to document with autodoc) are in another directory,
@@ -25,8 +19,7 @@ conf
 configuration for inline documentation with sphinx 
 
 '''
-
-__author__ = "R. Bauer"
+__author__ = "R. Bauer" 
 __copyright__ = "2020, MedPhyDO - Machbarkeitsstudien im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund und Klinikum Dortmund"
 __credits__ = ["R. Bauer", "K.Loot"]
 __license__ = "MIT"
@@ -45,8 +38,7 @@ sys.path.append(os.path.abspath("./_ext"))
 # --- General configuration --------------------------------------------------
 #
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
-
-# Project information
+#  
 project = 'webdoc'
 author = __author__
 copyright = __copyright__
@@ -158,8 +150,3 @@ napoleon_use_admonition_for_references = False
 napoleon_use_ivar = False
 napoleon_use_param = True
 napoleon_use_rtype = True
-
-
-
-
-

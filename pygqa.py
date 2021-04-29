@@ -10,18 +10,16 @@ Startet den Webserver
 import sys
 import argparse
 
+from version import __version__
 from app import run
 
 # ----------------------------------------------------------------------------- 
 if __name__ == '__main__':
-       
-    version_info = (0, 1, 1)
-    version = '.'.join(str(c) for c in version_info)
 
     # Initialisieren des parsers und setzen des Hilfetextes
     parser = argparse.ArgumentParser( description='pygqa' )
     
-    parser.add_argument('--version', action='version', version='%(prog)s {}'.format(version) )
+    parser.add_argument('--version', action='version', version='%(prog)s {}'.format(__version__) )
     
     parser.add_argument( "-w", "--webserver",
         action="store_true",

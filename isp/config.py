@@ -190,11 +190,8 @@ class ispConfig( object ):
         # default werte setzen
         self._config = DotMap( default_config )
         self._configs = ["default"]
-        
-        #print("#### init A", self._config)
+
         if config:
-            # mit einer neuen config starten
-            #self._config = DotMap( )
             # config in self._config merken
             self.update( config )
             self._configs.append( "init" )
@@ -203,8 +200,7 @@ class ispConfig( object ):
             self._configLoad( int(lastOverlay) )
             
         self._lastOverlay = lastOverlay
-        
-        #print("#### init B", self._config)
+
         # die Konfiguration um BASE_DIR erweitern
         self._config[ "BASE_DIR" ] = self._basedir
         
@@ -416,7 +412,6 @@ class ispConfig( object ):
         """
         if k[0] == "_":
             self.__dict__[k] = v
-            # super().__setattr__(k, v)
         else:
             self._config[k] = v
     
@@ -696,18 +691,12 @@ class ispConfig( object ):
                 # max 2 sekunden oder auf mqtt_init_ready signalStartup warten 
                 while not mqtt_init_ready.wait( timeout=2 ):
                     mqtt_init_ready.set()
-
-                #print( time.strftime("%Y%m%d %H:%M:%S", time.localtime(time.time()) ) )
-                #print("+++++++ config.logging.Handler.__init__", self._thread_mqtthdlr, self.mqttReady)
                 
                 # wenn der mqtt handler initialisiert wurde logging und _mqtthdlr setzen
                 if self._thread_mqtthdlr and self._thread_mqtthdlr._mqttc:
                     _mqtthdlr = self._thread_mqtthdlr
                     # logging Handler mit der MQTTclass Klasse initialisieren 
-                    logging.Handler.__init__( _mqtthdlr )
-                    
-                    #print("+++++++ config.addMQTTlogger", _mqtthdlr)
-                    
+                    logging.Handler.__init__( _mqtthdlr )                    
                     logger.addHandler( _mqtthdlr )
                     
                     # einen Verweis auf _mqtthdlr sowie send bereitstellen 
@@ -726,7 +715,6 @@ class ispConfig( object ):
                     self.logger_name = logger.name
                    
             else:
-                #print( "hasMQTTlogger" )   
                 # logger ist vorhanden verweis wieder in _mqtthdlr ablegen
                 self._mqtthdlr = mqtthdlr
                 # logger name merken
