@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-__version__ = '0.1.1'
+__version__ = '0.1.2'
 __project__ = "GQA - Geräte-QA"
 __version_info__ = __version__.split('.')
 __author__ = "R. Bauer"

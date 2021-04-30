@@ -4,7 +4,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 __status__ = "Prototype"
 
 from sortedcontainers import SortedDict
@@ -15,6 +15,7 @@ import numpy as np
 from math import pi
 
 import pandas as pd
+from dotmap import DotMap
 
 # WL suche mit skimage
 from skimage import filters
@@ -37,6 +38,9 @@ from app.check import ispCheckClass
 from app.base import ispBase
 
 from app.qa.field import qa_field
+
+from isp.config import dict_merge
+ 
 
 # logging
 import logging
@@ -688,12 +692,15 @@ class checkWL( ispBase ):
         self.fileCount = 0
         
         # metadata vorbereiten
-        md = self.metadata
+
         #print( fileData['SeriesUID'] )
-        md.update( {
+        md = dict_merge( DotMap( {
            # "Titel": "Auswertung",
            # "Betreff": "Monatstest WL",
-
+            "manual": {
+                "filename": self.metadata.info["anleitung"],
+                "attrs": {"class":"layout-fill-width"},
+            },
             "imageSize" : {"width" : 181, "height" : 45},
             "chartSize" : {"width" : 181, "height" : 95},
             
@@ -711,7 +718,7 @@ class checkWL( ispBase ):
                 {'field': 'centerBall_Y', 'label':'Y-Abweichung', 'format':'{0:1.3f}'},
                 {'field': 'maxCenter_passed', 'label':'Passed' }
             ]
-        } )
+        } ), self.metadata )
                        
         def groupBySeries( df_group ):
             """Serienweise Auswertung und PDF Ausgabe 
@@ -725,7 +732,7 @@ class checkWL( ispBase ):
             #               
             # Anleitung
             #
-            self.pdf.textFile( md["anleitung"], attrs={"class":"layout-fill-width"} )  
+            self.pdf.textFile( **md.manual )  
             
             wl = qa_wl( df_group.to_dict('index') , md["fieldSize"] )
             # als erstes das virtuelle Zentrum über die Kollimator Rotation festlegen
@@ -778,8 +785,8 @@ class checkWL( ispBase ):
             self.pdf.image( g, attrs=md["_image"] )
               
             text_values = {
-                "f_warning": md.tolerance[ md["energy"] ].default.warning.get("f",""),
-                "f_error": md.tolerance[ md["energy"] ].default.error.get("f","")
+                "f_warning": md.current.tolerance.default.warning.get("f",""),
+                "f_error": md.current.tolerance.default.error.get("f","")
             }
 
             text = "Warnung bei: {f_warning}\n Fehler bei: {f_error}".format( **text_values ).replace("{value}", "Abw. (x|Y)")

@@ -22,7 +22,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 __status__ = "Prototype"
 
 import json
@@ -343,7 +343,6 @@ class gqa( ispSAFRSDummy ):
            
         
         """
-
         import numpy as np
         from app.config import gqa_config
         
@@ -355,26 +354,28 @@ class gqa( ispSAFRSDummy ):
  
         style = """
         <style>
-        table {
+        .gqa-config {
             color: #333;
             min-width: 100px;
             border-collapse: collapse; 
             border-spacing: 0;
             font-size: 12px;
         }
-        td, th { 
+        .gqa-config td, .gqa-config th { 
             border: 1px solid gray; 
             text-align: center;
             vertical-align: middle;
         }
-        th { 
+        .gqa-config th { 
             font-weight: bold;
         }
-        thead th, tbody th { 
+        .gqa-config thead th, .gqa-config tbody th { 
             background: #FCFCFC; 
         }
         
-        th,td,caption { 
+        .gqa-config th,
+        .gqa-config td,
+        .gqa-config caption { 
             padding: 2px 2px 2px 2px;
         }
         
@@ -382,31 +383,46 @@ class gqa( ispSAFRSDummy ):
           You can zebra-stripe your tables in outdated browsers by adding
           the class "even" to every other table row.
          */
-        tbody tr:nth-child(even) td,
-        tbody tr.even td  {
+        .gqa-config tbody tr:nth-child(even) td,
+        .gqa-config tbody tr.even td  {
           background: #FAFAFA;
         }
-        tfoot       { font-style: italic; }
-        caption     { background: #eee; }
+        .gqa-config tfoot       { font-style: italic; }
+        .gqa-config caption     { background: #eee; }
         
         /* Angaben auch für pivot
         */
-        table { 
+        .gqa-config { 
             empty-cells: show;
         }
         
-        table .index_name{
+        .gqa-config .index_name{
             
         }
-        table .blank{
+        .gqa-config .blank{
             
         }
+        .gqa-config .data{
+            text-align: left;
+            vertical-align: top;
+        }
+        .gqa-config .data code{
+            word-wrap: break-word;
+            white-space: pre-wrap;
+            max-width: 35em;
+            display: inline-block;
+        }
+        
         """
+        def json_pretty( value ):
+            #value = "<pre>" + value + "</pre>"
+            
+            return value
+        
         html = '<div class="gqa-config flex-1">'
         html += (gqa_df.replace({np.nan:''}).style
-            #.applymap( highlight_fifty )
             .set_table_attributes('class="gqa-config"')
-            #.float_format()
+            .format("<pre><code>{}</code></pre>")
             .render() 
         )
         html += '</div>'
@@ -494,16 +510,20 @@ class gqa( ispSAFRSDummy ):
                     reloadDicom =  _kwargs["reloadDicom"],
                     unittest =     _kwargs["unittest"]
                 )
-
+                
         if _kwargs["unittest"] == False: # pragma: no cover
             # nach einem run wird normalerweise die info des testjahres aller units zurückgegeben   
+            # config nur für dieses jahr einlesen und verwenden
+            cls.init( {"year": _kwargs["year"] } )
+         
             _result = cls.ariaDicom.getAllGQA(
                 pids = list(cls.config.units.toDict().keys()),
-                year = int(_kwargs["year"]),
+                year = int( _kwargs["year"] ),
                 withInfo=False, 
                 withResult=True    
             )
-        
+           
+            
         return cls._int_json_response( { "data": _result } )        
     
     @classmethod

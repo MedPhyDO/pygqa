@@ -66,7 +66,6 @@ Eine Benannte Liste mit Tests und deren Parametern. [Hier](/docs/de/GQA-Tests.md
     - `tip:` Eine Kurze Beschreibung die in der Testliste angezeigt wird.
     - `anleitung:` Pfad zu einer Anleitung für den Test in `resources`. Default ""
     - `need:` Hier kann angegeben werden, welcher andere Test als Grundlage für diesen verwendet wird.
-    - `groupby:` Kann intern bei der Testauswertung verwendet werden und ist für den jeweiligen Test vorgegeben.  
     - `TODO:` Hier kann in einer Liste angegeben werden was noch vor der allgemeinen Verwendung des Tests gemacht werden muss. Diese Angaben werden im Menü **Testmatrix** angezeigt.
     - `tolerance:` Benannte Liste mit Energien und deren Test Toleranzen für die Auswertung.
       - `<energy>:` Die Energie für die folgenden Parameter gelten. z.B. "6x".
@@ -88,6 +87,7 @@ Eine Benannte Liste mit Tests und deren Parametern. [Hier](/docs/de/GQA-Tests.md
     - `inaktiv:` Mit diesem boolean Parameter kann ein Test ab einem zeitpunkt von der weiteren Auswertung ausgeschlossen werden.   
   - `<unit>:` Name des Geräts für die Konfiguration z.B. `Linac-1`
     - `energyFields:` Benannte Liste mit Energien und der mind. Anzahl von Feldern z.B. `{ "6x":18, "15x":18 }`
+  - `series_groupby:` Kann intern bei der Testauswertung verwendet werden und ist für den jeweiligen Test vorgegeben.  
  
 Beispiel für die LeafSpeed Konfiguration::
    
@@ -114,3 +114,5 @@ Beispiel für die LeafSpeed Konfiguration::
             "energyFields" : { "6x":18 }
         }
     }
+
+

@@ -4,7 +4,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 __status__ = "Prototype"
 
 from pylinac.picketfence import PFDicomImage, PicketFence, Settings, Overlay, UP_DOWN
@@ -14,6 +14,7 @@ from app.base import ispBase
 from app.image import DicomImage
 from app.check import ispCheckClass
 
+from isp.config import dict_merge
 #from datetime import datetime
 #from dateutil.parser import parse
 
@@ -756,10 +757,14 @@ class checkMlc( ispBase ):
         self.fileCount = 0
         
         # metadata vorbereiten
-        md = self.metadata
-            
-        md.update( {
-            "_anleitung_attrs" : {"class":"layout-fill-width" },
+        md = dict_merge( DotMap( {
+            "series_groupby": [ "day", "SeriesNumber" ],
+            "series_sort_values" : ['check_subtag'],
+            "field_count": 2,
+            "manual": {
+                "filename": self.metadata.info["anleitung"],
+                "attrs": {"class":"layout-fill-width"},
+            },
             "_image": { "width": 80, "height": 80 },
             "_image_attrs" : {"class":"layout-50-width", "margin-right": "20px"},
             "_chart": { "width": 180, "height": 45 },
@@ -767,9 +772,9 @@ class checkMlc( ispBase ):
             "_text_attrs" : {"margin-left":"5mm"},
             # Messorte alle 10mm im Bereich von -70mm bis 70mm
             "checkPositions" : np.arange(-70, 80, 10),
-            "sort_values" : ['check_subtag'],
-            # groupby kann in der config angegeben werden sonst default (2019 nicht in der gleichen Serie)
-            "groupby": md.get("groupby", [ "day", "SeriesNumber" ]),
+            
+            
+            #"groupby": [ "day", "SeriesNumber" ], # groupby in der config angegeben werden sonst default (2019 nicht in der gleichen Serie)
             "table_fields" : [
                 {'field': 'position', 'label':'Position', 'format':'{0:d}' },
                 {'field': 'gantry', 'label':'Gantry', 'format':'{0:.1f}' },
@@ -779,8 +784,9 @@ class checkMlc( ispBase ):
                 {'field': 'leaf.mean_y', 'label':'X2-Leaf Mean', 'format':'{0:.3f}' },
                 {'field': 'leaf.mean_y_passed', 'label':'X2-Passed'}
             ]
-        } )
-    
+        } ), self.metadata )
+        
+        # print("doJT_4_2_2_1_A", md.groupby )
         # Felder für die Tabelle  
         def groupBySeries( df_group ):
             """gruppenweise Auswertung 
@@ -793,7 +799,7 @@ class checkMlc( ispBase ):
             #               
             # Anleitung
             #
-            self.pdf.textFile( md["anleitung"], attrs=md["_anleitung_attrs"] )  
+            self.pdf.textFile( **md.manual )  
             
             # das offene Feld merken
             try:
@@ -810,8 +816,16 @@ class checkMlc( ispBase ):
                 # ein leeres df damit in checkFields geprüft wird
                 df_fields = pd.DataFrame()
             
-            #print(df_fields)
-            # übergebene felder prüfen
+
+            # alles notwendige da? Ein base und 2 weitere Felder
+            errors = self.checkFields( md, df_base, df_fields, md["field_count"])
+            if len(errors) > 0:
+                result.append( self.pdf_error_result( 
+                    md, date=checkDate, group_len=len( result ),
+                    errors=errors
+                ) )
+                return
+            '''
             if not self.checkFields( md, df_base, df_fields, 2 ): 
                 result.append( self.pdf_error_result( 
                     md, date=checkDate, group_len=len( result ),
@@ -819,7 +833,7 @@ class checkMlc( ispBase ):
                     
                 ) )
                 return
-            
+            '''
             
             # alle Felder durchgehen
             transmissionData = {}
@@ -918,8 +932,8 @@ class checkMlc( ispBase ):
             # tolerance anzeigen
             #
             text_values = {
-                "f_warning": md.tolerance[ md["energy"] ].default.warning.get("f",""),
-                "f_error": md.tolerance[ md["energy"] ].default.error.get("f","")
+                "f_warning": md.current.tolerance.default.warning.get("f",""),
+                "f_error": md.current.tolerance.default.error.get("f","")
             }
             text = """<br>
                 Warnung bei: <b style="position:absolute;left:120mm;">{f_warning}</b><br>
@@ -939,8 +953,8 @@ class checkMlc( ispBase ):
         # wenn angegeben die Gruppierung aus der config verwenden (2019 sind die Aufnahmen von unterschiedlichen Tagen)
         #
         ( fileData
-             .sort_values( md["sort_values"] )
-             .groupby( md["groupby"] )
+             .sort_values( md["series_sort_values"] )
+             .groupby( md["series_groupby"] )
              .apply( groupBySeries )
         )
             
@@ -984,11 +998,15 @@ class checkMlc( ispBase ):
         filesMax=len( fileData )
         self.fileCount = 0
         
-        # metadata vorbereiten
-        md = self.metadata 
-                    
-        md.update( {
-            "_anleitung_attrs" : {"class":"layout-fill-width" },
+        # metadata vorbereiten                    
+        md = dict_merge( DotMap( {
+            "series_groupby": [ "day", "SeriesNumber" ],
+            "series_sort_values" : ['check_subtag', 'gantry', 'collimator'],
+            "manual": {
+                "filename": self.metadata.info["anleitung"],
+                "attrs": {"class":"layout-fill-width"},
+            },
+            "field_count": 3,
             "_image": { "width": 58, "height": 58 },
             "_image_attrs" : {"class":"layout-50-width"},
             "_text" : {},
@@ -996,8 +1014,7 @@ class checkMlc( ispBase ):
             "_table_attrs" : {"class":"layout-fill-width", "margin-top": "2mm"},
             # Messorte nur im zentrum
             "checkPositions" : [0] ,
-            "sort_values" : ['check_subtag', 'gantry', 'collimator'],
-            "groupby": [ "day", "SeriesNumber" ],
+            
             "table_fields" : [
                 {'field': 'Kennung', 'label':'Kennung', 'format':'{0}', 'style': [('text-align', 'left')] },
                 {'field': 'gantry', 'label':'Gantry', 'format':'{0:.1f}' },
@@ -1005,7 +1022,7 @@ class checkMlc( ispBase ):
                 {'field': 'interleaf.mean', 'label':'interleaf Mean', 'format':'{0:.3f}' },
                 {'field': 'interleaf.mean_passed', 'label':'Passed'}
             ]
-        } )
+        } ), self.metadata )
 
         #print(fileData[ ["energy", "day", "gantry", "collimator", "SeriesNumber", "check_subtag"] ])
 
@@ -1020,7 +1037,7 @@ class checkMlc( ispBase ):
             #               
             # Anleitung
             #
-            self.pdf.textFile( md["anleitung"], attrs=md["_anleitung_attrs"] )  
+            self.pdf.textFile( **md.manual )  
            
             # alle Felder durchgehen
             data = []
@@ -1041,10 +1058,19 @@ class checkMlc( ispBase ):
                     # ein leeres df damit in checkFields geprüft wird
                     df_fields = pd.DataFrame()
                 
+                # alles notwendige da?
+                errors = self.checkFields( md, df_base, df_fields, md["field_count"])
+                if len(errors) > 0:
+                    result.append( self.pdf_error_result( 
+                        md, date=checkDate, group_len=len( result ),
+                        errors=errors
+                    ) )
+                    return
+                '''
                 # übergebene felder prüfen
                 if not self.checkFields( md, df_base, df_fields, 3 ):
                     return
-                
+                '''
                 #print( df[ ['check_subtag', 'gantry', 'collimator', 'Kennung'] ] )
                 
                 # baseField bereitstellen
@@ -1136,8 +1162,8 @@ class checkMlc( ispBase ):
             # tolerance anzeigen
             #
             text_values = {
-                "f_warning": md.tolerance[ md["energy"] ].default.warning.get("f",""),
-                "f_error": md.tolerance[ md["energy"] ].default.error.get("f","")
+                "f_warning": md.current.tolerance.default.warning.get("f",""),
+                "f_error": md.current.tolerance.default.error.get("f","")
             }
             text = """<br>
                 Warnung bei: <b style="position:absolute;left:45mm;">{f_warning}</b><br>
@@ -1154,8 +1180,8 @@ class checkMlc( ispBase ):
         # wenn angegeben die Gruppierung aus der config verwenden (2019 sind die Aufnahmen von unterschiedlichen Tagen)
         #
         ( fileData
-             .sort_values( md["sort_values"] )
-             .groupby( md["groupby"] )
+             .sort_values( md["series_sort_values"] )
+             .groupby( md["series_groupby"] )
              .apply( groupBySeries )
         )
             
@@ -1202,10 +1228,15 @@ class checkMlc( ispBase ):
         self.fileCount = 0
         
         # metadata vorbereiten
-        md = self.metadata
-        
-        md.update( {
-            "_anleitung_attrs" : {"class":"layout-fill-width", "margin-bottom": "5mm"},
+        md = dict_merge( DotMap( {
+            
+            "series_groupby": ["day", "SeriesNumber"],
+            "field_count": 3, # drei Felder pro Auswertung 
+            "manual": {
+                "filename": self.metadata.info["anleitung"],
+                "attrs": {"class":"layout-fill-width", "margin-bottom": "5mm"},
+            },
+            
             "_image": { "width": 58, "height": 58 },
             "_image_attrs" : {"class":"layout-50-width"},
            
@@ -1239,19 +1270,21 @@ class checkMlc( ispBase ):
                 "0" : None,
                 "40" : None
             }
-        } )
+        } ), self.metadata )
         
-        #print( md.tolerance.get( md["energy"] ).get( "0" ).soll.value )
+        #print("fileData", fileData[ [ "day", "SeriesNumber", "gantry", "collimator", "check_variante", "check_subtag" ] ] )
+            
+
         try:
-            md["checkValues"]["-40"] = md.tolerance.get( md["energy"] ).get( "-40" ).soll.value
+            md["checkValues"]["-40"] = md.current.tolerance.get( "-40" ).soll.value
         except:
             pass
         try:
-            md["checkValues"]["0"] = md.tolerance.get( md["energy"] ).get( "0" ).soll.value
+            md["checkValues"]["0"] = md.current.tolerance.get( "0" ).soll.value
         except:
             pass
         try:
-            md["checkValues"]["40"] = md.tolerance.get( md["energy"] ).get( "40" ).soll.value
+            md["checkValues"]["40"] = md.current.tolerance.get( "40" ).soll.value
         except:
             pass        
         
@@ -1266,7 +1299,7 @@ class checkMlc( ispBase ):
             #               
             # Anleitung
             #
-            self.pdf.textFile( md["anleitung"], attrs=md["_anleitung_attrs"] )  
+            self.pdf.textFile( **md.manual )  
            
             # alle Felder durchgehen
             data = []
@@ -1288,10 +1321,22 @@ class checkMlc( ispBase ):
                     # ein leeres df damit in checkFields geprüft wird
                     df_fields = pd.DataFrame()
                     
-                # übergebene felder prüfen
-                if not self.checkFields( md, df_base, df_fields, 3 ):
+                # print("groupByGantryKolli", md.current)
+                # logger.error( "Base: {}, Fields:{}".format( len(df_base.index), len(df_base.index) ) )
+                # alles notwendige da? Ein base und 2 weitere Felder
+                errors = self.checkFields( md, df_base, df_fields, md["field_count"])
+                if len(errors) > 0:
+                    result.append( self.pdf_error_result( 
+                        md, date=checkDate, group_len=len( result ),
+                        errors=errors
+                    ) )
                     return
-
+                '''
+                # übergebene felder prüfen
+                if not self.checkFields( md, df_base, df_fields, 3, warn=False ):
+                    return
+                '''
+                
                 #print( df[ ['check_subtag', 'gantry', 'collimator', 'Kennung'] ] )
                 #print( df_fields[ ['check_subtag', 'gantry', 'collimator'] ] )
                 # baseField bereitstellen
@@ -1415,8 +1460,8 @@ class checkMlc( ispBase ):
             # tolerance anzeigen
             #
             text_values = {
-                "f_warning": md.tolerance[ md["energy"] ].diff.warning.get("f",""),
-                "f_error": md.tolerance[ md["energy"] ].diff.error.get("f","")
+                "f_warning": md.current.tolerance.diff.warning.get("f",""),
+                "f_error": md.current.tolerance.diff.error.get("f","")
             }
             text = """<br>
                 Warnung bei: <b style="position:absolute;left:25mm;">{f_warning}</b><br>
@@ -1433,8 +1478,7 @@ class checkMlc( ispBase ):
         # wenn angegeben die Gruppierung aus der config verwenden (2019 sind die Aufnahmen von unterschiedlichen Tagen)
         #
         ( fileData
-             
-             .groupby( md.get("groupby", [ "day", "SeriesNumber" ]) )
+             .groupby( md["series_groupby"] )
              .apply( groupBySeries )
         )
             
@@ -1475,8 +1519,12 @@ class checkMlc( ispBase ):
         self.fileCount = 0
         
         # metadata vorbereiten
-        md = self.metadata
-        md.update( {
+        md = dict_merge( DotMap( {
+            "field_count": 1,
+            "manual": {
+                "filename": self.metadata.info["anleitung"],
+                "attrs": {"class":"layout-fill-width", "margin-bottom": "5mm"},
+            },
             "_text": { "left":0, "top": 0 },
             "_table": { "class":"layout-40-width", "margin-top": "1mm"},
            # "_table": { "left":0, "top":55, "width":65 },
@@ -1493,7 +1541,7 @@ class checkMlc( ispBase ):
                 {'field': 'delta', 'label':'Delta [%]', 'format':'{0:.1f}' },
                 {'field': 'delta_passed', 'label':'Passed', 'style':  [('max-height', '10px'), ('vertical-align','top')] }
             ]
-        } )
+        } ), self.metadata )
         
         def groupBy( df_group ):
             """
@@ -1506,7 +1554,7 @@ class checkMlc( ispBase ):
             #               
             # Anleitung
             #
-            self.pdf.textFile( md["anleitung"], attrs={"class":"layout-fill-width", "margin-bottom": "5mm"} )  
+            self.pdf.textFile( **md.manual )  
          
             #
             # Infobox
@@ -1522,14 +1570,23 @@ class checkMlc( ispBase ):
                 #print( len(df_speed) )
                 #print( df_speed)
                 df_base = df_speed.query("open == 'OF'")
-                df_field = df_speed.query("open != 'OF'")
-       
-                # prüfung der benötigten Felder
+                df_fields = df_speed.query("open != 'OF'")
+
+                # alles notwendige da?
+                errors = self.checkFields( md, df_base, df_fields, md["field_count"])
+                if len(errors) > 0:
+                    result.append( self.pdf_error_result( 
+                        md, date=checkDate, group_len=len( result ),
+                        errors=errors
+                    ) )
+                    return
+                '''
                 if not self.checkFields( md, df_base, df_field, 1 ):
                     return
-     
+                '''
+                
                 check = qa_mlc( 
-                    checkField=self.getFullData( df_field.iloc[0] ), 
+                    checkField=self.getFullData( df_fields.iloc[0] ), 
                     baseField=self.getFullData( df_base.iloc[0] ), 
                     normalize="prozent" 
                 )    
@@ -1619,8 +1676,8 @@ class checkMlc( ispBase ):
             
             # toleranz anzeigen             
             text_values = {
-                "f_warning": md.tolerance[ md["energy"] ].default.warning.get("f",""),
-                "f_error": md.tolerance[ md["energy"] ].default.error.get("f","")
+                "f_warning": md.current.tolerance.default.warning.get("f",""),
+                "f_error": md.current.tolerance.default.error.get("f","")
             }
             text = """<br>
                 Warnung bei: <b style="position:absolute;left:25mm;">{f_warning}</b><br>
@@ -1686,10 +1743,12 @@ class checkMlc( ispBase ):
         self.fileCount = 0
         
         # metadata vorbereiten
-        md = self.metadata
-        
-        md.update( {
-                       
+        md = dict_merge( DotMap( {
+            "manual": {
+                "filename": self.metadata.info["anleitung"],
+                "attrs": {"class":"layout-fill-width", "margin-bottom": "5mm"},
+            },
+            "field_count" : 1,
             "_infobox" : { "left":40, "top":50, "width":100 },
             "_clip" : { "width":"80mm", "height":"30mm", "margin-left":"10mm", "margin-top":"5mm" },
             "_clipLegend" : { "margin-left":"10mm", "margin-top": "5mm" },
@@ -1704,7 +1763,7 @@ class checkMlc( ispBase ):
                 {'field': 'delta', 'label':'Delta [%]', 'format':'{0:.1f}' },
                 {'field': 'delta_passed', 'label':'Passed' }
             ]
-        } )
+        } ), self.metadata )
           
         # gruppieren Doserate und Geschwindigkeit (V1, V2, V3)
         # Speed über doserate und MonitorEinheiten(MetersetExposure)
@@ -1723,7 +1782,7 @@ class checkMlc( ispBase ):
             #               
             # Anleitung
             #
-            self.pdf.textFile( md["anleitung"], attrs={"class":"layout-fill-width", "margin-bottom": "5mm"} )  
+            self.pdf.textFile( **md.manual )  
 
             #
             # Infobox
@@ -1752,20 +1811,40 @@ class checkMlc( ispBase ):
                     #logger.warning( "kein offenes Feld" )
                 #df_base = pd.DataFrame()   
                 # prüfung von df_base
+                
+                # alles notwendige da, erstmal nur df_base?
+                errors = self.checkFields( md, df_base )
+                if len(errors) > 0:
+                    result.append( self.pdf_error_result( 
+                        md, date=checkDate, group_len=len( result ),
+                        errors=errors
+                    ) )
+                    return
+                '''
                 if not self.checkFields( md, df_base ):
                     return    
                     #return
-                
+                '''
                 
                 # alle anderen durchgehen
                 # alle Felder durchgehen
                 for (idx, df_field) in df_speed.query("open != 'OF'").iterrows():
                     gating=""
    
+                    # alles notwendige da?
+                    errors = self.checkFields( md, df_base, df_field, md["field_count"] )
+                    if len(errors) > 0:
+                        result.append( self.pdf_error_result( 
+                            md, date=checkDate, group_len=len( result ),
+                            errors=errors
+                        ) )
+                        return
+                    '''
                     # prüfung der benötigten Felder
                     if not self.checkFields( md, df_base, df_field, 1 ):
                         return
-     
+                    '''
+                    
                     check = qa_mlc( 
                         checkField=self.getFullData( df_field ), 
                         baseField=self.getFullData( df_base ), 
@@ -1864,8 +1943,8 @@ class checkMlc( ispBase ):
 
             # toleranz anzeigen             
             text_values = {
-                "f_warning": md.tolerance[ md["energy"] ].default.warning.get("f",""),
-                "f_error": md.tolerance[ md["energy"] ].default.error.get("f","")
+                "f_warning": md.current.tolerance.default.warning.get("f",""),
+                "f_error": md.current.tolerance.default.error.get("f","")
             }
             text = """<br>
                 Warnung bei: <b style="position:absolute;left:25mm;">{f_warning}</b><br>
@@ -1922,23 +2001,26 @@ class checkMlc( ispBase ):
         --------
         isp.results : Aufbau von result
         """
-        
-        result = []
-        
-        # wird für progress verwendet
+        # used on progress
         filesMax=len( fileData )
         self.fileCount = 0
+        # holds evaluation results
+        result=[]
         
         # Auszuwertende Leaf Nummern
         leaf_from = md.options.leafs.get("from", 1)
         leaf_to = md.options.leafs.get("to", 60)
         leafs = np.arange( leaf_from, leaf_to + 1, 1 ) 
-        
-        #print( mlc_from, mlc_to, leafs )
-        
-        def groupBySeries( df_group ):
-            """Datumsweise Auswertung und PDF Ausgabe 
+         
+        def evaluate( df_group ):
+            """Evaluate grouped Fields.
             
+            create PDF output and fills result 
+            
+            Parameters
+            ----------
+            df_group : pandas Dataframe
+               
             """
             # das Datum vom ersten Datensatz verwenden
             checkDate = df_group['AcquisitionDateTime'].iloc[0].strftime("%d.%m.%Y")
@@ -1947,7 +2029,7 @@ class checkMlc( ispBase ):
             #               
             # Anleitung
             #
-            self.pdf.textFile( md["anleitung"], attrs={ "class":"layout-fill-width" } )  
+            self.pdf.textFile( **md.manual )  
             
             # array für die chartdaten bereitstellen
             fwxm_plot = {}
@@ -1963,7 +2045,7 @@ class checkMlc( ispBase ):
                 check = qa_mlc( self.getFullData( info._asdict() ) )
                 
                 # leafPair Transmissionen suchen und merken
-                data = check.FWHM_findLeafs( leafs=leafs, lfd=i, variante=md["variante"] ) 
+                data = check.FWHM_findLeafs( leafs=leafs, lfd=i, variante=md.current["testTag"] ) 
                 # Daten für die Tabelle merken
                 leafData.append( data )
                 
@@ -2035,10 +2117,10 @@ class checkMlc( ispBase ):
             
             # Formeln anzeigen
             text_values = {
-                "fwxm warning" : md.tolerance[ md["energy"] ].FWXMMean.warning.get("f","").replace("{value}", "FWXM mean"),
-                "fwxm_error": md.tolerance[ md["energy"] ].FWXMMean.error.get("f","").replace("{value}", "FWXM mean"),
-                "shift_warning" : md.tolerance[ md["energy"] ].ShiftMean.warning.get("f","").replace("{value}", "Shift mean"),
-                "shift_error": md.tolerance[ md["energy"] ].ShiftMean.error.get("f","").replace("{value}", "Shift mean")
+                "fwxm warning" : md.current.tolerance.FWXMMean.warning.get("f","").replace("{value}", "FWXM mean"),
+                "fwxm_error": md.current.tolerance.FWXMMean.error.get("f","").replace("{value}", "FWXM mean"),
+                "shift_warning" : md.current.tolerance.ShiftMean.warning.get("f","").replace("{value}", "Shift mean"),
+                "shift_error": md.current.tolerance.ShiftMean.error.get("f","").replace("{value}", "Shift mean")
             }
             text = """
                 Warnung bei: <b style="position:absolute;left:25mm;">{fwxm warning}</b>
@@ -2057,7 +2139,7 @@ class checkMlc( ispBase ):
         #
         # Gruppiert nach SeriesNumber abarbeiten
         # 
-        fileData.sort_values(md["sort_values"]).groupby( md["groupby"] ).apply( groupBySeries )        
+        fileData.sort_values(md["series_sort_values"]).groupby( md["series_groupby"] ).apply( evaluate )        
         # abschließen pdfdaten und result zurückgeben
         return self.pdf.finish(), result        
           
@@ -2087,7 +2169,13 @@ class checkMlc( ispBase ):
         """
         
         # metadata defaults vorbereiten
-        md = DotMap({
+        md = dict_merge( DotMap( {
+            "series_sort_values" :  ["gantry", "collimator"],
+            "series_groupby" :  ['day', 'SeriesNumber'],
+            "manual": {
+                "filename": self.metadata.info["anleitung"],
+                "attrs": {"class":"layout-fill-width"},
+            },
             "_leafPlot" : { "width" : 45, "height" : 45},
             "_boxPlot" : { "width" : 90, "height" : 45},
             "plotTitle" : "lfd:{lfd:d} G:{gantry:01.1f} K:{collimator:01.1f}",
@@ -2103,20 +2191,15 @@ class checkMlc( ispBase ):
                 {'field': 'shift.mean', 'label':'Shift<br>mean', 'format':'{0:.3f}' },
                 {'field': 'shift.max', 'label':'Shift<br>max', 'format':'{0:.3f}' },
                 {'field': 'shift.passed', 'label':'Shift<br>passed' },
-            ],
-            "sort_values" :  ["gantry", "collimator"],
-            "groupby" :  ['day', 'SeriesNumber'],            
+            ],            
             "options":{
                 "leafs" : {
                     "from": 1,
                     "to" : 60
                 }
             }
-        })
-        
-        # und mit den Angaben aus config (info) ergänzen / überschreiben
-        md.update( self.metadata )
-        
+        }), self.metadata )
+               
         return self._doLamellenpositioniergenauigkeit(fileData, md)  
     
     def doMT_8_02_3(self, fileData ):  
@@ -2136,7 +2219,13 @@ class checkMlc( ispBase ):
         """
         
         # metadata defaults vorbereiten
-        md = DotMap({
+        md = dict_merge( DotMap( {
+            "series_sort_values" : ['day'],
+            "series_groupby": ["day", "SeriesNumber"],
+            "manual": {
+                "filename": self.metadata.info["anleitung"],
+                "attrs": {"class":"layout-fill-width"},
+            },
             "_leafPlot" : { "width" : 45, "height" : 45},
             "_boxPlot" : { "width" : 90, "height" : 45},
             "plotTitle" : "lfd:{lfd} - {Richtung}",
@@ -2153,18 +2242,17 @@ class checkMlc( ispBase ):
                 {'field': 'shift.max', 'label':'Shift<br>max', 'format':'{0:.3f}' },
                 {'field': 'shift.passed', 'label':'Shift<br>passed' },
             ],  
-            "sort_values" : ['day'],
-            "groupby" :  ['day', 'SeriesNumber'],
+            
             "options":{
                 "leafs" : {
                     "from": 1,
                     "to" : 60
                 }
             }
-        })
+        }), self.metadata )
         
         # und mit den Angaben aus config (info) ergänzen / überschreiben
-        md.update( self.metadata )
+
         
         return self._doLamellenpositioniergenauigkeit(fileData, md)
           
@@ -2202,8 +2290,11 @@ class checkMlc( ispBase ):
         self.fileCount = 0
         
         # metadata vorbereiten
-        md = self.metadata
-        md.update( {
+        md = dict_merge( DotMap( {
+            "manual": {
+                "filename": self.metadata.info["anleitung"],
+                "attrs": {"class":"layout-fill-width"},
+            },
             "_chartSize" : { "width" : 180, "height" : 110},
             "_table" : { "top" : 165 },
             "table_fields_offsets" : [
@@ -2228,25 +2319,25 @@ class checkMlc( ispBase ):
                 {'field': 'max_from_mean_leaf', 'label':'Max von Mean Error<br>bei Leaf', 'format':'{0:d}' },
   
             ]     
-        } )
+        } ), self.metadata )
         md.update( overrideMD )
         
         # Analyse Grenzen festlegen
-        warning = md.tolerance[ md["energy"] ].MaxFromMeanError.warning.get("value", 0.3)
-        error = md.tolerance[ md["energy"] ].MaxFromMeanError.error.get("value", 0.5)
+        warning = md.current.tolerance.MaxFromMeanError.warning.get("value", 0.3)
+        error = md.current.tolerance.MaxFromMeanError.error.get("value", 0.5)
              
         #
         # Auswertungs text vorbereiten
         #
-        energy_tolerance = md.tolerance[ md["energy"] ]
+        energy_tolerance = md.current.tolerance
         
         text_values = {
-            "MeanSpacing_warning": md.tolerance[ md["energy"] ].MeanSpacing.warning.get("f","").replace("{value}", "Mean spacing"),
-            "MeanSpacing_error": md.tolerance[ md["energy"] ].MeanSpacing.error.get("f","").replace("{value}", "Mean spacing"),
-            "MeanError_warning": md.tolerance[ md["energy"] ].MeanError.warning.get("f","").replace("{value}", "Mean Error"),
-            "MeanError_error": md.tolerance[ md["energy"] ].MeanError.error.get("f","").replace("{value}", "Mean Error"),
-            "MaxFromMeanError_warning": md.tolerance[ md["energy"] ].MaxFromMeanError.warning.get("f","").replace("{value}", "Max v. Mean Error"),
-            "MaxFromMeanError_error": md.tolerance[ md["energy"] ].MaxFromMeanError.error.get("f","").replace("{value}", "Max v. Mean Error")           
+            "MeanSpacing_warning": md.current.tolerance.MeanSpacing.warning.get("f","").replace("{value}", "Mean spacing"),
+            "MeanSpacing_error": md.current.tolerance.MeanSpacing.error.get("f","").replace("{value}", "Mean spacing"),
+            "MeanError_warning": md.current.tolerance.MeanError.warning.get("f","").replace("{value}", "Mean Error"),
+            "MeanError_error": md.current.tolerance.MeanError.error.get("f","").replace("{value}", "Mean Error"),
+            "MaxFromMeanError_warning": md.current.tolerance.MaxFromMeanError.warning.get("f","").replace("{value}", "Max v. Mean Error"),
+            "MaxFromMeanError_error": md.current.tolerance.MaxFromMeanError.error.get("f","").replace("{value}", "Max v. Mean Error")           
         }
         
         text = """
@@ -2273,7 +2364,7 @@ class checkMlc( ispBase ):
             #               
             # Anleitung
             #
-            self.pdf.textFile( md["anleitung"], attrs={"class":"layout-fill-width"} )    
+            self.pdf.textFile( **md.manual )    
             
             data=[]
             # für jeden Datensatz (sollte eigentlich nur einer pro Tag sein)
@@ -2489,8 +2580,11 @@ class checkMlc( ispBase ):
         self.fileCount = 0
         
         # metadata vorbereiten
-        md = self.metadata
-        md.update( {
+        md = dict_merge( DotMap( {
+            "manual": {
+                "filename": self.metadata.info["anleitung"],
+                "attrs": {"class":"layout-fill-width", "margin-bottom": "5mm"},
+            },
             "imgSize" : {"width" : 100, "height" : 100},
             "_image": { "left":40, "top":10, "width" : 100, "height":100 },
             "_tableA": { "left":25, "top":110, "width" : 50 },
@@ -2500,7 +2594,7 @@ class checkMlc( ispBase ):
                 {'field': 'position', 'label':'Position', 'format':'{0:01.1f}' },
                 {'field': 'value', 'label':'50%', 'format':'{0:01.3f}' },
             ]    
-        } )
+        } ), self.metadata )
         
         # Auswertepositionen (Mitte der Leafs) festlegen
         fl1 = np.arange(-195, -100, 10 )
@@ -2522,7 +2616,7 @@ class checkMlc( ispBase ):
                 #               
                 # Anleitung
                 #
-                self.pdf.textFile( md["anleitung"], attrs={"class":"layout-fill-width", "margin-bottom": "5mm"} )  
+                self.pdf.textFile( **md.manual )  
             
                 # Auswertung starten     
                 check = qa_mlc( self.getFullData( info ) )

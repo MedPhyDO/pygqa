@@ -4,7 +4,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 __status__ = "Prototype"
 
 from dotmap import DotMap 
@@ -15,10 +15,13 @@ import numpy as np
 import json
 from datetime import date
 
+from isp.dicom import ispDicom
+from isp.config import dict_merge
+
 from app.config import infoFields
 
 from app.aria import ariaClass
-from app.dicom import dicomClass
+#from app.dicom import dicomClass
 from app.results import ispResults
 
 from app.qa.mlc import checkMlc
@@ -30,7 +33,7 @@ import logging
 logger = logging.getLogger( "MQTT" )
 
 
-class ariaDicomClass( ariaClass, dicomClass ):
+class ariaDicomClass( ariaClass, ispDicom ):
     '''Zentrale Klasse
     
     Attributes
@@ -71,7 +74,7 @@ class ariaDicomClass( ariaClass, dicomClass ):
         ariaClass.__init__( self, database )
 
         # dicomClass initialisieren. Der Erfolg kann über dicomClass.initialized abgefragt werden
-        dicomClass.__init__( self, server )
+        ispDicom.__init__( self, server, self.config )
 
         # Datei mit Ergebnissen als pandas laden
         self.resultfile = osp.join( self.config.get("resultsPath", ".."), self.config.get("database.gqa.name", "gqa.json") )
@@ -568,7 +571,7 @@ class ariaDicomClass( ariaClass, dicomClass ):
             data["tip"] = info.get("tip", "")
             need = info.get("need", "")
             
-            if need != "":
+            if type(need) == str and need != "":
                 chips.append( { "class": "badge badge-pill badge-success", "content": 'benötigt: ' + need  } )
             
             # Anleitung
@@ -675,6 +678,8 @@ class ariaDicomClass( ariaClass, dicomClass ):
         
         Stellt wenn f nicht angegeben wurde eine Formel in f zusammen
         
+        Gibt es eine GQA.<testid>.info.tolerance.default Angabe, so wird diese als Grundlage für alle Energien verwendet
+        
         Zweig in config::
             
             GQA.<testid>.info.tolerance.<energy>
@@ -716,18 +721,24 @@ class ariaDicomClass( ariaClass, dicomClass ):
             }, 
             
         """
-        info = self.config.get( ["GQA", testid, "info" ], False )
-        if info:
-            info = info
-        else:
-            info = DotMap()
-                      
-        tolerance = self.config.get( ["GQA", testid, "info", "tolerance", energy ], False )
-        if not tolerance:
-            return info
+        info = self.config.get( ["GQA", testid, "info" ] )
+  
+        default = info.tolerance.get( "default", False )
+        tolerance = info.tolerance.get( energy, False )
+        if not tolerance and not default:
+            return DotMap()
         
+        if not default:
+            default = DotMap()
+            
+        if tolerance:
+            tolerance = dict_merge( default, tolerance)
+        else:
+            tolerance = default
+        
+        #print("prepare_tolerance tolerance", tolerance )
         import functools
-        # alle angaben durchgehen
+        # alle Angaben durchgehen
         for name in tolerance:
             if not isinstance( tolerance.get(name), dict ): 
                 continue
@@ -750,9 +761,8 @@ class ariaDicomClass( ariaClass, dicomClass ):
                     tolerance[name][artName]["f"] = "abs({}) {} {}".format( "{value}", operator, _value )
                 # wurde ein Bereich angegeben
                 elif art.get("range", None) and len(_range) >= 2:  
-                    tolerance[name][artName]["f"] = "{} <= {} >= {}".format( _range[0], "{value}", _range[1] )
- 
-        return info
+                    tolerance[name][artName]["f"] = "{} <= {} >= {}".format( _range[0], "{value}", _range[1] ) 
+        return tolerance
     
     
     # ---------------------- Test durchführung
@@ -847,19 +857,38 @@ class ariaDicomClass( ariaClass, dicomClass ):
         
         # variables um payload erweitern
         variables.update( payload )
-        
+                
         # variables um info Bereich des test erweitern
-        variables.update( self.prepare_tolerance( variables['testId'], variables['energy'] ) )
-       
+        #variables.update( self.prepare_tolerance( variables['testId'], variables['energy'] ) )
+        
+        
         # metadaten um die test Variante erweitern
         variables["variante"] = payload["testTag"]
 
         #variables["testTag"] = payload["testTag"]
         #variables["testId"] = testId
         
-        # metadata um configdaten des Tests erweitern 
-        variables["testConfig"] = self.config.get( ["GQA", testId , variables["unit"] ], DotMap() ).toDict()
+        # variables um configdaten des Tests erweitern diese werden in der test Klasse als metadata verwendet
         
+        # TODO: AcquisitionYear und AcquisitionMonth als year und month in current ablegen
+        variables["testConfig"] = self.config.get( ["GQA", testId ], DotMap() );
+        current = self.config.get( ["GQA", testId, "current" ], DotMap() )
+        variables["testConfig"]["current"] = dict_merge( current, DotMap({
+            "testTag":  variables["variante"],
+            "testId": variables["testId"],
+            "unit": variables["unit"],
+            "energy": variables["energy"],
+            "year": variables["AcquisitionYear"],
+            "month": variables["AcquisitionMonth"],
+            "fields": self.config.get( ["GQA", testId, variables["unit"], "energyFields", variables["energy"] ], current.get( "fields" ,0) ),
+        #    "tolerance": self.config.get( ["GQA", testId, "info", "tolerance",  variables["energy"] ], current.get( "tolerance", {} ) )
+            "tolerance": self.prepare_tolerance( variables['testId'], variables['energy'] )
+        }) )
+        variables["testConfig"]["AcquisitionYear"] = variables["AcquisitionYear"]
+        variables["testConfig"]["AcquisitionMonth"] = variables["AcquisitionMonth"]
+        
+        # print("doTestType", variables.testConfig.current.toDict() )
+         
         # die benötigten Daten vom server oder aus dem DICOM dir holen
         # in self.dicomfiles liegen dann pro gerät die Infos als dict
         # in self.data liegen dann pro SOPInstanceUID die eingelesenen DICOM daten    
@@ -878,7 +907,7 @@ class ariaDicomClass( ariaClass, dicomClass ):
         # Dicom Daten einlesen   
         i = 0
         read_count = 0  
-        
+        dicomData = {}
         df = pd.DataFrame( data.values() )
         '''
         ['id', 'PatientId', 'RadiationId', 'RadiationSer', 'CourseId',
@@ -893,6 +922,7 @@ class ariaDicomClass( ariaClass, dicomClass ):
        'varianten', 'AcquisitionDateTime', 'dicom', 'check_variante',
        'check_subtag'],
         '''
+        
         #print("doTestType", variante, df[ [ 'energy', "AcquisitionYear", "AcquisitionMonth", "varianten"]  ] )
         
         # progress starten
@@ -913,11 +943,13 @@ class ariaDicomClass( ariaClass, dicomClass ):
                 "override" : variables["reloadDicom"],
                 "subPath" : str(AcquisitionYear)
             })
-            
-            for UID in result:
-                data[ UID ]["dicom"] = self.dicomData[ UID ]
+            for dcm in result:
+                data[ dcm.SOPInstanceUID ]["dicom"] = dcm
+                # FIXME: in allen testModulen zugriff auf dicom daten über data und nicht mehr über dicomData
+                # getFullData() sollte dann nicht mehr benötigt werden
+                dicomData[ dcm.SOPInstanceUID ] = dcm
                 read_count += 1  
-                        
+       
             # dicom Verbindung falls sie geöffnet wurde schließen
             self.closeAE()
         
@@ -927,7 +959,7 @@ class ariaDicomClass( ariaClass, dicomClass ):
                 logger.progress( testId, 100  )
             logger.warning( "doTestType: dicom retrieve Fehler: {} - {} - {} - {}".format( 
                 SOPInstanceUID,
-                data[SOPInstanceUID]["type"],
+                data[SOPInstanceUID]["testTags"],
                 data[SOPInstanceUID]["PatientId"],
                 data[SOPInstanceUID]["ImageId"]
             ) )
@@ -957,7 +989,6 @@ class ariaDicomClass( ariaClass, dicomClass ):
 
         #  wenn nicht angegeben Titel und Betreff aus config templates 
         for t in ["Titel", "Betreff"]:
-            
             if variables.get(t, "") == "":
                 variables[t] = self.config.get( ["templates", "PDF-{}-{}".format(infoTypeArt, t)], "" )
         
@@ -966,72 +997,77 @@ class ariaDicomClass( ariaClass, dicomClass ):
         }
         result = []
         
-        
         if testId=="JT-4_2_2_1-A":
-            check = checkMlc( self.config, variables, dicomData=self.dicomData )
+            check = checkMlc( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doJT_4_2_2_1_A( df )  
         elif testId=="JT-4_2_2_1-B":
-            check = checkMlc( self.config, variables, dicomData=self.dicomData )
+            check = checkMlc( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doJT_4_2_2_1_B( df )    
         elif testId=="JT-4_2_2_1-C":
-            check = checkMlc( self.config, variables, dicomData=self.dicomData )
+            check = checkMlc( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doJT_4_2_2_1_C( df )     
         elif testId=="JT-LeafSpeed":
-            check = checkMlc( self.config, variables, dicomData=self.dicomData )
+            check = checkMlc( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doJT_LeafSpeed( df )
         elif testId=="JT-10_3_1":
-            check = checkMlc( self.config, variables, dicomData=self.dicomData )
+            check = checkMlc( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doJT_10_3_1( df ) 
+        elif testId=="JT-7_2":
+            check = checkField( self.config, variables, dicomData=dicomData )
+            pdfData, result = check.doJT_7_2( df )
+        elif testId=="JT-7_3":
+            check = checkField( self.config, variables, dicomData=dicomData )
+            pdfData, result = check.doJT_7_3( df )
         elif testId=="JT-7_4":
-            check = checkField( self.config, variables, dicomData=self.dicomData )
+            check = checkField( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doJT_7_4( df )
         elif testId=="JT-7_5":
-            check = checkField( self.config, variables, dicomData=self.dicomData )
+            check = checkField( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doJT_7_5( df )
         elif testId=="JT-9_1_2":
-            check = checkField( self.config, variables, dicomData=self.dicomData )
+            check = checkField( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doJT_9_1_2( df )
         elif testId=="JT-10_3":
-            check = checkField( self.config, variables, dicomData=self.dicomData )
+            check = checkField( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doJT_10_3( df )
         elif testId=="MT-4_1_2":
-            check = checkField( self.config, variables, dicomData=self.dicomData )
+            check = checkField( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doMT_4_1_2( df )
         elif testId=="MT-WL":
-            check = checkWL( self.config, variables, dicomData=self.dicomData )
+            check = checkWL( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doMT_WL( df )
         elif testId=="MT-8_02-1-2":
-            check = checkMlc( self.config, variables, dicomData=self.dicomData )
+            check = checkMlc( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doMT_8_02_1_2( df )
         elif testId=="MT-8_02-3":
-            check = checkMlc( self.config, variables, dicomData=self.dicomData )
+            check = checkMlc( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doMT_8_02_3( df )
         elif testId=="MT-8_02-4":
-            check = checkMlc( self.config, variables, dicomData=self.dicomData )
+            check = checkMlc( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doMT_8_02_4( df )
         elif testId=="MT-8_02-5":
-            check = checkField( self.config, variables, dicomData=self.dicomData )
+            check = checkField( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doMT_8_02_5( df )
         elif testId=="MT-LeafSpeed":
-            check = checkMlc( self.config, variables, dicomData=self.dicomData )
+            check = checkMlc( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doMT_LeafSpeed( df )
         elif testId=="MT-VMAT-0_1":
-            check = checkField( self.config, variables, dicomData=self.dicomData )
+            check = checkField( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doMT_VMAT_0_1( df )
         elif testId=="MT-VMAT-0_2":
-            check = checkMlc( self.config, variables, dicomData=self.dicomData )
+            check = checkMlc( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doMT_VMAT_0_2( df ) 
         elif testId=="MT-VMAT-1_1":           
-            check = checkMlc( self.config, variables, dicomData=self.dicomData )
+            check = checkMlc( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doMT_VMAT_1_1( df ) 
         elif testId=="MT-VMAT-1_2":
-            check = checkMlc( self.config, variables, dicomData=self.dicomData )
+            check = checkMlc( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doMT_VMAT_1_2( df ) 
         elif testId=="MT-VMAT-2":
-            check = checkVMAT( self.config, variables, dicomData=self.dicomData )
+            check = checkVMAT( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doMT_VMAT_2( df )             
         elif testId=="MT-VMAT-3":
-            check = checkVMAT( self.config, variables, dicomData=self.dicomData )
+            check = checkVMAT( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doMT_VMAT_3( df )    
             
         # ab hier ist progress immer 100%
@@ -1041,8 +1077,8 @@ class ariaDicomClass( ariaClass, dicomClass ):
         # progress beenden
         if hasattr( logger, "progress"):
             logger.progressReady( testId )
-        
-        # print("doTestType", testId, result )
+            
+        #print("doTestType", testId, result )
         
         return pdfData["pdf_filepath"], { "result":result, "pdfData": pdfData }
       

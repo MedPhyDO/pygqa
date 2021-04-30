@@ -7,29 +7,22 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 __status__ = "Prototype"
 
 from pylinac.core.image import DicomImage as pyDicomImage
 from pylinac.core.image import BaseImage
 
-import os.path as osp
-from pathlib import Path
-import re
-from datetime import datetime
-import pydicom
 import copy
 
 import matplotlib.pyplot as plt
 import matplotlib
-
 
 import numpy as np
 from pylinac.settings import get_dicom_cmap
 
 from app.config import infoFields
 from isp.plot import plotClass
-
 
 from pylinac.core.geometry import Point
 

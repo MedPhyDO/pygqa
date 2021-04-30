@@ -4,7 +4,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 __status__ = "Prototype"
 
 import os.path as osp
@@ -136,7 +136,7 @@ class gqa_config():
                 
             for tag, settings in gqa.items():
                 if not tag in cross[config_name]:
-                    cross[config_name][ tag ]= json.dumps( settings) 
+                    cross[config_name][ tag ]= json.dumps( settings, indent=2, sort_keys=True ) 
                      
         # tabelle erzeugen 
 

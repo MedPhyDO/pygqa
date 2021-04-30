@@ -4,7 +4,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 __status__ = "Prototype"
 
 from pylinac import FlatSym
@@ -15,9 +15,11 @@ from app.base import ispBase
 from app.image import DicomImage
 from app.check import ispCheckClass
 
+from isp.config import dict_merge
 
 import numpy as np
 import pandas as pd
+from dotmap import DotMap 
 
 import matplotlib.pyplot as plt
 
@@ -25,9 +27,7 @@ import matplotlib.pyplot as plt
 import logging
 logger = logging.getLogger( "MQTT" )
 
-
 import math
-
 
 def pointRotate(origin, point, angle):
     """
@@ -49,8 +49,6 @@ def pointRotate(origin, point, angle):
     qy = oy + math.sin(angle) * (px - ox) + math.cos(angle) * (py - oy)
     
     return Point( qx, qy )
-
-
 
 class FSImage( FlatSym, DicomImage ):
 
@@ -348,7 +346,7 @@ class qa_field( ispCheckClass ):
         }
      
     def plot4Qprofile( self, data , metadata={} ):
-        """ Ein angegebenes 4Q profil plotten
+        """ Ein angegebenes 4Q Profil plotten
         
             Parameters
             ----------
@@ -384,14 +382,122 @@ class qa_field( ispCheckClass ):
          
     
 class checkField( ispBase ):
-    
+            
+    def _doField_one2n(self, fileData, md={}, passedOn=True, withOffsets=False):
+        """
+        
+        TODO: query aus tolerance?
+            openFieldQuery = md.current.tolerance.default.check.query
+            fieldQuery = openFieldQuery.replace("==", "!=")
+            
+        Parameters
+        ----------
+        fileData : TYPE
+            DESCRIPTION.
+        overrideMD : TYPE, optional
+            DESCRIPTION. The default is {}.
+        passedOn : TYPE, optional
+            DESCRIPTION. The default is True.
+        withOffsets : TYPE, optional
+            DESCRIPTION. The default is False.
+
+        Returns
+        -------
+        TYPE
+            DESCRIPTION.
+        result : TYPE
+            DESCRIPTION.
+
+        """
+        # used on progress
+        filesMax=len( fileData )
+        self.fileCount = 0
+        # holds evaluation results
+        result=[]
+        
+        # prepare metadata
+        md = dict_merge( DotMap( md ), self.metadata )
+        
+        #md.pprint(pformat='json')
+                
+        def evaluate( df_group ):
+            """Evaluate grouped Fields.
+            
+            create PDF output and fills result 
+            
+            Parameters
+            ----------
+            df_group : pandas Dataframe
+               
+            """
+            # get base and fields check number of data
+            ok, df_base, df_fields = self.evaluationPrepare(df_group, md, result)
+            if not ok:
+                return 
+            
+            # base Field und dosis bereitstellen
+            baseField = qa_field( self.getFullData( df_base.loc[df_base.index[0]] ) )
+            baseMeanDose = baseField.getMeanDose( md["doseArea"] )
+            
+            # 
+            evaluation_table = [ { 
+                'Kennung': baseField.infos["RadiationId"], 
+                'doserate': baseField.infos["doserate"], 
+                'ME': baseField.infos["ME"],
+                'baseME': baseField.infos["ME"], 
+                'baseMeanDose': 1,
+                'fieldMeanDose': baseMeanDose
+            }]
+
+            # print BaseField Image
+            img = baseField.image.plotImage( **md.plotImage )
+            self.pdf.image(img, **md.plotImage_pdf )
+             
+            # alle anderen durchgehen
+            for info in df_fields.itertuples():
+                # prüf Field und dosis bereitstellen
+                checkField = qa_field( self.getFullData(info), normalize="none" )
+                fieldMeanDose = checkField.getMeanDose( md["doseArea"] )
+                                
+                #
+                evaluation_table.append( { 
+                      'Kennung': checkField.infos["Kennung"], 
+                      'doserate': checkField.infos["doserate"], 
+                      'ME': checkField.infos["ME"], 
+                      'baseME': baseField.infos["ME"], 
+                      'baseMeanDose': baseMeanDose,
+                      'fieldMeanDose': fieldMeanDose
+                } )  
+            
+                if md["print_all_images"] == True:
+                    # print checkField Image
+                    img = checkField.image.plotImage( **md.plotImage )
+                    self.pdf.image(img, **md.plotImage_pdf )                   
+                    
+                # progress
+                self.fileCount += 1
+                if hasattr( logger, "progress"):
+                    logger.progress( md["testId"],  40 + ( 40 / filesMax * self.fileCount ) )
+            
+            evaluation_df = pd.DataFrame( evaluation_table )
+               
+            # check tolerance - printout tolerance, evaluation_df and result icon
+            acceptance = self.evaluationResult( evaluation_df, md, result, md["tolerance_field"] )
+               
+        #
+        # call evaluate with sorted and grouped fields
+        fileData.sort_values(md["series_sort_values"]).groupby( md["series_groupby"] ).apply( evaluate )      
+        
+        #print("one2n", result)
+        return self.pdf.finish(), result        
+        
     
     def doJT_end2end( self, filedata ):
         """
         .. note:: Test noch nicht erstellt
         """
         pass
-    
+         
     def doMT_4_1_2(self, fileData):
         """Monatstest: 4.1.2.  ()
         
@@ -410,47 +516,36 @@ class checkField( ispBase ):
             list mit dicts der Testergebnisse 
             
         """
-        
+        # used on progress
+        filesMax=len( fileData )
+        self.fileCount = 0
+        # holds evaluation results
         result=[]
-        # metadata vorbereiten
-        md = self.metadata
+
+        # place for testing parameters
+        md = dict_merge( DotMap( {
+           
+        } ), self.metadata )
         
-       # print( fileData.query(  )  )
-        
-        md.update( {
-            "doseArea" : { "X1":-1, "X2": 1, "Y1": -1, "Y2": 1 },
-            "table_fields": [
-                {'field': 'Kennung', 'label':'Kennung', 'format':'{0}', 'style': [('text-align', 'left')] },
-                {'field': 'doserate', 'label':'Doserate', 'format':'{0:1.1f}' },
-                {'field': 'ME','label':'MU', 'format':'{0:1.1f}' },
-               # {'field': 'basedose', 'label':'Dosis', 'format':'{0:.5f}' },
-                {'field': 'fielddose', 'label':'Messwert (KE)', 'format':'{0:.5f}' },
-                {'field': 'diff', 'label':'Abweichung [%]', 'format':'{0:.2f}' },
-               # {'field': 'warn', 'label':'Warnung', 'format':'{0:.1f}' },
-               # {'field': 'err', 'label':'Fehler', 'format':'{0:.1f}' },
-                {'field': 'diff_passed', 'label':'Passed' }
-            ]
-        } )
-            
+        #md.pprint(pformat='json')
+                   
         def groupBySeries( df_group ):
             """Datumsweise Auswertung und PDF Ausgabe 
             Die Daten kommen nach doserate und ME sortiert
             """
             #print("doMT_7_2", df_group[ ["energy", "doserate", "ME"] ] )
             
-            # das Datum vom ersten Datensatz verwenden
-            self.pdf.setContentName( df_group['AcquisitionDateTime'].iloc[0].strftime("%d.%m.%Y") )
+            # get base and fields check number of data
+            ok, df_base, df_fields = self.evaluationPrepare(df_group, md, result)
+            if not ok:
+                return 
             
-            #               
-            # Anleitung
-            #
-            self.pdf.textFile( md["anleitung"], attrs={"class":"layout-fill-width", "margin-bottom": "5mm"} )
-             
             result_doserate = []
+            
             def groupByDoserate( df_doserate ):
-  
+                text = ""
                 # in den Toleranzangaben der config steht die default query                 
-                openFieldQuery = md.tolerance[ md["energy"] ].default.check.query
+                openFieldQuery = md.current.tolerance.default.check.query
                 fieldQuery = openFieldQuery.replace("==", "!=")
                 #print( openFieldQuery, fieldQuery )
                 
@@ -466,8 +561,8 @@ class checkField( ispBase ):
                     'Kennung': baseField.infos["RadiationId"], 
                     'doserate': baseField.infos["doserate"], 
                     'ME': baseField.infos["ME"], 
-                 #   'basedose': baseMeanDose, 
-                    'fielddose': baseMeanDose,
+                 #   'baseMeanDose': baseMeanDose, 
+                    'fieldMeanDose': baseMeanDose,
                     'diff': (baseMeanDose - 1.0) * 100
                 
                 }]
@@ -490,55 +585,21 @@ class checkField( ispBase ):
                       'Kennung': checkField.infos["RadiationId"], 
                       'doserate': checkField.infos["doserate"], 
                       'ME': checkField.infos["ME"], 
-                      'fielddose': fieldMeanDose,
+                      'fieldMeanDose': fieldMeanDose,
                       'diff': (fieldMeanDose - baseFmu) / baseFmu * 100,
                     } )  
+                    
+                    # progress
+                    self.fileCount += 1
+                    if hasattr( logger, "progress"):
+                        logger.progress( md["testId"],  40 + ( 40 / filesMax * self.fileCount ) )
                   
                 # aus den daten ein DataFrame machen
-                df = pd.DataFrame( data )
-           
-                #
-                # Toleranzen Angaben bestimmen
-                #
-                check = []
-                tolerance_format = '<b>{}</b> <span style="position:absolute;left:25mm;">{}</span> <span style="position:absolute;left:75mm;">{}</span> <br>'
-                tolerance_text = tolerance_format.format("<br>", "<b>Warnung [%]</b>", "<b>Fehler [%]</b>")
-                for tolerance_name in md.tolerance[ md["energy"] ]:         
-                    tolerance =  md.tolerance[ md["energy"] ][tolerance_name]
-                    tolerance_check = tolerance.check
-                    tolerance_check["tolerance"] = tolerance_name
-                    check.append( tolerance_check )
-                    tolerance_text += tolerance_format.format( tolerance_name, tolerance.warning.f, tolerance.error.f )
-
-                #
-                # Abweichung ausrechnen und Passed setzen
-                #
-                df, acceptance = self.check_acceptance_ext( df, md, check )
-                                
-                #print("doMT_7_2", df, acceptance )
-               
-                #
-                # Ergebnis in result merken
-                #
-                result_doserate.append( self.createResult( df, md, check, 
-                    df_group['AcquisitionDateTime'].iloc[0].strftime("%Y%m%d"), 
-                    len( result_doserate ), # bisherige Ergebnisse in result_doserate
-                    acceptance
-                ) )
+                evaluation_df = pd.DataFrame( data )
+ 
+                # check tolerance - printout tolerance, evaluation_df -  md["tolerance_field"],
+                acceptance = self.evaluationResult( evaluation_df, md, result_doserate, printResultIcon=False )
                 
-                #
-                # Tabelle erzeugen
-                #
-                self.pdf.pandas( df.sort_values(["doserate", "ME"], ascending=False) , 
-                    attrs={"class":"layout-fill-width", "margin-top": "5mm"}, 
-                    fields=md["table_fields"]
-                )       
-
-                #
-                # toleranz anzeigen   
-                #
-                self.pdf.text( tolerance_text.replace("{value}", "Abweichung"), md["_text"] )
-              
                 # acceptance dieser Gruppe zurückgeben
                 return acceptance
                 
@@ -561,11 +622,35 @@ class checkField( ispBase ):
                  
         #
         # Gruppiert nach SeriesNumber abarbeiten
-        fileData.sort_values(["doserate", "ME"]).groupby( [ 'day', 'SeriesNumber' ] ).apply( groupBySeries )      
+        fileData.sort_values( md["series_sort_values"] ).groupby( md["series_groupby"] ).apply( groupBySeries )      
             
         # abschließen pdfdaten und result zurückgeben
         return self.pdf.finish(), result        
    
+    def doJT_7_2(self, fileData):
+        """Jahrestest: 7.2.  ()
+        Abhängigkeit der Kalibrierfaktoren von der Monitorrate
+        """
+       
+        # place for testing parameters
+        md = dict_merge( DotMap( {
+           
+        } ), self.metadata )
+        
+        return self._doField_one2n(fileData, md=md )
+    
+    
+    def doJT_7_3(self, fileData):
+        """Jahrestest: 7.3.  ()
+        Abhängigkeit der Kalibrierfaktoren vom Dosismonitorwert
+        """
+        # place for testing parameters
+        md = dict_merge( DotMap( {
+           
+        } ), self.metadata )
+
+        return self._doField_one2n(fileData, md=md )
+    
     def doJT_7_4(self, fileData):
         """Jahrestest: 7.4.  ()
         Abhängikeit Kalibrierfaktoren vom Tragarm Rotationswinkel
@@ -589,61 +674,67 @@ class checkField( ispBase ):
         --------
         isp.results : Aufbau von result
         """
-        
-        result=[]
-        
-        # wird für progress verwendet
+        # used on progress
         filesMax=len( fileData )
         self.fileCount = 0
+        # holds evaluation results
+        result=[]
         
-        # metadata vorbereiten
-        md = self.metadata
-        
-        md.update( {
+        # prepare metadata
+        md = dict_merge( DotMap( {
+            "series_sort_values": ["gantry", "collimator"],
+            "series_groupby": ["day", "SeriesNumber"],
+            "querys" : {
+                "base" : "gantry == 0 & collimator == 0",
+                "fields" : "gantry != 0 | collimator != 0",
+            },
+            # "field_count": 3,
+            "manual": {
+                "filename": self.metadata.info["anleitung"],
+                "attrs": {"class":"layout-fill-width"},
+            },
+            "tolerance_pdf" : {
+                "attrs": {"margin-top":"-2mm"},
+                "mode": "text"
+            },           
+            
             "doseArea" : { "X1":-5, "X2": 5, "Y1": -5, "Y2": 5 },
             "_imgSize" : { "width" : 80, "height" : 80},
-            "_field" : 10,
-            "table_fields": [
-                {'field': 'Kennung', 'label':'Kennung', 'format':'{0}', 'style': [('text-align', 'left')] },
-                {'field': 'gantry', 'label':'Gantry', 'format':'{0:1.1f}' },
-                {'field': 'collimator','label':'Kollimator', 'format':'{0:1.1f}' },
-                {'field': 'basedose', 'label':'Dosis', 'format':'{0:.5f}' },
-                {'field': 'fielddose', 'label':'Prüf Dosis', 'format':'{0:.5f}' },
-                {'field': 'diff', 'label':'Abweichung [%]', 'format':'{0:.2f}' },
-                {'field': 'diff_passed', 'label':'Passed' }
-            ]
+            "plotImage_field" : 10,
+            "evaluation_table_pdf" : {
+                "attrs": { "class":"layout-fill-width", "margin-top": "5mm" }, 
+                "fields": [
+                    {'field': 'Kennung', 'label':'Kennung', 'format':'{0}', 'style': [('text-align', 'left')] },
+                    {'field': 'gantry', 'label':'Gantry', 'format':'{0:1.1f}' },
+                    {'field': 'collimator','label':'Kollimator', 'format':'{0:1.1f}' },
+                    {'field': 'baseMeanDose', 'label':'Dosis', 'format':'{0:.5f}' },
+                    {'field': 'fieldMeanDose', 'label':'Prüf Dosis', 'format':'{0:.5f}' },
+                    {'field': 'diff', 'label':'Abweichung [%]', 'format':'{0:.2f}' },
+                    {'field': 'diff_passed', 'label':'Passed' }
+                ],
+            },
+            "table_sort_values_by": ["doserate"],
+            "table_sort_values_ascending": [True],
 
-        } )
-
-                
-        def groupBySeries( df_group ):
-            """Datumsweise Auswertung und PDF Ausgabe 
-            Die Daten kommen nach gantry und collimator sortiert
-            """
+        } ), self.metadata )
+        
+  
+        def evaluate( df_group ):
+            """Evaluate grouped Fields 
             
-            # das Datum vom ersten Datensatz verwenden
-            checkDate = df_group['AcquisitionDateTime'].iloc[0].strftime("%d.%m.%Y")
-            self.pdf.setContentName( checkDate )
+            create PDF output and fills result 
             
-            # base bestimmen
-            df_base = df_group.query("gantry == 0 & collimator == 0")
-            
-            # felder bestimmen
-            df_fields = df_group.query("gantry != 0 | collimator != 0")
-            
-            # alles notwendige da?
-            if not self.checkFields( md, df_base, df_fields, 3):
-                result.append( self.pdf_error_result( 
-                    md, date=checkDate, group_len=len( result ),
-                    msg='<b>Datenfehler</b>: keine Felder gefunden oder das offene Feld fehlt.'
-                ) )
-                return
-            
-            #               
-            # Anleitung
-            #
-            self.pdf.textFile( md["anleitung"], attrs={ "class":"layout-fill-width" } )  
+            Parameters
+            ----------
+            df_group : pandas Dataframe
                
+            """
+      
+            # get base and fields, check number of data
+            ok, df_base, df_fields = self.evaluationPrepare(df_group, md, result)
+            if not ok:
+                return 
+                        
             # base Field und dosis bereitstellen
             baseField = qa_field( self.getFullData( df_base.loc[df_base.index[0]] ) )
             baseMeanDose = baseField.getMeanDose( md["doseArea"] )
@@ -652,14 +743,15 @@ class checkField( ispBase ):
                 'Kennung': baseField.infos["Kennung"], 
                 'gantry': baseField.infos["gantry"], 
                 'collimator': baseField.infos["collimator"], 
-                'basedose': baseMeanDose, 
-                'fielddose': np.nan,
+                'baseMeanDose': baseMeanDose, 
+                'fieldMeanDose': np.nan,
                 'diff': np.nan,
             }]
+            
             # Bild anzeigen
             img = baseField.image.plotImage( original=False
                         , plotTitle="{Kennung} - G:{gantry:01.1f} K:{collimator:01.1f}"
-                        , field=md["_field"] 
+                        , field=md["plotImage_field"] 
                         , invert=False # , cmap="jet"
                         , plotCax=True, plotField=True
                     )
@@ -675,14 +767,14 @@ class checkField( ispBase ):
                       'Kennung': checkField.infos["Kennung"], 
                       'gantry': checkField.infos["gantry"], 
                       'collimator': checkField.infos["collimator"], 
-                      'basedose': np.nan,
-                      'fielddose': fieldDose,
+                      'baseMeanDose': np.nan,
+                      'fieldMeanDose': fieldDose,
                       'diff': (fieldDose-baseMeanDose) / baseMeanDose * 100,
                 } )  
                 # Bild anzeigen
                 img = checkField.image.plotImage( original=False
                             , plotTitle="{Kennung} - G:{gantry:01.1f} K:{collimator:01.1f}"
-                            , field=md["_field"] 
+                            , field=md["plotImage_field"] 
                             , invert=False # , cmap="jet"
                             , plotCax=True, plotField=True
                         )
@@ -693,70 +785,22 @@ class checkField( ispBase ):
                 self.fileCount += 1
                 if hasattr( logger, "progress"):
                     logger.progress( md["testId"], 40 + ( 40 / filesMax * self.fileCount ) )
-                
-            df = pd.DataFrame( data )
-            
-            #
-            # Abweichung ausrechnen und Passed setzen
-            #
-            check = [
-                { "field": 'diff', 'tolerance':'default' }   
-            ]
-            acceptance = self.check_acceptance( df, md, check )
-            
-            #print("7.4", df[ ['basedose','fielddose', 'diff', 'diff_acceptance'] ] )
-            #
-            # Ergebnis in result merken
-            #
-            result.append( self.createResult( df, md, check, 
-                    df_group['AcquisitionDateTime'].iloc[0].strftime("%Y%m%d"), 
-                    len( result ), # bisherige Ergebnisse in result
-                    acceptance
-            ) )
-                          
-            #
-            # Tabelle erzeugen
-            #
-            self.pdf.pandas( df, 
-                attrs={"class":"layout-fill-width", "margin-top": "5mm"}, 
-                fields=md["table_fields"]
-            )
-            
-            #
-            # toleranz anzeigen   
-            #
-            text_values = {
-                "f_warning": md.tolerance[ md["energy"] ].default.warning.get("f",""),
-                "f_error": md.tolerance[ md["energy"] ].default.error.get("f","")
-            }
-            text = """<br>
-                Warnung bei: <b style="position:absolute;left:25mm;">{f_warning}</b><br>
-                Fehler bei: <b style="position:absolute;left:25mm;">{f_error}</b>
-            """.format( **text_values ).replace("{value}", "Delta")
-            
-            self.pdf.text( text, md["_text"], attrs={"margin-top":"-2mm"} )
-          
-            # Gesamt check - das schlechteste aus der tabelle
-            self.pdf.resultIcon( acceptance )
-            
+                     
+            evaluation_df = pd.DataFrame( data )
+                        
+            # check tolerance - printout tolerance, evaluation_df and result icon
+            acceptance = self.evaluationResult( evaluation_df, md, result, 'diff' )
+                        
         #
-        # Gruppiert nach SeriesNumber abarbeiten
-        # 
-        fileData.sort_values(["gantry", "collimator"]).groupby( [ 'day', 'SeriesNumber' ] ).apply( groupBySeries )      
+        # call evaluate with sorted and grouped fields
+        fileData.sort_values(md["series_sort_values"]).groupby( md["series_groupby"] ).apply( evaluate )  
+     
         # abschließen pdfdaten und result zurückgeben
         return self.pdf.finish(), result
 
-    
     def doJT_7_5(self, fileData):
         """Jahrestest: 7.5.  ()
-        ACHTUNG: der Test 7.5 und 7.4 muss am gleichem Tag erfolgen, da das 0° Feld von 7.4 benötigt wird
-        
-        Abhängikeit Kalibrierfaktoren der Tragarmrotation
-        10x10 Feld 4 Gantrysectoren: 180-90, 90-0, 180-270, 270-0
-        Auswertung in einer ROI von 10mmx10mm mit dem 0° Feld von 7.4 vergleichen
-        
-        Energie: alle
-        
+
         Parameters
         ----------
         fileData : pandas.DataFrame
@@ -771,147 +815,156 @@ class checkField( ispBase ):
         See Also
         --------
         isp.results : Aufbau von result
-        """
-        
-        # wird für progress verwendet
+        """    
+        # used on progress
         filesMax=len( fileData )
         self.fileCount = 0
+        # holds evaluation results
+        result=[]
         
-        result=[]        
-        # metadata vorbereiten
-        md = self.metadata
-        md.update( {
+        # prepare metadata
+        md = dict_merge( DotMap( {
+            "series_sort_values": ["gantry", "StopAngle"],
+            "series_groupby": ["day"],
+            "sub_series_groupby": ["energy"],
+            "querys" : {
+                "base" : "GantryRtnDirection == 'NONE'",
+                "fields" : "GantryRtnDirection != 'NONE'",
+                "sub_base" : "GantryRtnDirection == 'NONE'",
+                "sub_fields" : "GantryRtnDirection != 'NONE'",
+            },
+            "manual": {
+                "filename": self.metadata.info["anleitung"],
+                "attrs": {"class":"layout-fill-width", "margin-bottom": "5mm"},
+            },
             "doseArea" : { "X1":-5, "X2": 5, "Y1": -5, "Y2": 5 },
-            "_imgSize" : {"width" : 90, "height" : 90},
-            "_field" : 10,
-            "table_fields" : [
-                {'field': 'Kennung', 'label':'Kennung', 'format':'{0}', 'style': [('text-align', 'left')] },
-                {'field': 'von_nach', 'label':'Gantry' },
-                {'field': 'basedose', 'label':'Dosis', 'format':'{0:.5f}' },
-                {'field': 'fielddose', 'label':'Prüf Dosis', 'format':'{0:.5f}' },
-                {'field': 'diff', 'label':'Abweichung [%]', 'format':'{0:.2f}' },
-                {'field': 'diff_passed', 'label':'Passed' }
-            ]    
-        } )
-                    
-        def groupBySeries( df_group ):
-            """Datumsweise Auswertung und PDF Ausgabe 
-            """
-                        
-            # das Datum vom ersten Datensatz verwenden
-            checkDate = df_group['AcquisitionDateTime'].iloc[0].strftime("%d.%m.%Y")
-            self.pdf.setContentName( checkDate )
-            
-            #               
-            # Anleitung
-            #
-            self.pdf.textFile( md["anleitung"], attrs={"class":"layout-fill-width", "margin-bottom": "5mm"} )  
+            "plotImage": {
+                "original": False,
+                "plotTitle": "{Kennung} - G:{von_nach}",
+                "field": 10,
+                "invert": True,
+                "cmap": "gray_r", # gray_r twilight jet
+                "plotCax": True, 
+                "plotField": True
+            },
+            "plotImage_pdf": {
+                "area" : { "width" : 90, "height" : 90 },
+                #"attrs": "",
+            },
 
-            df_base = df_group.query("GantryRtnDirection == 'NONE'")
-            df_fields = df_group.query("GantryRtnDirection != 'NONE'")
+            "evaluation_table_pdf" : {
+                "attrs": { "class":"layout-fill-width", "margin-top": "5mm" }, 
+                "fields": [
+                    {'field': 'Kennung', 'label':'Kennung', 'format':'{0}', 'style': [('text-align', 'left')] },
+                 #   {'field': 'ME', 'label':'MU' },
+                    {'field': 'von_nach', 'label':'Gantry' },
+                    {'field': 'baseMeanDose', 'label':'Dosis', 'format':'{0:.5f}' },
+                    {'field': 'fieldMeanDose', 'label':'Prüf Dosis', 'format':'{0:.5f}' },
+                    {'field': 'diff', 'label':'Abweichung [%]', 'format':'{0:.2f}' },
+                    {'field': 'diff_passed', 'label':'Passed' }
+                ],
+            },
+
+            "table_sort_values_by": ["ME"],
+            "table_sort_values_ascending": [True],
+
+        } ), self.metadata )  
+        # alte Auswertung
+        pre2020 = False
+        if md.get("AcquisitionYear", 0) < 2020:
+            md.evaluation_text = ""
+            md.tolerance_pdf.mode = "text"
+            pre2020 = True
+        
+        #md.pprint(pformat='json')
+        
+        def evaluate( df_group ):
+            """Evaluate grouped Fields 
             
-            # alles notwendige da?
-            if not self.checkFields( md, df_base, df_fields, 4):    
-                result.append( self.pdf_error_result( 
-                    md, date=checkDate, group_len=len( result ),
-                    msg='<b>Datenfehler</b>: keine Felder gefunden oder das offene Feld fehlt.'
-                ) )
+            create PDF output and fills result 
+            
+            Parameters
+            ----------
+            df_group : pandas Dataframe
+               
+            
+            felder unter 0° sind basis für die winkel felder
+            Auswertung je doserate
+            """
+            # get base and fields, check number of data
+            ok, df_base, df_fields = self.evaluationPrepare(df_group, md, result)
+            if not ok:
                 return
             
-                
-            # base Field und dosis bereitstellen
-            baseField = qa_field( self.getFullData( df_base.loc[df_base.index[0]] ) )
-            baseMeanDose = baseField.getMeanDose( md["doseArea"] )
-            
-            # zusätzliche spalte in fields anlegen
-            df_fields["von_nach"] = df_group[['gantry','StopAngle']].apply(lambda x : '{:.1f} -> {:.1f}'.format(x[0],x[1]), axis=1)
-                        
-            #print( df_fields["key"] )
-            data = [{ 
-                'Kennung': baseField.infos["Kennung"], 
-                'von_nach': "{:01.1f}".format( baseField.infos["gantry"] ), 
-                'basedose': baseMeanDose, 
-                'fielddose': np.nan,
-                'diff': np.nan,
-            }]
+            data = []
+            # gruppiert nach gantry und kollimator
+            def sub_evaluate( df ):
+                # get base and fields, check number of data
+              #  print("doJT_7_5", df[ [ "RadiationId", "gantry", "StopAngle", "collimator", "ME", "doserate", "check_subtag" ] ])
+                df_base = df.query( md.querys[ "sub_base"] )
+                df_fields = df.query( md.querys[ "sub_fields"] )    
                     
-            # alle Felder durchgehen
-            for info in df_fields.itertuples():
-                # prüf Field und dosis bereitstellen
-                checkField = qa_field( self.getFullData(info), normalize="none" )
-                fieldDose = checkField.getMeanDose( md["doseArea"] )
-                #
-                data.append( { 
-                      'Kennung': checkField.infos["Kennung"], 
-                      'von_nach': checkField.infos["von_nach"], 
-                      'basedose': np.nan,
-                      'fielddose': fieldDose,
-                      'diff': (fieldDose-baseMeanDose) / baseMeanDose * 100,
-                } )  
-                # Bild anzeigen
-                img = checkField.image.plotImage( original=False
-                            , plotTitle="{Kennung} - G:{von_nach}"
-                            , field=md["_field"] 
-                            , invert=False # , cmap="jet"
-                            , plotCax=True, plotField=True )
-                self.pdf.image(img, md["_imgSize"] )
+                # base Field und dosis bereitstellen
+                baseField = qa_field( self.getFullData( df_base.loc[df_base.index[0]] ) )
+                baseMeanDose = baseField.getMeanDose( md["doseArea"] )
                 
-                # progress pro file stimmt nicht immer genau (baseimage)
-                # 40% für die dicom daten 40% für die Auswertung 20 % für das pdf
-                self.fileCount += 1
-                if hasattr( logger, "progress"):
-                    logger.progress( md["testId"],  40 + ( 40 / filesMax * self.fileCount ) )
+                # zusätzliche Spalte in fields anlegen
+                df_fields["von_nach"] = df_group[['gantry','StopAngle']].apply(lambda x : '{:.1f} -> {:.1f}'.format(x[0],x[1]), axis=1)
                 
-            df = pd.DataFrame( data )
+                if pre2020 == True:
+                    data.append({ 
+                        'Kennung': baseField.infos["Kennung"], 
+                        'von_nach': "{:01.1f}".format( baseField.infos["gantry"] ), 
+                        'ME': baseField.infos["ME"],
+                        'baseMeanDose': baseMeanDose, 
+                        'fieldMeanDose': np.nan,
+                        'diff': np.nan,
+                    })
+                # alle Felder durchgehen
+                for info in df_fields.itertuples():
+                    # prüf Field und dosis bereitstellen
+                    checkField = qa_field( self.getFullData(info), normalize="none" )
+                    fieldDose = checkField.getMeanDose( md["doseArea"] )
+                    #
+                    if pre2020 == True:
+                        data.append({ 
+                              'Kennung': checkField.infos["Kennung"], 
+                              'von_nach': checkField.infos["von_nach"], 
+                              'ME': checkField.infos["ME"],
+                              'baseMeanDose': np.nan,
+                              'fieldMeanDose': fieldDose,
+                              'diff': (fieldDose-baseMeanDose) / baseMeanDose * 100,
+                        })  
+                    else:                        
+                        data.append({ 
+                              'Kennung': checkField.infos["Kennung"], 
+                              'von_nach': checkField.infos["von_nach"], 
+                              'ME': checkField.infos["ME"],
+                              'baseMeanDose': baseMeanDose,
+                              'fieldMeanDose': fieldDose,
+                        })  
+                    # Bild anzeigen
+                    img = checkField.image.plotImage( **md["plotImage"] )
+                    self.pdf.image(img, **md["plotImage_pdf"] )
+
+                    # progress pro file stimmt nicht immer genau (baseimage)
+                    # 40% für die dicom daten 40% für die Auswertung 20 % für das pdf
+                    self.fileCount += 1
+                    if hasattr( logger, "progress"):
+                        logger.progress( md["testId"],  40 + ( 40 / filesMax * self.fileCount ) )
+   
+            # sub evaluate 
+            #
+            df_group.groupby( md["sub_series_groupby"] ).apply( sub_evaluate )
             
-            #
-            # Abweichung ausrechnen und Passed setzen
-            #
-            check = [
-                { "field": 'diff', 'tolerance':'default' }   
-            ]
-            acceptance = self.check_acceptance( df, md, check )
-            
-            #
-            # Ergebnis in result merken
-            #
-            result.append( self.createResult( df, md, check, 
-                df_group['AcquisitionDateTime'].iloc[0].strftime("%Y%m%d"), 
-                len( result ), # bisherige Ergebnisse in result
-                acceptance
-            ) )
-            
- 
-            #
-            # Tabelle erzeugen
-            #
-            self.pdf.pandas( df, 
-                attrs={"class":"layout-fill-width", "margin-top": "5mm"}, 
-                fields=md["table_fields"]
-            )
-            
-            #
-            # toleranz anzeigen   
-            #
-            text_values = {
-                "f_warning": md.tolerance[ md["energy"] ].default.warning.get("f",""),
-                "f_error": md.tolerance[ md["energy"] ].default.error.get("f","")
-            }
-            text = """<br>
-                Warnung bei: <b style="position:absolute;left:25mm;">{f_warning}</b><br>
-                Fehler bei: <b style="position:absolute;left:25mm;">{f_error}</b>
-            """.format( **text_values ).replace("{value}", "Delta")
-            self.pdf.text( text, md["_text"] )
-  
-            # Gesamt check - das schlechteste aus der tabelle
-            self.pdf.resultIcon( acceptance )  
-            
-            
-        #
-        # Gruppiert nach day abarbeiten 
-        # nach Gantry und Stoppwinkel sortieren
-        #
-        fileData.sort_values( ['gantry','StopAngle'] ).groupby( [ 'day' ] ).apply( groupBySeries )      
+            evaluation_df = pd.DataFrame( data )
+                
+            # check tolerance - printout tolerance, evaluation_df and result icon
+            acceptance = self.evaluationResult( evaluation_df, md, result, 'diff' )
+        
+        # call evaluate with sorted and grouped fields
+        fileData.sort_values(md["series_sort_values"]).groupby( md["series_groupby"] ).apply( evaluate )  
+   
         # abschließen pdfdaten und result zurückgeben
         return self.pdf.finish(), result
  
@@ -936,15 +989,24 @@ class checkField( ispBase ):
         --------
         isp.results : Aufbau von result
         """
-        
-        # wird für progress verwendet
+        # used on progress
         filesMax=len( fileData )
         self.fileCount = 0
-        
+        # holds evaluation results
         result=[]
-        # metadata vorbereiten
-        md = self.metadata
-        md.update( {
+        
+        # prepare metadata
+        md = dict_merge( DotMap( {
+            "series_sort_values": ["gantry"],
+            "series_groupby": ["day"],
+            "querys" : {
+                "fields" : "check_subtag != 'base'",
+              #  "field_count": self.metadata.current.get("fields", 0), # 4
+            },
+            "manual": {
+                "filename": self.metadata.info["anleitung"],
+                "attrs": {"class":"layout-fill-width", "margin-bottom": "5mm"},
+            },
             "_clip" : { "width":"50mm", "height":"45mm" },
             "_formel": { "margin-top":"15mm", "width":"21mm", "height":"11mm"},
             "_table": { "width":105, "height": 45, "left":75, "top":215 },
@@ -965,33 +1027,23 @@ class checkField( ispBase ):
                # {'field': 'i_diff', 'label':'i-abw.[%]', 'format':'{0:.3f}' }
               
             ]   
-        } )
+        } ), self.metadata )
        
+
+        
         # tolerance Werte bereitstellen
         #toleranz = {}
         #if "toleranz" in md["testConfig"] and md["energy"] in md["testConfig"]["toleranz"]:
         #    toleranz = md["testConfig"]["toleranz"][ md["energy"] ]
 
-        def groupBySeries( df_group ):
+        def evaluate( df_group ):
             """Datumsweise Auswertung 
             """
             
-            # das Datum vom ersten Datensatz verwenden
-            checkDate = df_group['AcquisitionDateTime'].iloc[0].strftime("%d.%m.%Y")
-            self.pdf.setContentName( checkDate )
-            
-            #               
-            # Anleitung
-            #
-            self.pdf.textFile( md["anleitung"], attrs={"class":"layout-fill-width", "margin-bottom": "5mm"} )  
-            
-            if not self.checkFields( md, None, df_group, 4):
-                result.append( self.pdf_error_result( 
-                    md, date=checkDate, group_len=len( result ),
-                    msg='<b>Datenfehler</b>: keine Felder gefunden oder das offene Feld fehlt.'
-                ) )
-                return
-            
+            # get base and fields check number of data
+            ok, df_base, df_fields = self.evaluationPrepare(df_group, md, result)
+            if not ok:
+                return 
             
             data = []
             # alle Felder durchgehen
@@ -1008,7 +1060,6 @@ class checkField( ispBase ):
                 #sollKeyC = "{gantry:1.0f}-cl".format( **checkField.infos )
                 #sollKeyI = "{gantry:1.0f}-il".format( **checkField.infos ) 
                 #sollKey = "{gantry:1.0f}-cl".format( **checkField.infos )
-                
                 
                 # Bild anzeigen
                 img =  checkField.plotProfile( profile["flatness"], metadata=md )
@@ -1079,9 +1130,9 @@ class checkField( ispBase ):
             self.pdf.resultIcon( acceptance )
         
         #
-        # Gruppiert nach day abarbeiten 
-        # 
-        fileData.sort_values(["gantry"]).groupby( [ 'day' ] ).apply( groupBySeries )      
+        # call evaluate with sorted and grouped fields
+        fileData.sort_values(md["series_sort_values"]).groupby( md["series_groupby"] ).apply( evaluate )     
+        # fileData.sort_values(["gantry"]).groupby( [ 'day' ] ).apply( groupBySeries )      
         # abschließen pdfdaten und result zurückgeben
         return self.pdf.finish(), result      
                    
@@ -1109,77 +1160,89 @@ class checkField( ispBase ):
         --------
         isp.results : Aufbau von result
         """
-        
-        result=[]
-        
-        # wird für progress verwendet
+        # used on progress
         filesMax=len( fileData )
         self.fileCount = 0
+        # holds evaluation results
+        result=[]
         
-        # metadata vorbereiten
-        md = self.metadata
-        md.update( {
+        # prepare metadata
+        md = dict_merge( DotMap( {
+            "series_sort_values" : ['check_subtag'],
+            "series_groupby": ["day", "SeriesNumber"],
+            "querys" : {
+                "base": "check_subtag.isnull()", 
+                "fields": "check_subtag.notnull()",
+                "engine": "python"
+              #  "field_count": self.metadata.current.get("fields", 0), # 5
+            },
+            "manual": {
+                "filename": self.metadata.info["anleitung"],
+                "attrs": {"class":"layout-fill-width", "margin-bottom": "5mm"},
+            },
             "_chart" : {"width" : 90, "height" : 50},
             "_imgSize" : {"width" : 120, "height" : 120},
             "_image_attrs" : { "margin-top": "5mm" },
-            "_table" : {"left" : 125, "top" : 165, "width": 50},
-            "_text" : { "left" : 10, "top" : 240, "width": 180},
+
             "field" : { "X1":-110, "X2": 110, "Y1": -110, "Y2": 110 },
-            "table_fields": [
-                {'field': 'name', 'label':'von - nach' },
-                {'field': 'value', 'label':'Wert', 'format':'{0:.3f}' },
-                {'field': 'value_passed', 'label':'Passed' }
-            ]    
-        } )
+            "evaluation_table_pdf" : {
+                "fields": [
+                    {'field': 'name', 'label':'von - nach' },
+                    {'field': 'value', 'label':'Wert', 'format':'{0:.3f}' },
+                    {'field': 'value_passed', 'label':'Passed' }
+                ],
+                "area": {"left" : 125, "top" : 165, "width": 50},
+                "attrs": {"class":"layout-fill-width"},
+            },
+            "evaluation_replaces" : {"value":"Wert"}, 
+            
+            "tolerance_pdf": {
+                "area" : { "left" : 10, "top" : 240, "width": 180},
+                "mode" : "text"
+            },
+            "tolerance_field": "value"
+        } ), self.metadata )
         
-        def groupBySeries( df_group ):
-            """Datumsweise Auswertung 
+        #print("doJT_10_3-current", md.current )
+        
+        def evaluate( df_group ):
+            """Evaluate grouped Fields.
+            
+            create PDF output and fills result 
+            
+            Parameters
+            ----------
+            df_group : pandas Dataframe
+               
             """
-            # das Datum vom ersten Datensatz verwenden
-            checkDate = df_group['AcquisitionDateTime'].iloc[0].strftime("%d.%m.%Y")
-            self.pdf.setContentName( checkDate )
+            # get base and fields check number of data
+            ok, df_base, df_fields = self.evaluationPrepare(df_group, md, result)
+            if not ok:
+                return 
             
-            #               
-            # Anleitung
-            #
-            self.pdf.textFile( md["anleitung"], attrs={"class":"layout-fill-width", "margin-bottom": "5mm"} )  
-            
-            
-            if not self.checkFields( md, None, df_group, 5):
-                result.append( self.pdf_error_result( 
-                    md, date=checkDate, group_len=len( result ),
-                    msg='<b>Datenfehler</b>: keine Felder gefunden oder das offene Feld fehlt.'
-                ) )
-                return
-             
-            baseField = None
-            sumfield = []
+            # base Field und dosis bereitstellen
+            baseField = qa_field( self.getFullData( df_base.loc[df_base.index[0]] ) )
+
+            sumfield = []           
             # alle Felder durchgehen
-            for (idx, info) in df_group.iterrows():
-                if not baseField and not info['check_subtag']:
-                    baseField = qa_field( self.getFullData( info ), normalize="none" )
+            for (idx, info) in df_fields.iterrows():
+                checkField = qa_field( self.getFullData(info), normalize="none" )
+                if len(sumfield) == 0:
+                    sumfield = checkField.image.array
                 else:
-                    # prüffeld
-                    checkField = qa_field( self.getFullData( info ), normalize="none" )
-                    if len(sumfield) == 0:
-                        sumfield = checkField.image.array
-                    else:
-                        sumfield = np.add( sumfield, checkField.image.array )
-                 
-                # progress pro file stimmt nicht immer genau (baseimage)
-                # 40% für die dicom daten 40% für die Auswertung 20 % für das pdf
+                    sumfield = np.add( sumfield, checkField.image.array )
+                    
+                # progress
                 self.fileCount += 1
                 if hasattr( logger, "progress"):
                     logger.progress( md["testId"],  40 + ( 40 / filesMax * self.fileCount ) )
-                
-                #print(sumfield)
-            
+                    
             # das baseField durch das normalisierte Summenfeld erstezen
             baseField.image.array = np.divide( sumfield, baseField.image.array + 0.00000001 )
             
             # baseField auswerten 
             data4q = baseField.find4Qdata() 
-            df = pd.DataFrame( data4q['result'] ).T
+            evaluation_df = pd.DataFrame( data4q['result'] ).T
            
             # alle vier Quadranten durchgeghen
             for k, item in data4q["result"].items(): 
@@ -1187,7 +1250,6 @@ class checkField( ispBase ):
                 img =  baseField.plot4Qprofile( item, metadata=md )
                 self.pdf.image(img, md["_chart"] )
                 
-        
             #
             # Bild mit Beschriftung anzeigen
             #
@@ -1210,7 +1272,6 @@ class checkField( ispBase ):
                 ax.text( da["X2"] , da["Y2"] , 'Q3', **style)
                 ax.text( da["X2"] , da["Y1"] , 'Q4', **style)
                 
-                
             img = baseField.image.plotImage( 
                     original=False
                     , invert=False
@@ -1224,57 +1285,18 @@ class checkField( ispBase ):
                 )
             self.pdf.image(img, md["_imgSize"], attrs=md["_image_attrs"]  )
             
-            #
-            # Abweichung ausrechnen und Passed setzen
-            #
-            check = [
-                { "field": 'value', 'tolerance':'default' }   
-            ]
-            acceptance = self.check_acceptance( df, md, check )
-            
-            #
-            # Ergebnis in result merken
-            #
-            result.append( self.createResult( df, md, check, 
-                    df_group['AcquisitionDateTime'].iloc[0].strftime("%Y%m%d"), 
-                    len( result ), # bisherige Ergebnisse in result
-                    acceptance
-            ) )
-                            
-            #
-            # Tabelle erzeugen
-            #
-            self.pdf.pandas( df, 
-                area=md["_table"],
-                attrs={"class":"layout-fill-width"}, 
-                fields=md["table_fields"]
-            )
-            
-            #
-            # toleranz anzeigen   
-            #
-            text_values = {
-                "f_warning": md.tolerance[ md["energy"] ].default.warning.get("f",""),
-                "f_error": md.tolerance[ md["energy"] ].default.error.get("f","")
-            }
-            text = """<br>
-                Warnung bei: <b style="position:absolute;left:25mm;">{f_warning}</b><br>
-                Fehler bei: <b style="position:absolute;left:25mm;">{f_error}</b>
-            """.format( **text_values ).replace("{value}", "Wert")
-            self.pdf.text( text, md["_text"]  )
-              
-            # Gesamt check - das schlechteste aus der tabelle
-            self.pdf.resultIcon( acceptance )
-            
-            
+           # print("doJT_10_3", md.current, evaluation_df )
+            # check tolerance - printout tolerance, evaluation_df and result icon
+            acceptance = self.evaluationResult( evaluation_df, md, result, md["tolerance_field"] )
+                        
         #
         # Sortiert nach check_subtag
         # Gruppiert nach Tag und SeriesNumber abarbeiten
         # 
         ( fileData
-             .sort_values(['check_subtag'], na_position='first')
-             .groupby( [ 'day', 'SeriesNumber' ] )
-             .apply( groupBySeries )
+             .sort_values( md["series_sort_values"], na_position='first')
+             .groupby( md[ "series_groupby" ] )
+             .apply( evaluate )
         )   
         # abschließen pdfdaten und result zurückgeben
         return self.pdf.finish(), result
@@ -1306,8 +1328,21 @@ class checkField( ispBase ):
         self.fileCount = 0
         
         # metadata ergänzen und lokal als md bereitstellen
-        md = self.metadata
-        md.update( {
+        md = dict_merge( DotMap( {
+            "series_sort_values": ["MLCPlanType", "gantry"],
+            "series_groupby": ["day", "SeriesNumber"],
+            "current": {
+                "field_count": self.metadata.current.get("fields", 0) - 1, # 4
+            },
+            "querys" : {
+                "base" : 'MLCPlanType!="DynMLCPlan"', # "check_subtag == 'base'",
+                "fields" : 'MLCPlanType=="DynMLCPlan"', # "check_subtag != 'base'",
+            },
+            "manual": {
+                "filename": self.metadata.info["anleitung"],
+                "attrs": {"class":"layout-fill-width", "margin-bottom": "5mm"},
+            },
+            
             "doseArea" : { "X1":-0.75, "X2": 0.75, "Y1": -4, "Y2": 4 },
             "_imgSize" : {"width" : 36, "height" : 70},
             "_imgField": {"border": 10 },
@@ -1320,32 +1355,18 @@ class checkField( ispBase ):
                 {'field': 'Mdev', 'label':'M<sub>dev</sub> [%]', 'format':'{0:.2f}' },
                 {'field': 'Mdev_passed', 'label':'Passed' },
             ]
-        } )
+        } ), self.metadata )
             
+        
         def groupBySeries( df_group ):
             """Datumsweise Auswertung und PDF Ausgabe.
             
             """
-            # das Datum vom ersten Datensatz verwenden
-            checkDate = df_group['AcquisitionDateTime'].iloc[0].strftime("%d.%m.%Y")
-            self.pdf.setContentName( checkDate )
-            
-            #               
-            # Anleitung
-            #
-            self.pdf.textFile( md["anleitung"], attrs={"class":"layout-fill-width", "margin-bottom": "5mm"} )  
-            
-            df_base = df_group.query('MLCPlanType!="DynMLCPlan"')
-            df_fields = df_group.query('MLCPlanType=="DynMLCPlan"')
-           
-            if not self.checkFields( md, df_base, df_fields, 4):
-                result.append( self.pdf_error_result( 
-                    md, date=checkDate, group_len=len( result ),
-                    msg='<b>Datenfehler</b>: keine Felder gefunden oder das offene Feld fehlt.'
-                ) )
-                return
-           
-               
+            # get base and fields check number of data
+            ok, df_base, df_fields = self.evaluationPrepare(df_group, md, result)
+            if not ok:
+                return 
+                           
             # base Field und dosis bereitstellen
             baseField = qa_field( self.getFullData( df_base.loc[df_base.index[0]] ) )
             
@@ -1430,8 +1451,8 @@ class checkField( ispBase ):
             )
             
             text_values = {
-                "f_warning": md.tolerance[ md["energy"] ].default.warning.get("f",""),
-                "f_error": md.tolerance[ md["energy"] ].default.error.get("f","")
+                "f_warning": md.current.tolerance.default.warning.get("f",""),
+                "f_error": md.current.tolerance.default.error.get("f","")
             }
             text = """<br>
                 Warnung bei: <b style="position:absolute;left:45mm;">{f_warning}</b><br>
@@ -1477,17 +1498,18 @@ class checkField( ispBase ):
         --------
         isp.results : Aufbau von result
         """
-        
-        
-        result=[]
-        
-        # wird für progress verwendet
+        # used on progress
         filesMax=len( fileData )
         self.fileCount = 0
+        # holds evaluation results
+        result=[]
         
-        # metadata vorbereiten
-        md = self.metadata
-        md.update( {
+        # prepare metadata
+        md = dict_merge( DotMap( {
+            "manual": {
+                "filename": self.metadata.info["anleitung"],
+                "attrs": {"class":"layout-fill-width"},
+            },
             "_imgSize" : {"width" : 45, "height" : 45},
             "fieldArea" : { "X1":-80, "X2":80, "Y1": -80, "Y2":80, "xStep":20, "yStep":20 },
             "doseArea" : { "X1": -60, "X2": 60, "Y1": -60, "Y2": 60 },
@@ -1499,7 +1521,7 @@ class checkField( ispBase ):
                 {'field': 'diff', 'label':'Diff [%]', 'format':'{0:1.2f}' },
                 {'field': 'diff_passed', 'label':'Passed' }
             ]
-        } )
+        } ), self.metadata )
      
         # für jeden datensatz
         def groupBySeries( df_group ):
@@ -1513,7 +1535,7 @@ class checkField( ispBase ):
             #               
             # Anleitung
             #
-            self.pdf.textFile( md["anleitung"], attrs={"class":"layout-fill-width"} )  
+            self.pdf.textFile( **md.manual )
             
             #print( df.query("CollMode == 'Symmetry'") )
             # es muss ein symetrisches basis Feld geben
@@ -1617,8 +1639,8 @@ class checkField( ispBase ):
  
             # toleranz anzeigen             
             text_values = {
-                "f_warning": md.tolerance[ md["energy"] ].default.warning.get("f",""),
-                "f_error": md.tolerance[ md["energy"] ].default.error.get("f","")
+                "f_warning": md.current.tolerance.default.warning.get("f",""),
+                "f_error": md.current.tolerance.default.error.get("f","")
             }
             text = """<br>
                 Warnung bei: <b style="position:absolute;left:25mm;">{f_warning}</b><br>

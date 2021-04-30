@@ -15,7 +15,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 __status__ = "Prototype"
 
 from pylinac.vmat import VMATBase
@@ -280,9 +280,14 @@ class checkVMAT( ispBase ):
         # metadata ergänzen und lokal als md bereitstellen
         md = self.metadata
         md.update( {
+            "field_count": 2,
             "_imgSize" : {"width" : 90, "height" : 85},
             "_imgField": {"border": 20 },
             "_chart": { "width" : 180, "height" : 60},
+            "manual": {
+                "filename": self.metadata.info["anleitung"],
+                "attrs": {"class":"layout-fill-width", "margin-bottom": "5mm"},
+            },
         } )
  
 
@@ -297,9 +302,17 @@ class checkVMAT( ispBase ):
             #               
             # Anleitung
             #
-            self.pdf.textFile( md["anleitung"], attrs={"class":"layout-fill-width", "margin-bottom": "5mm"} )  
+            self.pdf.textFile( **md.manual )  
             
-            # auf genau 2 felder prüfen (open, DMLC)
+            # auf genau 2 Felder prüfen (open, DMLC)
+            errors = self.checkFields( md, None, df_group, md["field_count"])
+            if len(errors) > 0:
+                result.append( self.pdf_error_result( 
+                    md, date=checkDate, group_len=len( result ),
+                    errors=errors
+                ) )
+                return
+            '''
             if not self.checkFields( md, fields=df_group, fieldLen=2 ):
                 result.append( 
                     self.pdf_error_result( 
@@ -309,7 +322,7 @@ class checkVMAT( ispBase ):
                     )
                 )
                 return
-            
+            '''
            
             # Analyse durchführen
             drgs = qa_vmat( df_group, str( md["vmat_type"]), metadata=md )
@@ -390,8 +403,8 @@ class checkVMAT( ispBase ):
             #
             # Auswertungs text anzeigen
             #
-            drgs.results["f_warning"] = md.tolerance[ md["energy"] ].default.warning.get("f","")
-            drgs.results["f_error"] = md.tolerance[ md["energy"] ].default.error.get("f","")
+            drgs.results["f_warning"] = md.current.tolerance.default.warning.get("f","")
+            drgs.results["f_error"] = md.current.tolerance.default.error.get("f","")
             # <h3>{header} VMAT results:</h3>
             text = """<br>
                 Source-to-Image Distance: <b style="position:absolute;left:45mm;">{SID:2.0f} mm</b>
