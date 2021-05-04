@@ -469,6 +469,12 @@ class gqa( ispSAFRSDummy ):
               type: integer
               required : false
               description : Der Tag für den der Test durchgeführt werden soll
+            - name : getall
+              in : query
+              type: boolean
+              required : false
+              default : false
+              description : Bei true wird nicht nur das Ergebnis sondern alle Infos zurückgegeben
             - name : unittest
               in : query
               type: boolean
@@ -489,7 +495,8 @@ class gqa( ispSAFRSDummy ):
             "month": 0,
             "day": 0,
             "reloadDicom": False,
-            "unittest": False
+            "unittest": False,
+            "getall": False
         }
         _kwargs.update( cls.init( kwargs ) )
         
@@ -511,8 +518,8 @@ class gqa( ispSAFRSDummy ):
                     unittest =     _kwargs["unittest"]
                 )
                 
-        if _kwargs["unittest"] == False: # pragma: no cover
-            # nach einem run wird normalerweise die info des testjahres aller units zurückgegeben   
+        if _kwargs["getall"] == True: # pragma: no cover
+            # nach einem run kann die info des testjahres aller units zurückgegeben werden
             # config nur für dieses jahr einlesen und verwenden
             cls.init( {"year": _kwargs["year"] } )
          
@@ -522,7 +529,17 @@ class gqa( ispSAFRSDummy ):
                 withInfo=False, 
                 withResult=True    
             )
-           
+        elif not _kwargs["unittest"] == True:
+            # bei einem normalem Aufruf nur result verwenden
+            runTests = {}
+            
+             # <AcquisitionYear>-<AcquisitionMonth>-<unit>-<testId>-<energy>
+            for key, value in _result.items():              
+                pdfName = value["pdfData"]["pdf_filename"]
+                runTests[pdfName] = value["result"] 
+                
+            _result = { "runTests": runTests }
+            
             
         return cls._int_json_response( { "data": _result } )        
     

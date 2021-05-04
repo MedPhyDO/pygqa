@@ -81,7 +81,11 @@
 		margin-top: 2px;
 		border-radius: 6px;
 	}
-	
+	.gqa_table .running{
+    	pointer-events: none;
+    	opacity: 0.5;
+    }
+    
 </style>
 
 <script>
@@ -89,12 +93,6 @@
 var gqaServer = "http://{{ serverHost }}"; 
 
 var gqaMQTT = {{ mqtt|tojson|safe }}
-
-//var gqaMQTTbase = " gqaMQTTbase "; // gqa oder gqa_dev
-
-// console.info("gqaMQTT", gqaMQTT );
-
-// gqaMQTT["password"] = "";
 
 localMqtt = app.mqtt( gqaMQTT );
 
@@ -165,7 +163,7 @@ function getCell( year, month, unit, type, key, data, fullData, flatResults ){
 		"class": ""
 	};
 	html = '';
-	
+	    
 	title = key + " : " + unit;
 	
 	if (month > 0) {
@@ -175,9 +173,10 @@ function getCell( year, month, unit, type, key, data, fullData, flatResults ){
 	}
 	
 	var maxFields = data["fields"];
-	var energyFields = d3.entries( data["energyFields"] );
+	var energyFields = d3.entries( data["energyFields"] ).sort( function(a, b){ 
+        return parseInt(a.key, 10) > parseInt(b.key, 10);
+    } );
 	
-
 	var ready = d3.map( data["ready"] );
 	// fehlermanchen = data["value"]["results"]
     // return '<div title="' + title + '" >' + html + '</div>';
@@ -192,19 +191,9 @@ function getCell( year, month, unit, type, key, data, fullData, flatResults ){
     	// d = { key, value)
     	// 
     	// a alles items
-    	
-    	// console.info("energyFields", d, d.key, d.value);
-    	
-    	// fehlermanchen = data["value"]["results"]
-		
+     	
 		var energy = d.key;
-		// Monat oder Jahr (0)
-		// var month = 0;
-		// if (type === "MT") {
-		//	month = key;
-		// }
-		var proEnergy = d.value; // ( energy in energyFields ) ? energyFields[energy] : 0;
-		
+		var proEnergy = d.value; 
 		var isReady = false;
 		var count = 0;
 		var hasPdf = false;
@@ -213,22 +202,27 @@ function getCell( year, month, unit, type, key, data, fullData, flatResults ){
 		// gibt es in data Ergebnisse für den Monat und die Energie
 		if ( (month in data) && ( energy in data[month]) ) {
     		testResults = data[month][energy];
-
     		count = ( "counts" in testResults) ? testResults["counts"] : 0;
-    		
     		hasPdf = ( "pdf" in testResults) ? testResults["pdf"] : false;
-    		
     		isReady = ( "ready" in testResults) ? testResults["ready"] : false;
-    		 
-    		// results = ( "results" in testResults) ? testResults["results"] : [];
-    		
-    // console.info("getCell testResults", testResults, count, hasPdf, isReady );
 		}
 		
 		//  year, month, unitName, testId, energy, isReady, hasPdf
 		var params = year + "," + month + ",'" + unit + "','" + fullData.key + "','" + energy + "'," + isReady + "," + hasPdf;
 		
 		var dataKey = year + "-" + month + "-" + unit + "-" + fullData.key + "-" + energy;
+		
+        var _data = {
+        	"key": dataKey,
+        	"year" : year,
+        	"month" : month,
+        	"unit" : unit,
+        	"testId" : fullData.key,
+        	"energy" : energy,
+        	"count" : count,
+        	"hasPdf" : hasPdf,
+        	"isReady" : isReady
+        };
 		
 		// result vorhanden ? reihenfolge <year>|<unit>|<test>|<energy>|<month>
 		if ( "index" in flatResults ) {
@@ -240,8 +234,7 @@ function getCell( year, month, unit, type, key, data, fullData, flatResults ){
 				idx = flatResults["index"].indexOf(resultKey, idx + 1);
 			}
     	}
-
-		
+	
 		var cls = "_" + energy + " ";
 		if ( hasPdf === true ){
 			cls += "green lighten-4";
@@ -254,9 +247,8 @@ function getCell( year, month, unit, type, key, data, fullData, flatResults ){
 			}
 		}
 
-		// console.info( type, energy, key, count, isReady, hasPdf );
 		// 
-		html += '<span class="md-chip ' + cls + '" onClick="gqaEnergyClick( this, ' + params + ') " data-key="' + dataKey + '" >';
+		html += '<span class="md-chip ' + cls + '" onClick="gqaEnergyClick( this, ' + params + ') " data-key="' + dataKey + '" data-ready="' + _data["isReady"] + '" data-pdf="' + _data["hasPdf"] + '">';
 		html += energy;
 		if ( hasPdf  ) {
 			html += '<i class="mdi ' + pdfClass + ' pdfIcon"></i>';
@@ -276,6 +268,58 @@ function getCell( year, month, unit, type, key, data, fullData, flatResults ){
 	});
 	cell.html = '<div title="' + title + '" >' + html + '</div>';
 	return cell;
+}
+
+function change_energy_chip( data ){
+    // params
+    // - year
+    // - month
+    // - unit 
+    // - test 
+    // - energy
+    
+    // element.data
+    // - isReady
+    // - hasPdf;
+    
+    if (data.length < 1 ) return "";
+    
+    d = data[0];
+    
+    var dataKey = [
+        d["year"],
+        d["month"],
+        d["unit"],
+        d["testId"],
+        d["energy"],
+    ].join("-");
+	
+	var element = $("[data-key='" + dataKey + "']");
+
+    if ( element ) {
+        // ready und pdf setzten 
+        element.data( "pdf", true );
+        element.data( "ready", true );
+    	// change class and innerHTML
+    	// energy as class and has PDF because result is given
+    	var cls = "md-chip _" + d["energy"] + " green lighten-4";
+    	element.removeClass();
+    	element.addClass( cls );
+    	element.empty();
+    	var inner = d["energy"];
+    	inner += '<i class="mdi ' + pdfClass + ' pdfIcon"></i>';
+    	
+    	for (i = 0; i < data.length; i++) { 
+    		acceptance = data[i]["acceptance"];
+    		if ( !acceptance ){
+    			acceptance = 0
+    		}
+    		inner += '<i class="mdi ' + resultIcons[ acceptance ] + ' white resultIcon"></i>'; 
+    	}
+	
+    	element.html( inner );
+	}
+    
 }
 
 function GQA_view( data, param ){
@@ -328,7 +372,6 @@ function GQA_view( data, param ){
 				}
 				return s;
 			});
-			
         
         tests = d3.entries( data["GQA"] );  
 		var rows = table.append('tbody').selectAll('tr')
@@ -450,7 +493,7 @@ function gqaEnergyClick( self, year, month, unitName, testId, energy, isReady, h
     // summary:
 	//     perform action on selected element
 	
-	// console.info("gqaEnergyClick", isReady, hasPdf, self, self.parentElement, arguments);
+	console.info("gqaEnergyClick", $( self).data(), self, $( self ).parents("td"), isReady, hasPdf, self.parentElement, arguments);
 	var param = {
 		"year" : year,
 		"month" : month,
@@ -458,6 +501,10 @@ function gqaEnergyClick( self, year, month, unitName, testId, energy, isReady, h
 		"testid" : testId,
 		"energy" : energy,	
 	};
+	
+	var data = $( self ).data();
+	hasPdf = data["pdf"];
+	isReady = data["ready"];
 	
 	if ( hasPdf ) {
 		//var url = app.phypedia.api + "?action=varian&format=json&module=gqa&mode=main&json=" + JSON.stringify(param); 
@@ -476,7 +523,7 @@ function gqaEnergyClick( self, year, month, unitName, testId, energy, isReady, h
                 action: function( dialog ) {
                        dialog.close();
                        param["action"] = "gqa/run";
-        			   GQA_loaddata( param );
+        			   GQA_loaddata( param, self );
                 }
             },{
                 label: 'Abbruch',
@@ -493,7 +540,7 @@ function gqaEnergyClick( self, year, month, unitName, testId, energy, isReady, h
 		// kein pdf aber isReady dann test auswertung starten
 		if ( isReady ) {
 			param["action"] = "gqa/run";
-			GQA_loaddata( param );	
+			GQA_loaddata( param, self );	
 		} else {
 
 			BootstrapDialog.show({
@@ -505,7 +552,7 @@ function gqaEnergyClick( self, year, month, unitName, testId, energy, isReady, h
                     action: function(dialog) {
                         dialog.close();
                         param["action"] = "gqa/run";
-        				GQA_loaddata( param );
+        				GQA_loaddata( param, self );
                     }
                 },{
                     label: 'Nein',
@@ -520,25 +567,8 @@ function gqaEnergyClick( self, year, month, unitName, testId, energy, isReady, h
 	}
 }
 
-function gqaTestClick( year, month, unitName, testArt, energy ){
-	// Ein Test soll ausgewertet werden
-	// 
-	//console.info("gqaTestClick", self, unitName, year, testArt);
 
-	var param = {
-		"action" : "gqa/run",
-		"year" : year,
-		"month" : month,
-		"unit" : unitName,
-		"test" : testArt,
-		"energy" : energy
-	};
-	
-	GQA_loaddata( param );
-	
-}
-
-function GQA_loaddata( param ){
+function GQA_loaddata( param, self ){
     // summary:
 	//     load data over api
 	// 
@@ -555,6 +585,7 @@ function GQA_loaddata( param ){
     if ( param["action"] == "gqa") {
         // einfach nur /gqa/<jahr>
         url += param["action"] + "/" + param["year"];
+        
         // url += param["action"] + "/info?year=" + param["year"];
     } else { 
          // /gqa/<action>?<queryparams>
@@ -565,24 +596,40 @@ function GQA_loaddata( param ){
     
     // console.info("GQA_loaddata");
     
-	app.splashLoading( true );
-
+	// app.splashLoading( true );
+    $( self ).parents("td").addClass( "running" ); 
+    
 	return d3.json(url).then( function( odata ){
-    	var tests = 0;
-		if ( odata.data && odata.data.GQA ) {
-    		// tests = Object.keys( odata.data.GQA ).length; // .info.length;
-			GQA_view( odata.data, param );
-		} else {
-			// console.info( "GQA_loaddata: wrong data", odata, param, url);
-			
-			BootstrapDialog.show({
-    			type: BootstrapDialog.TYPE_WARNING,
-                title: 'GQA Serverfehler',
-                message: 'Beim durchführen der Abfrage ist ein Fehler aufgetreten',
-            });
-		}
-		app.splashLoading( false );
-		// console.info("GQA_loaddata - ready ", tests);
+    	
+    	$( self ).parents("td").removeClass( "running" ); 
+    	
+    	if (param["action"] === "run") {
+        	console.info("GQA_loaddata - ready ", tests);
+        	
+    	} else {
+        	var tests = 0;
+    		if ( odata.data && odata.data.GQA ) {
+        		// tests = Object.keys( odata.data.GQA ).length; // .info.length;
+    			GQA_view( odata.data, param );
+    		} else if( odata.data && odata.data.runTests) {
+        		// <AcquisitionYear>-<AcquisitionMonth>-<unit>-<testId>-<energy>
+        		console.info( "runTests result", odata.data.runTests );
+        		for ( key in odata.data.runTests ) { 
+            		change_energy_chip( odata.data.runTests[key] );
+        		}
+    		} else {
+    			// console.info( "GQA_loaddata: wrong data", odata, param, url);
+    			
+    			BootstrapDialog.show({
+        			type: BootstrapDialog.TYPE_WARNING,
+                    title: 'GQA Serverfehler',
+                    message: 'Beim durchführen der Abfrage ist ein Fehler aufgetreten',
+                });
+    		}
+    		
+    	}
+		// app.splashLoading( false );
+		
 	} );
 }
 

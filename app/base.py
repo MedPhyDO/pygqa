@@ -884,6 +884,7 @@ class ispBase(  ):
         -------
         result : dict
             - test (testTag) 
+            - testId (testId) 
             - unit
             - energy
             - year
@@ -926,6 +927,7 @@ class ispBase(  ):
 
         result = {
             "test" : md.current['testTag'],
+            "testId" : md.current['testId'],
             "unit" : md.current['unit'],
             "energy" : md.current['energy'],
             "year" : int( md.get('AcquisitionYear') or 0 ),
