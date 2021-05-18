@@ -1593,6 +1593,17 @@ class system( ispSAFRSDummy ):
     """
     http_methods = ["get"]
  
+    @classmethod
+    def _extendedSystemCheck(cls):
+        """Stub Function for api_list (Systeminformationen)
+        
+        Returns
+        -------
+        dict, string
+        
+        """
+        return {}, ""
+ 
     @jsonapi_rpc( http_methods=['GET'] )
     def api_get(cls, **kwargs):
         """.. restdoc::
@@ -1663,7 +1674,11 @@ class system( ispSAFRSDummy ):
             "kwargs" : kwargs,
             "python" : sys.version,
             "modules" : {}
-         }
+        }
+        
+        # add extended informations
+        extended, extended_html = cls._extendedSystemCheck()
+        sysinfo["extended"] = extended
         
         import logging
         level = {
@@ -1826,6 +1841,7 @@ class system( ispSAFRSDummy ):
         <div class="sysinfo">
         <h4>python: {}</h4>
         <h5>Memory: {}</h5>
+        {}
         <br>
         <h5 class="m-0 p-1 text-white bg-secondary">process</h5>
         <pre >{}</pre>
@@ -1840,6 +1856,7 @@ class system( ispSAFRSDummy ):
             style,
             sysinfo["python"], 
             sysinfo["memory"], 
+            extended_html,
             json.dumps( sysinfo["process"], indent=4), 
             json.dumps( sysinfo["logger.level"], indent=4),
             sysinfo["fonts_msg"],

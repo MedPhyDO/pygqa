@@ -14,7 +14,7 @@ Beschreibung der zusätzliche Konfigurationsmöglichkeiten für die Geräte-QA.
   
 ## Optionen `dicom`  
 
-Diese Optionen müssen denen des `DICOM Service Daemon Configuration Wizard` (DicomController.exe) auf dem Varian Server entsprechen.
+Diese Optionen müssen denen des `DB Daemon Configuration [DICOM Service Daemon Configuration Wizard]` (DicomController.exe) auf dem Varian Server entsprechen.
 
 * Im Bereich **General** befinden sich die Settings für `aec` - **AE Title** und `server_port` - **Listen Port**
 * Im Bereich **Security** muss eine neue **Trusted Application** mit `aet` - **AE Title** der eigenen **IP-Address** und `listen_port` - **Port** angelegt werden.  
@@ -34,7 +34,8 @@ Der Pfad in dem die erstellten Testauswertungen abgelegt werden.
 
 ## Optionen `units`  
 
-Eine Benannte Liste (PatientenID:Gerät) um eine Aria Patienten ID einem Gerät zuzuordnen.
+Eine Benannte Liste (PatientenID:Gerät) um eine Aria Patienten ID einem Gerät zuzuordnen.  
+Wir Empfehlen pro Gerät einen Patienten im Aria anzulegen.
 
 Beispiel::
 

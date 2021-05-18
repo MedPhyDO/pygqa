@@ -4,6 +4,9 @@ Die Zuordnung des jeweiligen Test erfolgt durch die Eingabe eines **tag** im Ari
 Im Kommentarfeld können in seperaten Zeilen mehrere Tests angegeben werden.  
 Bei jeder dieser Angaben ist es, durch einen Doppelpunkt getrennt, möglich eine spezielle Zuordnung vorzunehmen.
 
+Diese Tagging Informationen dienen dazu die passenden Aufnahmen für einen Test in der Datenbank zu bestimmen.  
+Über den DICOM Zugriff werden dann die gefunden Aufnahmen für die Auswertung geladen.
+  
 
 MT_4.1.2 - Linearität des Dosismonitorsystems bei kleinen Dosismonitorwerten
 ============================================================================

@@ -94,10 +94,10 @@ var gqaServer = "http://{{ serverHost }}";
 
 var gqaMQTT = {{ mqtt|tojson|safe }}
 
-localMqtt = app.mqtt( gqaMQTT );
+app.clientMqtt = app.mqtt( gqaMQTT );
 
-localMqtt.unsubscribe( gqaMQTT["basetopic"] + "/stat/progress/#" ); // unsubscribe zum testen
-localMqtt.subscribe( gqaMQTT["basetopic"] + "/stat/progress/#", function( msg ){ 
+app.clientMqtt.unsubscribe( gqaMQTT["basetopic"] + "/stat/progress/#" ); // unsubscribe zum testen
+app.clientMqtt.subscribe( gqaMQTT["basetopic"] + "/stat/progress/#", function( msg ){ 
     // console.info("progress callback", msg );
     
     // <AcquisitionYear>-<AcquisitionMonth>-<unit>-<testId>-<energy>
