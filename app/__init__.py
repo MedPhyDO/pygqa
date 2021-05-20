@@ -117,17 +117,24 @@ class system( system ):
         
         # --------------- DICOM
         from app.ariadicom import ariaDicomClass
+        from isp.config import dict_merge
         
         _dicom_key = config.get( "dicom.servername", "VMSDBD" )
         adc = ariaDicomClass( _database_key, _dicom_key, config )
-        dicom_config = config.get( ["dicom", _dicom_key] )
+        dicom_config = dict_merge( {
+            "aec" : "notset",
+            "server_ip": "notset",
+            "server_port": "notset",
+            "aet":  "notset",
+            "listen_port": "notset"
+        }, config.get( ["dicom", _dicom_key] ).toDict() )
         
         html += '<div class="alert alert-dark" >Prüfe Dicom <span class="badge badge-info">dicom.servername</span>: <b>{}</b> - Konfiguration:'.format( _dicom_key )
-        html += '<pre>{}</pre>'.format( json.dumps( dicom_config.toDict(), indent=2 ) )
+        html += '<pre>{}</pre>'.format( json.dumps( dicom_config, indent=2 ) )
         html += '<br>Server Settings - AE Title (aec): <b>{aec}</b> - IP (server_ip): <b>{server_ip}</b> - Port (server_port): <b>{server_port}</b><br>'.format( **dicom_config )
         html += '<br>Application Entity Map Entry - AE Title (aet): <b>{aet}</b> - Port (listen_port): <b>{listen_port}</b>'.format( **dicom_config )
         html += '<div class="alert alert-dark" >Prüfe Verzeichnis: <span class="badge badge-info">dicom.{}.local_dir</span>'.format( _dicom_key ) 
-        html += checkPath( dicom_config.get("local_dir", "" ) , '<span class="badge badge-info">dicom.{}.local_dir</span>'.format(_dicom_key))
+        html += checkPath( dicom_config.get("local_dir", "notset" ) , '<span class="badge badge-info">dicom.{}.local_dir</span>'.format(_dicom_key))
         html += "</div>"
         
         status = adc.initAE()
