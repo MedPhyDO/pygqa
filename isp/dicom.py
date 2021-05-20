@@ -1,20 +1,10 @@
 # -*- coding: utf-8 -*-
 
 """
-Version 1.5.6 instead of 1.4.1
-pip install pynetdicom --upgrade 
-
-pip install pynetdicom==1.5.6
-pip install pynetdicom==1.4.1
-
 There are two types of AEs: 
     
 * SCP (Service Class Provider) which can be thought of as a server 
 * SCU (Service Class User) as a client.
-
-https://www.voltron.studio/article/build-a-dicom-dimse-c-store-service-with-python
-
-https://github.com/pydicom/pynetdicom/issues/487
 
 """
 
@@ -22,7 +12,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.1"
+__version__ = "0.1.3"
 __status__ = "Prototype"
 
 import os

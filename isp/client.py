@@ -120,7 +120,7 @@ class ispClient(  ):
         return self.sendRequest(resource, params, _init)
     
             
-    def QUERY( self, resource:str="", query_string:dict={}, init:dict={}):
+    def QUERY( self, resource:str="", data:dict={}, init:dict={}):
         
         _init = dict_merge( self.init, init )
         _init["method"] = "GET" 
@@ -129,7 +129,7 @@ class ispClient(  ):
             resource = self.schema
             
         resource = "api/{}".format( resource )
-        return self.sendRequest( resource, data=query_string, init=_init )
+        return self.sendRequest( resource, data=data, init=_init )
      
     
     def GET(self, id:str="undefined", init:dict={} ):

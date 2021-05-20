@@ -11,7 +11,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R. Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.1"
+__version__ = "0.1.3"
 __status__ = "Prototype"
         
 import uuid
@@ -312,7 +312,7 @@ class ispBaseWebApp():
                 # add CORS support
                 # Content-Range wird von dstore ausgewertet um die max Anzahl zu bestimmen
                 CORS( self.app, 
-                     expose_headers='Content-Range, Content-Newitem,  X-Query, X-Rquery, X_Error-Msg, X_App-Error, X_App-Info'
+                     expose_headers='Content-Range, Content-Newitem,  X-Query, X-Rquery, X_Error, X_Info'
                 )
                
                 # dieser abschnitt wird bei coverage nicht berücksichtigt, da er im testmode nicht ausgeführt wird

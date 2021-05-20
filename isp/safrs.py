@@ -50,7 +50,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R. Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.1"
+__version__ = "0.1.3"
 __status__ = "Prototype"
 
 import json
@@ -627,9 +627,7 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
     custom_decorators = [ispSAFRS_decorator]
     
     _resultUpdate = {
-        "App-Info": [],
-        "App-Error": [],
-        "App-Dialog": []
+        "infos": []
     }
 
     exclude_attrs = []  # list of attribute names that should not be serialized
@@ -692,9 +690,7 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         Setzt _resultUpdate vor jedem Aufruf::
             
             {
-                "App-Error" : [],
-                "App-Info" : [],
-                "App-Dialog" : [],
+                "infos" : []
                 "errors" : []
             }
             
@@ -708,9 +704,7 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
 
         """
         cls._resultUpdate = {
-            "App-Error" : [],
-            "App-Info" : [],
-            "App-Dialog" : [],
+            "infos" : [],
             "errors" : []
         }
         cls._config = current_app._config
@@ -805,17 +799,17 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         return has_args
     
     @classmethod
-    def _int_add_meta( cls, meta:str="App-Info", message:str="", info:str="", status_code:int=None ):  
+    def _int_add_meta( cls, meta:str="App-Info", title:str="", detail:str="", status_code:int=None ):  
         """App-Info, App-Error, App-Dialog, errors Informationen anfügen.
         
         Parameters
         ----------
         meta: str
             der Bereich in dem angefügt wird
-        message : str, optional
-            Message Bereich. The default is "".
-        info : str, optional
-            Info Bereich. The default is "".
+        title : str, optional
+            title Bereich. The default is "".
+        detail : str, optional
+            detail Bereich. The default is "".
         status_code: int, optional
             Wenn gesetzt der http statuscode
             
@@ -826,29 +820,28 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         """       
         # Versuchen in json umzuwandeln 
         try:
-            json_data = json.loads( info )
+            json_data = json.loads( detail )
             if type(json_data) is dict:
-                info = json_data
+                detail = json_data
         except:  # includes simplejson.decoder.JSONDecodeError
-            
             pass
     
-        if meta in ["App-Info", "App-Error"]:  
-            cls._resultUpdate[ meta ].append( { 'message':message, 'info': info } )
-        elif meta in ["App-Dialog"]: 
-            cls._resultUpdate[ meta ].append( info )
+        if meta in ["App-Info", "App-Dialog"]:  
+            cls._resultUpdate[ "infos" ].append( { 'title':title, 'detail': detail, 'code': meta } )
+        else:
+            cls._resultUpdate[ "errors" ].append( { 'title':title, 'detail': detail, 'code': meta } )
         if status_code:
             cls._resultUpdate[ "status_code" ] = status_code
                         
     @classmethod        
-    def appInfo(cls, message:str="", info:str="", status_code:int=None):
+    def appInfo(cls, title:str="", detail:str="", status_code:int=None):
         """App-Info Informationen anfügen.
         
         Parameters
         ----------
-        message : str, optional
+        title : str, optional
             Message Bereich. The default is "".
-        info : str, optional
+        detail : str, optional
             Info Bereich. The default is "".
         status_code: int, optional
             Wenn gesetzt der http statuscode
@@ -858,19 +851,19 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         None.
 
         """    
-        cls._int_add_meta( "App-Info", message, info, status_code ) 
+        cls._int_add_meta( "App-Info", title, detail, status_code ) 
      
     @classmethod
-    def appError(cls, message:str="", info:str="", status_code:int=None):
-        """App-Error Informationen anfügen.
+    def appError(cls, title:str="", detail:str="", status_code:int=None):
+        """App-Error Informationen in errors anfügen.
         
         diese werden z.b. bei einer Form im status icon angezeigt
          
         Parameters
         ----------
-        message : str, optional
+        title : str, optional
             Message Bereich. The default is "".
-        info : str, optional
+        detail : str, optional
             Info Bereich. The default is "".
         status_code: int, optional
             Wenn gesetzt der http statuscode
@@ -880,10 +873,10 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         None.
 
         """    
-        cls._int_add_meta( "App-Error", message, info, status_code ) 
+        cls._int_add_meta( "App-Error", title, detail, status_code ) 
         
     @classmethod
-    def appDialog(cls, message:str="", info:dict={}):
+    def appDialog(cls, title:str="", detail:dict={}):
         """App-Dialog Informationen für den client anfügen.
         
         Diese Informationen führen zu einer Dialog Anzeige im client::
@@ -899,9 +892,9 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         
         Parameters
         ----------
-        message : str, optional
+        title : str, optional
             title Bereich. The default is "".
-        info : str, optional
+        detail : str, optional
             Info Bereich. The default is "".
             ist title hier nicht angegeben wird message verwendet
             
@@ -910,10 +903,10 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         None.
 
         """    
-        if not "title" in info:
-            info[ "title" ] = message
+        if not "title" in detail:
+            detail[ "title" ] = title
             
-        cls._int_add_meta( "App-Dialog", '', info ) 
+        cls._int_add_meta( "App-Dialog", title, detail ) 
                 
     @classmethod       
     def _int_query( cls, query=None, **kwargs):
@@ -1592,7 +1585,7 @@ class system( ispSAFRSDummy ):
     
     """
     http_methods = ["get"]
- 
+
     @classmethod
     def _extendedSystemCheck(cls):
         """Stub Function for api_list (Systeminformationen)
@@ -1603,7 +1596,7 @@ class system( ispSAFRSDummy ):
         
         """
         return {}, ""
- 
+    
     @jsonapi_rpc( http_methods=['GET'] )
     def api_get(cls, **kwargs):
         """.. restdoc::

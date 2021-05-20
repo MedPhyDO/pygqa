@@ -18,3 +18,10 @@
 - change app/qa/mlc.py - changes for config settings
 - change app/qa/vmat.py - changes for config settings
 - change app/qa/wl.py - changes for config settings
+
+# 0.1.3 / 2021-05-19
+- change isp/dicom.py - change debug messages
+- change isp/safrs.py - changes in additional api results, add _extendedSystemCheck
+- change isp/webapp.py - change cors header
+- change app/__init__.py - add _extendedSystemCheck
+- Some ui changes for _extendedSystemCheck
