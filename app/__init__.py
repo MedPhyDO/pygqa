@@ -61,17 +61,25 @@ class system( system ):
         config = ispConfig()
         html = "<h4>System Check</h4>"
         
+        from isp.config import dict_merge
+        
         # --------------- Aria Datenbank
         from app.aria import ariaClass 
         _database_key = config.get( "server.database.servername", "variansystem" )
         aria = ariaClass( _database_key, config )
         connect = aria.openDatabase( _database_key )
-        db_config = config.database[_database_key]
+
+        db_config = dict_merge( {
+            "dbname":"notset",
+            "host":"notset",
+            "user":"notset",
+            "password":"notset"
+        }, config.get( ["database", _database_key] ).toDict() )
         
         html += '<div class="alert alert-dark" >Prüfe Datenbankzugriff <span class="badge badge-info">database.servername</span>: <b>{}</b> - Konfiguration:'.format( _database_key )
         db_config_copy = db_config.copy()
-        db_config_copy.password = "******"
-        html += '</br> <pre>{}</pre>'.format( json.dumps( db_config_copy.toDict(), indent=2 ) )
+        db_config_copy["password"] = "******"
+        html += '</br> <pre>{}</pre>'.format( json.dumps( db_config_copy, indent=2 ) )
         info_text = "Der Zugriff auf die Datenbank dbname:<b>{dbname}</b>, host:<b>{host}</b>, user:<b>{user}</b>".format( **db_config )
         if not connect:
             info_class = "danger"   
@@ -117,7 +125,6 @@ class system( system ):
         
         # --------------- DICOM
         from app.ariadicom import ariaDicomClass
-        from isp.config import dict_merge
         
         _dicom_key = config.get( "dicom.servername", "VMSDBD" )
         adc = ariaDicomClass( _database_key, _dicom_key, config )
