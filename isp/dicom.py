@@ -183,13 +183,11 @@ class ispDicom(  ):
         
         self.initialized = False
         
-        # pfad zu den dicom dateien bereitstellen
-        self.dicomPath = str( self.config.get( ["dicom", self.server, "local_dir"], ".", replaceVariables=True ) )
-        if self.dicomPath[0] == ".": # pragma: no cover
-            self.dicomPath = os.path.abspath( osp.join( str(self.config.BASE_DIR), str(self.config.dicom[self.server]["local_dir"]) ) )
+        # pfad zu den dicom dateien bereitstellen default: {{BASE_DIR}}/files/DICOM
+        self.dicomPath = str( self.config.get( ["dicom", self.server, "local_dir"], "", replaceVariables=True ) )
+        if self.dicomPath == "": # pragma: no cover
+            self.dicomPath = os.path.abspath( osp.join( str(self.config.BASE_DIR), "files", "dicom" ) )
             self.config.dicom[self.server]["local_dir"] = self.dicomPath
-        #else:
-        #    self.dicomPath = str( self.config.get( ["dicom", self.server, "local_dir"], "", replaceVariables=True )
             
         if not os.path.isdir(self.dicomPath): # pragma: no cover
             logger.debug('dicomClass.initAE: erzeuge dirname={}'.format( self.dicomPath ) )           
