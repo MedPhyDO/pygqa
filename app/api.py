@@ -22,7 +22,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.2"
+__version__ = "0.1.4"
 __status__ = "Prototype"
 
 import json
@@ -428,6 +428,63 @@ class gqa( ispSAFRSDummy ):
         html += '</div>'
         return Response(style + html, mimetype='text/html')
             
+    @classmethod
+    @jsonapi_rpc( http_methods=['GET'] )
+    def info( cls, **kwargs ):
+        """
+        .. restdoc:: 
+            
+        description: Informationen zu allen Tests eines Jahres holen
+        summary : Informationen holen
+        parameters:
+            - name : year
+              in : query
+              type: integer
+              required : true
+              description : Das Jahr für das der Test durchgeführt werden soll
+            - name : pid
+              in : query
+              required : false
+              description : Id des Tests im Aria [_xxxQA TB, _xxxQA VB]              
+        """
+
+        # config laden und alle anderen parameter prüfen 
+        _kwargs = cls.init( kwargs )
+    
+        # Aufruf Paramter in App-Info ablegen
+        cls.appInfo( "do_get", _kwargs )   
+        
+        where = "LEN([Radiation].[Comment]) > 0  "
+        
+        pids = _kwargs["pid"]
+        if type(pids) == str:
+            pids = pids.split(",")
+            
+        if not type(pids) == list:
+            pids = [pids]
+
+        if not pids or len(pids) == 0:
+            _result = { "error": "no pid (Aria Patient ID) found in config or params" }
+        else:
+            subSql = []
+            for pid in pids:
+                subSql.append( "[Patient].[PatientId]='{}'".format( pid.strip() ) )
+            if len( subSql ) > 0:
+                where += " AND (" + " OR ".join( subSql ) + ")" 
+                
+            images, sql = cls.ariaDicom.getImages( 
+                addWhere=where,
+                AcquisitionYear=_kwargs["year"]
+            #    AcquisitionMonth=month,
+            #    AcquisitionDay=day,
+            #    testTags=testTags
+            )
+            
+            _result = {"sql": sql, "data":images }
+ 
+        return cls._int_json_response( { "data": _result } )   
+    
+       
     @classmethod
     @jsonapi_rpc( http_methods=['GET'] )
     def run( cls, **kwargs ):

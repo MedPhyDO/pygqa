@@ -25,3 +25,7 @@
 - change isp/webapp.py - change cors header
 - change app/__init__.py - add _extendedSystemCheck
 - Some ui changes for _extendedSystemCheck
+
+# 0.1.4 / 2021-06-02
+- change app/aria.py - change result from getImageInfos() for missing parameters
+- add app/api.py - info() gives infos from database for one year
