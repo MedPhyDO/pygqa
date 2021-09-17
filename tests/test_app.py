@@ -76,12 +76,14 @@ class testBase(unittest.TestCase):
                 }
             },
             "database": {
+                "servername" : "variansystem"
                 "main": "gqa",
                 "gqa" : {
                     "name" : "gqa_unittest.json"
                 }
             },
             "dicom": {
+                "servername" : "VMSDBD",
                 "VMSDBD" : {
                     "local_dir" : "files/DICOM"
                 }

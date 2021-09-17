@@ -1,6 +1,6 @@
 <div class="">
     <div class="GQA " id="{{ id }}" ></div>
-    <div>Erklärung: 
+    <div>Erklärung:
         <span class="gqa-help md-chip green lighten-4">Test ausgewertet und PDF erstellt</span>
         <span class="gqa-help md-chip yellow lighten-3">Test gemacht. Auswertung starten durch anklicken</span>
         <span class="gqa-help md-chip grey lighten-1">Test noch nicht vollständig</span>
@@ -39,9 +39,9 @@
 		margin: 5px;
 	}
     .gqa_table .info{
-    
+
     }
-    
+
 	.gqa-help{
 		padding: 2px;
 		margin: 2px;
@@ -56,7 +56,7 @@
 		border-radius: 6px;
 		padding: 1px;
 		margin-left: 3px;
-		line-height: 10px;	
+		line-height: 10px;
 		max-width: 350px;
 		font-size: smaller;
 		width: max-content;
@@ -67,11 +67,11 @@
 		border-radius: 6px;
 		padding: 1px;
 		margin-left: 3px;
-		line-height: 10px;	
+		line-height: 10px;
 		max-width: 350px;
 		font-size: smaller;
 		width: max-content;
-	}	
+	}
 	.gqa_table .resultIcon{
 		border-radius: 6px;
 		margin-top: 2px;
@@ -85,25 +85,25 @@
     	pointer-events: none;
     	opacity: 0.5;
     }
-    
+
 </style>
 
 <script>
 
-var gqaServer = "http://{{ serverHost }}"; 
+var gqaServer = "http://{{ serverHost }}";
 
 var gqaMQTT = {{ mqtt|tojson|safe }}
 
 app.clientMqtt = app.mqtt( gqaMQTT );
 
-app.clientMqtt.unsubscribe( gqaMQTT["basetopic"] + "/stat/progress/#" ); // unsubscribe zum testen
-app.clientMqtt.subscribe( gqaMQTT["basetopic"] + "/stat/progress/#", function( msg ){ 
+// app.clientMqtt.unsubscribe( gqaMQTT["basetopic"] + "/stat/progress/#" ); // unsubscribe zum testen
+app.clientMqtt.subscribe( gqaMQTT["basetopic"] + "/stat/progress/#", function( msg ){
     // console.info("progress callback", msg );
-    
+
     // <AcquisitionYear>-<AcquisitionMonth>-<unit>-<testId>-<energy>
 	var key = "";
 	// key zusammenstallen
-		
+
 	if ( typeof msg.payload === "object" ){
 
 		var p = msg.payload;
@@ -113,16 +113,16 @@ app.clientMqtt.subscribe( gqaMQTT["basetopic"] + "/stat/progress/#", function( m
 
 		// progress angaben (maxprogress und progress)
 		var progress = p.progress / p.maxprogress * 100;
-				
+
 		// console.info("gqaMQTTbase subscribe", key, progress);
-			
+
 		var style = "background-color:#fff176 !important;";
-			
+
 		style += "background:linear-gradient(to right, #81C784 " + progress + "% , #fff176 0%) !important;";
 		style += "background:-ms-linear-gradient(left, #81C784 " + progress + "% , #fff176 0%) !important;";
 		// das Element ändern. Gelb als Farbe setzen falls gradient nicht unterstützt wird
-		// 
-		$("[data-key='" + key + "']").attr("style", style ); 
+		//
+		$("[data-key='" + key + "']").attr("style", style );
 
 	}
 } );
@@ -141,21 +141,21 @@ var pdfClass = "mdi-file-pdf-box green-text";
 
 function getCell( year, month, unit, type, key, data, fullData, flatResults ){
 	/**
-	 * 
+	 *
 	 * year : int - das Ausgabe Jahr
 	 * month : int - der Ausgabe Monat bei 0 ist ein Jahreseintrag
 	 * unit : string - Der Gerätename
 	 * type - MT | JT
 	 * key - der Tag keyname des Tests
 	 * data -
-	 * fullData - 
-	 * flatResults - nur wenn result seperat angegeben wurde 
-	 * 
+	 * fullData -
+	 * flatResults - nur wenn result seperat angegeben wurde
+	 *
 	 * Elementeigenschaft
-	 * 
+	 *
 	 * data-key = <year>-<month>-<unit>-<testId>-<energy>
-	 *     wird für die MQTT Indentifizierung verwendet 
-	 * 
+	 *     wird für die MQTT Indentifizierung verwendet
+	 *
 	 */
 
 	var cell = {
@@ -163,20 +163,20 @@ function getCell( year, month, unit, type, key, data, fullData, flatResults ){
 		"class": ""
 	};
 	html = '';
-	    
+
 	title = key + " : " + unit;
-	
+
 	if (month > 0) {
     	title += " - Monat: " +  month;
 	} else {
     	title += " - Jahrestest";
 	}
-	
+
 	var maxFields = data["fields"];
-	var energyFields = d3.entries( data["energyFields"] ).sort( function(a, b){ 
+	var energyFields = d3.entries( data["energyFields"] ).sort( function(a, b){
         return parseInt(a.key, 10) > parseInt(b.key, 10);
     } );
-	
+
 	var ready = d3.map( data["ready"] );
 	// fehlermanchen = data["value"]["results"]
     // return '<div title="' + title + '" >' + html + '</div>';
@@ -186,14 +186,14 @@ function getCell( year, month, unit, type, key, data, fullData, flatResults ){
 	}  else {
 		cell.class = "all-ready";
 	}
-	
+
 	energyFields.map( function(d, i, a){
     	// d = { key, value)
-    	// 
+    	//
     	// a alles items
-     	
+
 		var energy = d.key;
-		var proEnergy = d.value; 
+		var proEnergy = d.value;
 		var isReady = false;
 		var count = 0;
 		var hasPdf = false;
@@ -206,12 +206,12 @@ function getCell( year, month, unit, type, key, data, fullData, flatResults ){
     		hasPdf = ( "pdf" in testResults) ? testResults["pdf"] : false;
     		isReady = ( "ready" in testResults) ? testResults["ready"] : false;
 		}
-		
+
 		//  year, month, unitName, testId, energy, isReady, hasPdf
 		var params = year + "," + month + ",'" + unit + "','" + fullData.key + "','" + energy + "'," + isReady + "," + hasPdf;
-		
+
 		var dataKey = year + "-" + month + "-" + unit + "-" + fullData.key + "-" + energy;
-		
+
         var _data = {
         	"key": dataKey,
         	"year" : year,
@@ -223,18 +223,18 @@ function getCell( year, month, unit, type, key, data, fullData, flatResults ){
         	"hasPdf" : hasPdf,
         	"isReady" : isReady
         };
-		
+
 		// result vorhanden ? reihenfolge <year>|<unit>|<test>|<energy>|<month>
 		if ( "index" in flatResults ) {
     		var resultKey = year + "|" + unit + "|" + fullData.value["tag"] + "|" + energy + "|" + month
-   		
+
     		var idx = flatResults["index"].indexOf(resultKey);
 			while (idx != -1) {
 				results.push( {"acceptance" : flatResults["data"][ idx ][0] } );
 				idx = flatResults["index"].indexOf(resultKey, idx + 1);
 			}
     	}
-	
+
 		var cls = "_" + energy + " ";
 		if ( hasPdf === true ){
 			cls += "green lighten-4";
@@ -247,7 +247,7 @@ function getCell( year, month, unit, type, key, data, fullData, flatResults ){
 			}
 		}
 
-		// 
+		//
 		html += '<span class="md-chip ' + cls + '" onClick="gqaEnergyClick( this, ' + params + ') " data-key="' + dataKey + '" data-ready="' + _data["isReady"] + '" data-pdf="' + _data["hasPdf"] + '">';
 		html += energy;
 		if ( hasPdf  ) {
@@ -256,12 +256,12 @@ function getCell( year, month, unit, type, key, data, fullData, flatResults ){
 			html += ' (' + count + '/' + proEnergy + ')';
 		}
 		if ( results.length > 0) {
-			for (i = 0; i < results.length; i++) { 
+			for (i = 0; i < results.length; i++) {
 				acceptance = results[i]["acceptance"];
 				if ( !acceptance ){
 					acceptance = 0
 				}
-				html += '<i class="mdi ' + resultIcons[ acceptance ] + ' white resultIcon"></i>'; 
+				html += '<i class="mdi ' + resultIcons[ acceptance ] + ' white resultIcon"></i>';
 			}
 		}
 		html += '</span>';
@@ -274,18 +274,18 @@ function change_energy_chip( data ){
     // params
     // - year
     // - month
-    // - unit 
-    // - test 
+    // - unit
+    // - test
     // - energy
-    
+
     // element.data
     // - isReady
     // - hasPdf;
-    
+
     if (data.length < 1 ) return "";
-    
+
     d = data[0];
-    
+
     var dataKey = [
         d["year"],
         d["month"],
@@ -293,11 +293,11 @@ function change_energy_chip( data ){
         d["testId"],
         d["energy"],
     ].join("-");
-	
+
 	var element = $("[data-key='" + dataKey + "']");
 
     if ( element ) {
-        // ready und pdf setzten 
+        // ready und pdf setzten
         element.data( "pdf", true );
         element.data( "ready", true );
     	// change class and innerHTML
@@ -308,50 +308,50 @@ function change_energy_chip( data ){
     	element.empty();
     	var inner = d["energy"];
     	inner += '<i class="mdi ' + pdfClass + ' pdfIcon"></i>';
-    	
-    	for (i = 0; i < data.length; i++) { 
+
+    	for (i = 0; i < data.length; i++) {
     		acceptance = data[i]["acceptance"];
     		if ( !acceptance ){
     			acceptance = 0
     		}
-    		inner += '<i class="mdi ' + resultIcons[ acceptance ] + ' white resultIcon"></i>'; 
+    		inner += '<i class="mdi ' + resultIcons[ acceptance ] + ' white resultIcon"></i>';
     	}
-	
+
     	element.html( inner );
 	}
-    
+
 }
 
 function GQA_view( data, param ){
     // summary:
     //     sw
-	// gqa: object 
+	// gqa: object
 	//     - info
 	//     - results
 	//     - units
-	
+
 	var id = "{{ id }}";
-		
+
 	// gibt es schon eine tabelle zuerst entfernen dann neu erzeugen
 	var div = d3.select("#" + id);
     div.selectAll('table').remove();
 	div.selectAll('H3').remove();
-	
+
 	var titles = [ param.year, "Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
 
 	// alle info zum anzeigen durchgehen und inhalte von units für die Daten verwenden
 	var flatResults = data["results"]
-	
-	var units = d3.keys( data["units"] );	
-	var tags = ("tags" in data) ? data["tags"] : {} ;	
-	
+
+	var units = d3.keys( data["units"] );
+	var tags = ("tags" in data) ? data["tags"] : {} ;
+
 	units.map( function( unit ){
 		var unitName = data["units"][unit];
-		
+
 		div.append( 'H3' ).html( unitName ).attr('class', 'm-0 text-white bg-secondary');
-		
+
 	    var table = div.append('table')
-			.attr("class", "gqa_table");	
+			.attr("class", "gqa_table");
 
 		var headers = table.append('thead').append('tr')
 			.selectAll('th')
@@ -372,8 +372,8 @@ function GQA_view( data, param ){
 				}
 				return s;
 			});
-        
-        tests = d3.entries( data["GQA"] );  
+
+        tests = d3.entries( data["GQA"] );
 		var rows = table.append('tbody').selectAll('tr')
 			.data( tests ).enter()
 			.append('tr')
@@ -388,13 +388,13 @@ function GQA_view( data, param ){
     				// d = eintrag ( key, value)
     				// k = Monatsname
     				// i = Monat (0 = Jahrestest)
-    				   	
+
 					var cell = {
 						"colspan": 1,
 						"html": "",
 						"class": ""
 					};
-            		
+
    					if (i > 0) {
    						// die Eigentlichen tests
    						if (d.key.slice(0, 2) === "JT") {
@@ -407,21 +407,21 @@ function GQA_view( data, param ){
    								cell.html = "";
    								cell.class = "remove";
    							}
-   				
+
    						} else if (d.key.slice(0,2) === "MT") {
    							cell = getCell( parseInt(param.year), i, unitName, "MT", d.key, d.value[ unitName ], d, flatResults );
    						}
-   
+
    					} else {
    						// die erste Spalte
-   						// 				
+   						//
    						title = "";
    						tip = "";
    						need = "";
-   						optional = "";		
-   						
+   						optional = "";
+
    						if ( d.value[ "tag" ] ) {
-       						
+
    							if ( d.value["info"]["optional"] ) {
    								optional = '<div class="badge badge-pill badge-primary" >Optional wenn ' + d.value["info"]["optional"] + ' OK</div>';
    							}
@@ -433,7 +433,7 @@ function GQA_view( data, param ){
    								need = '<div class="badge badge-pill badge-info" >benötigt: ' + d.value["info"]["need"] + '</div>';
    							}
    						}
-   						
+
    						params = param.year + ",0 ,'" + unitName + "','" + d.key + "'";
 
    						s = "";
@@ -460,31 +460,31 @@ function GQA_view( data, param ){
 				return d.class;
 			})
 		;
-		
+
 		// alle mit remove gekennzeichneten Zellen wieder entfernen
 		table.selectAll('.remove').remove();
     });
-	
+
 	return div;
 }
 
-// zum testen data global anlegen 
+// zum testen data global anlegen
 var data = null;
 
 function gqaChange( year, plus ){
     // summary:
     //      change visible year
-    
+
 	if (!plus) plus = 0;
-	
+
 	var id = "{{ id }}";
 	var div = d3.select("#" + id);
     div.selectAll('table').remove();
 	div.selectAll('H3').remove();
-	
+
 	var load = year + plus;
 	// console.info( year, plus, load );
-	
+
 	// daten laden
 	GQA_loaddata( { "action":"gqa", "year": load } );
 }
@@ -492,25 +492,25 @@ function gqaChange( year, plus ){
 function gqaEnergyClick( self, year, month, unitName, testId, energy, isReady, hasPdf ){
     // summary:
 	//     perform action on selected element
-	
+
 	console.info("gqaEnergyClick", $( self).data(), self, $( self ).parents("td"), isReady, hasPdf, self.parentElement, arguments);
 	var param = {
 		"year" : year,
 		"month" : month,
 		"unit" : unitName,
 		"testid" : testId,
-		"energy" : energy,	
+		"energy" : energy,
 	};
-	
+
 	var data = $( self ).data();
 	hasPdf = data["pdf"];
 	isReady = data["ready"];
-	
+
 	if ( hasPdf ) {
-		//var url = app.phypedia.api + "?action=varian&format=json&module=gqa&mode=main&json=" + JSON.stringify(param); 
+		//var url = app.phypedia.api + "?action=varian&format=json&module=gqa&mode=main&json=" + JSON.stringify(param);
 		// param action = view verwenden?
 		param["uid"] = (new Date().getTime()).toString(36);
-		
+
 		var url = gqaServer + "/api/gqa/pdf?" + $.param( param ); //  isp.objectToQuery( param ) ;
 
         dlgParams = {
@@ -533,14 +533,14 @@ function gqaEnergyClick( self, year, month, unitName, testId, energy, isReady, h
                 }
             }]
         };
-        
+
 		BootstrapDialog.show(dlgParams);
 
 	} else {
 		// kein pdf aber isReady dann test auswertung starten
 		if ( isReady ) {
 			param["action"] = "gqa/run";
-			GQA_loaddata( param, self );	
+			GQA_loaddata( param, self );
 		} else {
 
 			BootstrapDialog.show({
@@ -562,7 +562,7 @@ function gqaEnergyClick( self, year, month, unitName, testId, energy, isReady, h
                     }
                 }]
             });
-            
+
 		}
 	}
 }
@@ -571,7 +571,7 @@ function gqaEnergyClick( self, year, month, unitName, testId, energy, isReady, h
 function GQA_loaddata( param, self ){
     // summary:
 	//     load data over api
-	// 
+	//
 	// param:
 	//		action: gqa|gqa/run
 	//		year
@@ -585,27 +585,27 @@ function GQA_loaddata( param, self ){
     if ( param["action"] == "gqa") {
         // einfach nur /gqa/<jahr>
         url += param["action"] + "/" + param["year"];
-        
+
         // url += param["action"] + "/info?year=" + param["year"];
-    } else { 
+    } else {
          // /gqa/<action>?<queryparams>
         url += param["action"];
         delete param["action"];
         url += "?" + $.param( param ); // isp.objectToQuery( param ) ;
     }
-    
+
     // console.info("GQA_loaddata");
-    
+
 	// app.splashLoading( true );
-    $( self ).parents("td").addClass( "running" ); 
-    
+    $( self ).parents("td").addClass( "running" );
+
 	return d3.json(url).then( function( odata ){
-    	
-    	$( self ).parents("td").removeClass( "running" ); 
-    	
+
+    	$( self ).parents("td").removeClass( "running" );
+
     	if (param["action"] === "run") {
         	console.info("GQA_loaddata - ready ", tests);
-        	
+
     	} else {
         	var tests = 0;
     		if ( odata.data && odata.data.GQA ) {
@@ -614,22 +614,22 @@ function GQA_loaddata( param, self ){
     		} else if( odata.data && odata.data.runTests) {
         		// <AcquisitionYear>-<AcquisitionMonth>-<unit>-<testId>-<energy>
         		console.info( "runTests result", odata.data.runTests );
-        		for ( key in odata.data.runTests ) { 
+        		for ( key in odata.data.runTests ) {
             		change_energy_chip( odata.data.runTests[key] );
         		}
     		} else {
     			// console.info( "GQA_loaddata: wrong data", odata, param, url);
-    			
+
     			BootstrapDialog.show({
         			type: BootstrapDialog.TYPE_WARNING,
                     title: 'GQA Serverfehler',
                     message: 'Beim durchführen der Abfrage ist ein Fehler aufgetreten',
                 });
     		}
-    		
+
     	}
 		// app.splashLoading( false );
-		
+
 	} );
 }
 

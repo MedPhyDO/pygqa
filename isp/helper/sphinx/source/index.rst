@@ -11,15 +11,14 @@ Python Module Index
 ===================
 .. toctree::
    :maxdepth: 3
-   
-   README
-   
-   ../../README
-      
-   modules
-     
 
-  
+   README
+
+   ../../README
+
+   modules
+
+
 Indices and tables
 ==================
 
@@ -30,3 +29,6 @@ Indices and tables
 Python Module TODO
 ==================
 .. todolist::
+
+.. mdinclude:: ../../CHANGELOG.md
+

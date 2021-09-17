@@ -22,9 +22,17 @@
         "servername" : "variansystem", 
         "variansystem" : {
             "host": "",
-            "dbname": "",
+            "dbname": "variansystem",
             "user": "",
             "password": ""
+        },
+        "VMSCOM": {
+            "engine": "pyodbc",
+            "dsn": "VMSCOM",
+            "dbname": "VARIAN",
+            "user": "",
+            "password": ""
+
         },
         "main": ["gqa"],
         "gqa" : {
