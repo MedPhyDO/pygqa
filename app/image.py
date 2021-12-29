@@ -7,7 +7,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.2"
+__version__ = "0.1.6"
 __status__ = "Prototype"
 
 from pylinac.core.image import DicomImage as pyDicomImage
@@ -196,11 +196,13 @@ class plotImage( pyDicomImage, plotClass ):
                 ticks = np.arange(px_min, px_max + t_width / step , t_width / step )
                 
             
-            # label setzen
-            ax.get_xaxis().set_ticklabels( labels )
+            
+            # FixedFormatter should only be used together with FixedLocator
             # ticks setzen
             ax.get_xaxis().set_ticks( ticks )
-            
+            # label setzen
+            ax.get_xaxis().set_ticklabels( labels )
+
         else:
             # x-Achse entfernen
             ax.get_xaxis().set_ticklabels([])
@@ -230,11 +232,12 @@ class plotImage( pyDicomImage, plotClass ):
                 # ticks bestimmen
                 t_width = abs(px_max - px_min) 
                 ticks = np.arange(px_min, px_max + t_width / step , t_width / step )
-                
-            # label setzen
-            ax.get_yaxis().set_ticklabels( labels )
+            
             # ticks setzen
             ax.get_yaxis().set_ticks( ticks )
+            
+            # label setzen
+            ax.get_yaxis().set_ticklabels( labels )
         else:
             # y-Achse entfernen
             ax.get_yaxis().set_ticklabels([])

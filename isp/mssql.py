@@ -6,7 +6,7 @@ pip install python-tds
 
 pip install pyodbc
 
-for using pyodbs install microsoft-odbc with unixODBC development headers
+for using pyodbc install microsoft-odbc with unixODBC development headers
 
 Example:
 
@@ -20,13 +20,25 @@ print( msdb.execute("select @@version as version") )
 
 use {dbname} in sql querys to replace it with dbname from config
 
+
+CHANGELOG
+=========
+
+0.1.1 / 2021-09-03
+------------------
+- add support for pyodbc
+
+0.1.0 / 2021-01-16
+------------------
+- First Release
+
 """
 
 __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.5"
+__version__ = "0.1.1"
 __status__ = "Prototype"
 
 

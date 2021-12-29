@@ -44,13 +44,30 @@ Beispiele::
     /api/<modul>/groupby?fields[<modul>]=<feld1,feld2>&groups=Geraet&filter=eq(aktiv,true)
     /api/<modul>/groupby?fields[<modul>]=<feld1,feld2>&groups[Ersatz]=Geraet&filter=eq(aktiv,true)
 
+
+CHANGELOG
+=========
+
+0.1.2 / 2021-12-28
+------------------
+- changes for Python 3.8
+- add count check in _int_json_response and __abstract__ in ispSAFRSModel
+
+0.1.1 / 2021-05-19
+------------------
+- changes in additional api results, add _extendedSystemCheck
+
+0.1.0 / 2021-01-16
+------------------
+- First Release
+
 """
 
 __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R. Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.3"
+__version__ = "0.1.2"
 __status__ = "Prototype"
 
 import json
@@ -986,6 +1003,8 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         response = SAFRSFormattedResponse()
         try:
             # data=None, meta=None, links=None, errors=None, count=None, include=None
+            if not "count" in result and "meta" in result and "count" in result["meta"]:
+                result["count"] = result["meta"]["count"]
             response.response = jsonapi_format_response( **result )
 
         except Exception as exc:
@@ -1405,6 +1424,7 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
 
 # ----------- ispSAFRS mit db.Model
 class ispSAFRSModel( ispSAFRS, db.Model ):
+    __abstract__ = True
     pass
 
 
@@ -1670,6 +1690,7 @@ class system( ispSAFRSDummy ):
         import sys
 
         sysinfo = {
+            "config_webserver" : cls._config.server.webserver.toDict(),
             "kwargs" : kwargs,
             "python" : sys.version,
             "modules" : {}

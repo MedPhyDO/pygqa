@@ -5,13 +5,31 @@
 webapp
 ======
 
+
+
+CHANGELOG
+=========
+
+0.1.2 / 2021-12-08
+------------------
+- changes for Python 3.8
+- use add_extension for jinja extensions
+
+0.1.1 / 2021-05-19
+------------------
+- change cors header
+
+0.1.0 / 2021-01-16
+------------------
+- First Release
+
 """
 
 __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R. Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.3"
+__version__ = "0.1.2"
 __status__ = "Prototype"
 
 import uuid
@@ -355,7 +373,8 @@ class ispBaseWebApp():
         #
 
         # markdown in templates auch für flask
-        self.app.jinja_options['extensions'].append('jinja_markdown.MarkdownExtension')
+        self.app.jinja_env.add_extension('jinja_markdown.MarkdownExtension')
+        #self.app.jinja_options['extensions'].append('jinja_markdown.MarkdownExtension')
 
         # Konfigurationen für SQLAlchemy setzen
         self.app.config.update( SQLALCHEMY_BINDS=binds )
@@ -391,16 +410,16 @@ class ispBaseWebApp():
             # Zugangsbeschränkung prüfen
             return ( self._checkNetarea() )
 
-        # zusätzliche routen
+        # zusätzliche routen ermöglichen
+        self.addRoutes(  )
+
+        # zusätzliche default routen
         @self.app.route('/')
         @self.app.route('/<path:filepath>')
         def home( filepath:str='' ):
             self.status_code = 200
             self.default_header = None # auto default
             return self.routeIndex( filepath ), self.status_code, self.default_header
-
-        # zusätzliche routen ermöglichen
-        self.addRoutes()
 
         return self.app
 
@@ -501,10 +520,10 @@ class ispBaseWebApp():
         """Überschreibbare Funktion um zusätzliche routen einzubinden.
 
         Sample::
-
-            @self.route('/test/<path:filepath>')
-            def test_route( filepath:str='' ):
-                return "testroute"
+            def addRoutes( self ):
+                @self.app.route('/test/<path:filepath>')
+                def test_route( filepath:str='' ):
+                    return "testroute"
         """
         pass
 
