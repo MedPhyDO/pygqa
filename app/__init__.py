@@ -243,14 +243,16 @@ class system( system ):
         return {}, html
 
 # -----------------------------------------------------------------------------
-def run( overlay:dict={} ):
+def run( overlay:dict={}, load_tests_db:bool=False ):
     ''' Startet ispBaseWebApp mit zusätzlichen config Angaben
 
     Parameters
     ----------
     overlay : dict, optional
         Overlay Angaben für config. The default is {}.
-
+    load_tests_db: bool, optional
+        load also testdb
+        
     Returns
     -------
     webApp : ispBaseWebApp
@@ -264,7 +266,11 @@ def run( overlay:dict={} ):
     _apiConfig = {
         "models": [ gqa, gqadb, system ],
     }
-
+    
+    if load_tests_db: # pragma: no cover
+        import tests.db as testdb
+        _apiConfig["models"].append( testdb.dbtests )
+        
     # Webserver starten
     webApp = ispBaseWebApp( _config, db, apiconfig=_apiConfig, overlay=overlay )
 

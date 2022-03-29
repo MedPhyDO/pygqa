@@ -4,37 +4,77 @@
 mpdf
 ====
 
-Die mpdf Klasse ermöglicht das Erstellen von pdf Dateien wie die entsprechende PHP Version.
+This mpdf class allows creating pdf files like the corresponding PHP class.
 
-Sie verwendet als Grundlage weasyprint und html5lib
+It is based on weasyprint, jinja and html5lib 
 
-* autom. header und footer
-* Grafiken über Pfadangabe mit Positions und Größen
-* svg Dateien
-* Generierte Grafiken
-* Lange texte
-* Tabellen aus panda
-* CSS Unterstützung bei HTML Einbindung
-* Verwendung von materialdesignicons-webfont.svg für icon
+* Automatic integration of header and footer areas
+* Images via path information with positions and sizes 
+* SVG files
+* Generated graphics 
+* Long texts also as markdown 
+* Pandas tables
+* CSS support for HTML integration 
+* Using materialdesignicons-webfont for icons 
 
+Use Ghostscript (gs) to convert pdf to png. Solution found in /tests/conftest.py
+
+render_png() shape size A4 210x297mm
+
+- python 3.7 - cairo 1.16.0 (https://cairographics.org) (1120, 790, 3) - %PDF-1.5
+- python 3.8 - WeasyPrint 53.4 (1123, 794, 3) - %PDF-1.7
+        
 resources
 ---------
-Angaben in config.json
+Configuration in config.json 
 
 - variables : dict
-
-Abschnitt pdf:
-
-- styles : str
-    Wird von resources geladen. Default: mpdf_styles.css
-- overlay : str
-    Wird von resources geladen. Default: mpdf_overlay.css
-- logo : str
-    Wird von resources geladen. Default: logo.png
+    Variables that are inserted into the templates with format() 
+    - templates
+         path to template files
+    - resources
+        path to resources with CSS, Fonts .... used in templates
+    - filename, path
+        is used to specify the pdf file storage location 
+    - page: dict
+        - top
+        - right
+        - bottom
+        - left
+        - header
+        - footer
+        - header-margin
+        - footer-margin      
+    
+- templates :
+    - PDF-PAGE_STYLE
+        Specify HTML of the style or a file with file:/// 
+    - PDF-OVERLAY_STYLE
+        Specify HTML of the style or a file with file:/// 
+    - PDF-HEADER_HTML
+        Specify HTML of the style or a file with file:/// 
+    - PDF-FOOTER_HTML
+        Specify HTML of the style or a file with file:/// 
+    
+- pdf
+    - style : str
+        Loaded from the resources path. Default: mpdf_page.css 
+    - overlay : str
+        Loaded from the resources path. Default: mpdf_overlay.css
+    - logo : str
+        Loaded from the resources path. Default: logo.png
 
 
 CHANGELOG
 =========
+
+0.1.2 / 2022-03-29
+------------------
+- add file template support
+- add function onTheFly() wich gives pdf or html for browser output
+- add support for pdf.module setting
+- add printDebugPage() to add one page with debug informations
+- add .jinja and .tmpl support to text()
 
 0.1.1 / 2021-04-27
 ------------------
@@ -51,7 +91,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R. Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 __status__ = "Prototype"
 
 from weasyprint import HTML, CSS
@@ -69,7 +109,7 @@ import os
 import os.path as osp
 import base64
 import string
-from datetime import date, datetime
+from datetime import datetime
 
 from isp.config import ispConfig, dict_merge
 from isp.plot import rcParams
@@ -81,55 +121,14 @@ ABSPATH = osp.dirname( osp.abspath( __file__) )
 # weasyprint warnings abschalten
 wp_logger = logging.getLogger('weasyprint')
 
-# logger.addHandler( logging.FileHandler( osp.join( ABSPATH, '..', 'weasyprint.log') ) )
 wp_logger.setLevel( logging.CRITICAL )
 
 
 DEFAULT_TEMPLATES = {
-    "PAGE_STYLE":"""
-        @page {
-            size: {{ page.size }};
-            margin: {{page.header_height}}mm {{page.right}}mm {{page.footer_height}}mm {{page.left}}mm;
-        }
-    """,
-    "OVERLAY_STYLE":"""
-        @page {
-            size: {{ page.size }};
-            margin: {{page.top}}mm {{page.right}}mm {{page.bottom}}mm {{page.left}}mm;
-        }
-        .isp-header {
-            height: {{page.header}}mm;
-        }
-        .isp-header .logo{
-            height: {{page.header}}mm;
-        }
-    """,
-    "header_html":"""<header>
-        <table class="isp-header" ><tr>
-            <td class="header_1 logo" rowspan="3"><img class="logo" src="file://{{resources}}/{{logo}}"></img></td>
-            <td class="header_2 text">{{Klinik}}</td>
-        </tr><tr>
-            <td class="header_2 text">{{Abteilung}}</td>
-        </tr><tr>
-            <td class="header_2 text">{{Titel}} - {{Betreff}}</td>
-        </tr></table>
-        </header>
-    """,
-    "footer_html": """<footer>
-        <table class="isp-footer" ><tr>
-        	<td class="footer_1 name" rowspan="2">{{filename}}</td>
-        	<td class="footer_2 text">Erstelldatum: {{Erstelldatum}} ({{Erstellt_von}})</td>
-        	<td class="footer_3 text" colspan="2">Freigabe: {{Freigegeben_von}} ({{Gültig_ab}}) V.{{Version}}</td>
-        </tr><tr>
-            <td class="footer_2 text">geprüft: {{Geprüft_von}}</td>
-            <td class="footer_3 text">Datenausgabe: {{Datenausgabe}}</td>
-            <td class="footer_4 text">Seite <pagenum>{{pagenum}}</pagenum> von <pages>{{pages}}</pages></td>
-        </tr></table></footer>
-    """,
-    "_PAGE_STYLE": "{% include \"mpdf_page_style.tmpl\" %}",
-    "_OVERLAY_STYLE": "{% include \"mpdf_overlay_style.tmpl\" %}",
-    "_header_html": "{% include \"mpdf_header.tmpl\" %}",
-    "_footer_html": "{% include \"mpdf_footer.tmpl\" %}"
+    "PAGE_STYLE": "file://{{templates}}/mpdf_page_style.tmpl",
+    "OVERLAY_STYLE": "file://{{templates}}/mpdf_overlay_style.tmpl",
+    "HEADER_HTML": "file://{{templates}}/mpdf_header.tmpl",
+    "FOOTER_HTML": "file://{{templates}}/mpdf_footer.tmpl"
 }
 
 
@@ -155,31 +154,34 @@ class PdfGenerator:
     Parameters
     ----------
     _variables: dict
-        Default ist: {}
+        Variables that are inserted into the templates with format(). Default: {}
     title : str
-        Dokumententitel Default ist ""
+        document title. Default: ""
     meta : str
-        PDF Dokument Metaangaben Default ist ""
+        PDF Document meta settings. Default: ""
     style : str
-        Dokumentenstyle Default ist "body{ padding:5mm 0 5mm 0; }"
+        document style. Default: "body{ padding:5mm 0 5mm 0; }"
     head : str
-        Dokumenteninhalt für Head Default ist ""
+        html content used for head.  Default: ""
     body : str
-        Dokumenteninhalt für Body Default ist ""
+        html content used for body. Default: ""
     header_html : str
-        Dokumenteninhalt für Header Default ist ""
+        Template for Header. Default: ""
     body_html : str
-        Dokumenteninhalt für Body Default ist ""
+        Template for Body. Default: ""
     footer_html : str
-        Dokumenteninhalt für Footer Default ist ""
+       Template for Footer. Default: ""
+
     pageContent: dict
-        Inhalte wenn mehrere Seiten (mit unterseiten) verwendet werden sollen.  Default ist {}
+        Content if several pages (with subpages) are used. Default: {}
     contentName: str
-        Name des aktuellen contentBereichs. Default ist "_"
+        Name of the current content area. Default: "_"
+    addContent: str
+        Additional content 
     pandas_table_id: int
-        Die fortlaufende id für eine tabellen. Default ist 0
+        Sequential id for pandas tables. Default: 0
     autoRender:bool
-        Automatisch rendern oder nur den Inhalt zurückgeben. Default ist True
+        Render automatically or just return the content . Default: True
 
     """
 
@@ -195,7 +197,7 @@ class PdfGenerator:
         autoRender: bool - True
              Elemente sofort rendern oder nur zurückgeben
 
-        config: dict oder isp config
+        config: ispConfig class or dict merged with ispConfig()
             verwendet wird variables, templates und pdf
 
         filename:
@@ -203,30 +205,34 @@ class PdfGenerator:
 
         """
 
-        # Konfiguration
-        if not config:
-            self._config = ispConfig( mqttlevel=logging.WARNING )
-        else:
+        # load or extend configuration
+        if isinstance( config, ispConfig ):
             self._config = config
+        else:
+            self._config = ispConfig( mqttlevel=logging.WARNING )
+            if isinstance( config, dict):
+                self._config.update( config )
 
-        # Defaultwerte der Klassse setzen
+        # set class defaults
         self.set_class_defaults()
-
-        # default _variables Angaben mit config.variables ergänzen
-        self._variables = dict_merge( self._variables, self._config.get( "variables", {} ) )
-        # zusätzliche angegebene variables ergänzen
+        
+        # update default _variables with config.variables
+        self._variables = dict_merge( self._variables, self._config.get("variables") )
+         
+        # update variables
         self._variables = dict_merge( self._variables, variables )
-
+      
         # Dateiname ggf. aus den metadaten aufbereiten
         if filename:
             self._variables["filename"] = filename
 
         self.autoRender = autoRender
+        
 
-        # overlay und page layout setzen
+        # set overlay and page layout
         self.set_page_defaults()
 
-        # plot defaults setzen
+        # set plot defaults
         plt.rcParams.update( rcParams )
 
 
@@ -235,25 +241,17 @@ class PdfGenerator:
 
         alle _variables Angaben können in config.json im Abschnitt variables überschrieben werden
         """
-        self.OVERLAY_STYLE = ''
-        self.PAGE_STYLE = ''
-
-        self.template = """
-            <!doctype html>
-            <html>
-              <head>
-                <title>{title}</title>
-                <meta charset="utf-8">
-                {meta}
-                <style>{style}</style>
-                {head}
-              </head>
-              <body>
-              {body}
-              </body>
-            </html>
-        """
-
+        
+        self.addContent = ""
+        self.pageContent = {}
+        self.contentName = "_"
+        self.overlayContent = {}
+        self.autoRender = True
+        self.pandas_table_id = 0
+        self.isRendered = False
+        self.debugPage = False
+        self.debugInfo= {}
+        
         self.title = '{{Titel}} - {{Betreff}}'
         self.meta = ''
         self.style = 'body{ padding:5mm 0 5mm 0; }'
@@ -261,7 +259,26 @@ class PdfGenerator:
 
         self.header_html = ''
         self.footer_html = ''
+        
+        self.OVERLAY_STYLE = ''
+        self.PAGE_STYLE = ''
 
+        self.template = """
+        <!doctype html>
+        <html>
+          <head>
+            <title>{title}</title>
+            <meta charset="utf-8">
+            {meta}
+            <style>{style}</style>
+          </head>
+          {head}
+          <body>
+          {body}
+          </body>
+        </html>
+        """
+        
         self._variables = {
             "page" : {
                 "size" : "A4 portrait",  # a4 = 210x297 width=172.5 (soll 180)
@@ -274,10 +291,15 @@ class PdfGenerator:
                 "header-margin": 4,
                 "footer-margin": 2
             },
-            "resources": "{{BASE_DIR}}/resources", # Pfad zu den resources mit CSS und Fonts Angaben MPDF verwendet font format("svg")
-            "logo": "logo.png",
+            "templates": "{{BASE_DIR}}/resources", # path to resources with .tmpl, CSS, Fonts .... 
+            "render_mode" : "pdf", # rendering mode pdf or html 
+            "resources": "file://{{BASE_DIR}}/resources", # recources path used in templates, for pdf rendering 
+            "resources_html" : "/resources", # recources path used in templates, for html rendering 
+            
             "path" : "{{BASE_DIR}}/files",
             "filename": "noname.pdf",
+            
+            "logo": "logo.png",
             "Klinik" : "",
             "Abteilung" : "",
             "Titel" : "",
@@ -293,47 +315,98 @@ class PdfGenerator:
             "Freigegeben_von" : ""
         }
 
-        # defaults setzen
-        self.pageContent = {}
-        self.contentName = "_"
-        self.overlayContent = {}
-        self.autoRender = True
-        self.pandas_table_id = 0
-        self.isRendered = False
+
 
     def set_page_defaults(self):
-        """Setzt die default Einstellungen für die Seiten.
+        """Sets default settings for all pages. 
 
-        * ersetzt variables in resources, filename, path
-        * Berechnet page Angaben header_height und footer_height
-        * füllt OVERLAY_STYLE, PAGE_STYLE, header_html und footer_html
+        * replaces variables in resources, templates, filename, path and self.title
+        * fills OVERLAY_STYLE, PAGE_STYLE, HEADER_HTML and FOOTER_HTML 
 
         """
-
-        # resources render_template für wichtige _variables durchführen
-        self._variables["resources"] = self._config.render_template( self._variables["resources"], self._variables)
-        self._variables["filename"] = self._config.render_template( self._variables["filename"], self._variables )
-        self._variables["path"] = self._config.render_template( self._variables["path"], self._variables )
-
-        # title Ersetzung durchführen
+        
+        # replaces variables in templates, resources, filename, path and self.title
+        self._variables["templates"] = self._config.render_template( self._variables["templates"], self._variables).rstrip('/')
+        self._variables["resources"] = self._config.render_template( self._variables["resources"], self._variables).rstrip('/')
+        self._variables["path"] = self._config.render_template( self._variables["path"], self._variables ).rstrip('/')
+        self._variables["filename"] = self._config.render_template( self._variables["filename"], self._variables )          
+        # resources is file based
+        if self._variables["resources"][:8] != "file:///":
+            self._variables["resources"] = "file:///{}".format( self._variables["resources"].lstrip("/") )
+        
+        # title replacement
         self.title = self._config.render_template( self.title, self._variables, deep_replace=True )
 
-        # ränder für die Seiteninhalte berechnen - PAGE_STYLE
-        page = self._variables["page"]
-        self._variables["page"]["header_height"] = page["top"] + page["header"] + page["header-margin"]
-        self._variables["page"]["footer_height"] = page["bottom"] + page["footer"] + page["footer-margin"]
-
-        # styles bereitstellen
+        # fills OVERLAY_STYLE, PAGE_STYLE
         self.PAGE_STYLE = self._config.get("templates.PDF-PAGE_STYLE", DEFAULT_TEMPLATES["PAGE_STYLE"])
+        if self.PAGE_STYLE[:5] == "file:":
+            self.debugInfo["PAGE_STYLE"] = self.PAGE_STYLE
+            self.PAGE_STYLE = self._getTemplateFromFile( self.PAGE_STYLE[7:] )
+        else: # pragma: no cover
+            self.debugInfo["PAGE_STYLE"] = "not file based"
+              
         self.OVERLAY_STYLE = self._config.get("templates.PDF-OVERLAY_STYLE", DEFAULT_TEMPLATES["OVERLAY_STYLE"])
+        if self.OVERLAY_STYLE[:5] == "file:":
+            self.debugInfo["OVERLAY_STYLE"] = self.OVERLAY_STYLE
+            self.OVERLAY_STYLE = self._getTemplateFromFile( self.OVERLAY_STYLE[7:] )
+        else: # pragma: no cover
+            self.debugInfo["OVERLAY_STYLE"] = "not file based"  
+            
+        # header_html and footer_html 
+        self.header_html = self._config.get("templates.PDF-HEADER_HTML", DEFAULT_TEMPLATES["HEADER_HTML"])
+        if self.header_html[:5] == "file:":
+            self.debugInfo["header_html"] = self.header_html
+            self.header_html = self._getTemplateFromFile( self.header_html[7:] )
+        else: # pragma: no cover
+            self.debugInfo["header_html"] = "not file based"       
+            
+        self.footer_html = self._config.get("templates.PDF-FOOTER_HTML", DEFAULT_TEMPLATES["FOOTER_HTML"])
+        if self.footer_html[:5] == "file:":
+            self.debugInfo["footer_html"] = self.footer_html
+            self.footer_html = self._getTemplateFromFile( self.footer_html[7:] )
+        else: # pragma: no cover
+            self.debugInfo["footer_html"] = "not file based"
+        
+    def printDebugPage(self):
+        """set debugPage to True to render debug Information 
+        
+        Returns
+        -------
+        None.
 
-        # html Gerüst bereitstellen
-        self.header_html = self._config.get("templates.PDF-HEADER", DEFAULT_TEMPLATES["header_html"])
-        self.footer_html = self._config.get("templates.PDF-FOOTER", DEFAULT_TEMPLATES["footer_html"])
+        """
+        self.debugPage = True
+        
+    def _getTemplateFromFile( self, name ):
+        """Load template from file
 
+        Parameters
+        ----------
+        name: str
+            template filename 
+
+        Returns
+        -------
+        filepath : str
+            Name and path for the new file
+        filename : str
+            Name only for the new file
+        """
+        
+        filename = self._config.render_template(name, self._variables )
+        content = None
+        # add additional CSS from css_file
+        if os.path.isfile(filename):
+            with open( filename, 'r', encoding="utf-8") as myfile:
+                content = myfile.read()
+
+        if not content:
+            content = "<!-- missig:'{}' -->".format( filename )
+            
+        return content        
 
     def _getFilePath( self, ext:str="pdf" ):
-        """Ensure the presence of _variables.path and gives filename and filepath.
+        """Ensure the presence of _variables["path"] and gives filename and filepath.
 
         Parameters
         ----------
@@ -356,7 +429,49 @@ class PdfGenerator:
         filepath = osp.join( self._variables["path"], filename )
         return filepath, filename
 
-    def render_pdf(self):
+    def onTheFly( self, renderMode:str=None ):
+        """Complete document in memory and return pdf or html content based on render_mode.
+        
+        Returns
+        -------
+        the rendered pdf or html
+            
+        """
+        main_doc, overlay_html, body_html = self.render( )
+        
+        renderMode = renderMode or self._variables["render_mode"] 
+        if renderMode == "pdf": 
+            return main_doc.write_pdf()
+        
+        # .tmpl styles
+        inline_styles = self.OVERLAY_STYLE 
+        inline_styles += self.PAGE_STYLE 
+        
+        # add css style
+        page_style_file ="{}/{}".format( 
+            self._variables["resources_html"],
+            self._config.get( "pdf.page-style", "mpdf_page.css" ) 
+        )
+        self.debugInfo["page-style"] = page_style_file
+        styles = '\n<link rel="stylesheet" href="{}" />'.format( 
+            page_style_file
+        )
+        
+        overlay_style_file ="{}/{}".format( 
+            self._variables["resources_html"],
+            self._config.get( "pdf.overlay-style", "mpdf_overlay.css"  ) 
+        )
+        self.debugInfo["overlay-style"] = overlay_style_file
+        styles += '\n<link rel="stylesheet" href="{}" />'.format(
+            overlay_style_file
+        )
+        
+        html = self.template.format( meta=self.meta + styles, style=inline_styles, head=overlay_html, body=body_html, title=self.title )
+         
+        return html.strip()
+    
+    
+    def render_pdf(self ):
         """Generate PDF with all Pages.
 
         Returns
@@ -391,7 +506,7 @@ class PdfGenerator:
             "pdf_filepath": pdf_filepath,
         }
 
-    def render_png(self):
+    def render_png(self ):
         """Generate PNG with all Pages.
 
         Returns
@@ -410,10 +525,89 @@ class PdfGenerator:
             - png_filepath: str
                  Name and path of the generated file
 
+
+        shape size A4 210x297mm
+        - python 3.7 - cairo 1.16.0 (https://cairographics.org) (1120, 790, 3) - %PDF-1.5
+        - python 3.8 - WeasyPrint 53.4 (1123, 794, 3) - %PDF-1.7   
+          
         """
         png_filepath, png_filename = self._getFilePath( "png" )
         main_doc, overlay_html, body_html = self.render()
+        
+        # adds a PNG export based on Ghostscript. found in v53.0/tests/conftest.py
+        import io
+        import os
+        import shutil
+        from subprocess import PIPE, run
+        from tempfile import NamedTemporaryFile
+        from PIL import Image
+        from weasyprint import HTML
+        from weasyprint.document import Document
+        
+        MAGIC_NUMBER = b'\x89\x50\x4e\x47\x0d\x0a\x1a\x0a'
 
+        def document_write_png(self, target=None, resolution=96, antialiasing=1,
+                               zoom=4/30, split_images=False):
+            # Use temporary files because gs on Windows doesn’t accept binary on stdin
+            with NamedTemporaryFile(delete=False) as pdf:
+                pdf.write(self.write_pdf(zoom=zoom))
+            command = [
+                'gs', '-q', '-dNOPAUSE', '-dBATCH', 
+                f'-dTextAlphaBits={antialiasing}',
+                f'-dGraphicsAlphaBits={antialiasing}', 
+                '-sDEVICE=png16m',
+                f'-r{resolution / zoom}', 
+                '-sOutputFile=-', pdf.name]
+            pngs = run(command, stdout=PIPE).stdout
+            os.remove(pdf.name)
+            
+            if not pngs.startswith(MAGIC_NUMBER):
+               return False
+
+            # TODO: use a different way to find PNG files in stream
+            magic_numbers = pngs.count(MAGIC_NUMBER)
+            if magic_numbers == 1:
+                if target is None:
+                    return [pngs] if split_images else pngs
+                png = io.BytesIO(pngs)
+            else:
+                images = [MAGIC_NUMBER + png for png in pngs[8:].split(MAGIC_NUMBER)]
+                if split_images:
+                    return images
+                images = [Image.open(io.BytesIO(image)) for image in images]
+                width = max(image.width for image in images)
+                height = sum(image.height for image in images)
+                output_image = Image.new('RGBA', (width, height))
+                top = 0
+                for image in images:
+                    output_image.paste(image, (int((width - image.width) / 2), top))
+                    top += image.height
+                png = io.BytesIO()
+                output_image.save(png, format='png')
+        
+            png.seek(0)
+        
+            if target is None:
+                return png.read()
+        
+            if hasattr(target, 'write'):
+                shutil.copyfileobj(png, target)
+            else:
+                with open(target, 'wb') as fd:
+                    shutil.copyfileobj(png, fd)
+                
+        def html_write_png(self, target=None, stylesheets=None, resolution=96,
+                           presentational_hints=False, optimize_size=('fonts',),
+                           font_config=None, counter_style=None, image_cache=None):
+            return self.render(
+                stylesheets, presentational_hints=presentational_hints,
+                optimize_size=optimize_size, font_config=font_config,
+                counter_style=counter_style, image_cache=image_cache).write_png(
+                    target, resolution)
+        
+        Document.write_png = document_write_png
+        HTML.write_png = html_write_png
+        
         main_doc.write_png( png_filepath )
 
         # Seiteninhalt zurückgeben
@@ -426,7 +620,7 @@ class PdfGenerator:
             "png_filepath": png_filepath,
         }
 
-    def render_pdf_and_png(self):
+    def render_pdf_and_png(self ):
         """Generate PDF and PNG with all Pages in one step.
 
         Returns
@@ -461,7 +655,7 @@ class PdfGenerator:
         return result
 
 
-    def render(self):
+    def render(self ):
         """Generate document.
 
         thereby summarizing all page content areas
@@ -481,7 +675,11 @@ class PdfGenerator:
         """
         if not self.isRendered:
             self.isRendered = False
-
+            
+        # if html render_mode set resources to resources_html
+        if self._variables["render_mode"] == "html":
+            self._variables["resources"] = self._variables["resources_html"]
+            
         # code für page break
         pageBreak = self.newPage( render=False )
 
@@ -541,27 +739,50 @@ class PdfGenerator:
         # mit pagebreak zusammensetzen pageBreak
         body_html = pageBreak.join( self.pageContent.values() )
 
+        body_html += self._config.render_template( self.addContent, self._variables, deep_replace=True )
+        
+        if self.debugPage:
+            self.debugInfo["overlay-style"] = osp.join(
+                self._variables["templates"],
+                self._config.get( "pdf.overlay-style", "mpdf_overlay.css" )
+            )
+
+            self.debugInfo["templates"] = self._variables["templates"]
+            self.debugInfo["resources"] = self._variables["resources"]
+            template = """
+            <div class="pageContent"><pre class="pageContent debugInfo">{{ debugInfo|jsondumps }}</pre></div>
+            <style>.debugInfo { font-size:  0.75em; white-space: pre-wrap; } </style>
+            """
+            pagenum += 1
+            pagenames[ pagenum ] = "debugInfo"
+            body_html += pageBreak
+            body_html += self._config.render_template(tpl=template, variables={"debugInfo": self.debugInfo })
+            
         # template zusammensetzten
         main_html = self.template.format(
             title = self.title, meta = self.meta, style = self.style,
             head = self.head, body = body_html
         )
-
+        
+        
         html = HTML( string=main_html )
 
         # zusätzliche css file einbinden
         stylesheets = []
         css_file = osp.join(
-            self._variables["resources"],
+            self._variables["templates"],
             self._config.get( "pdf.page-style", "mpdf_page.css" )
         )
+        
         # add additional CSS from css_file
         if os.path.isfile(css_file):
             stylesheets.append( CSS(filename=css_file) )
 
         # css aus PAGE_STYLE zusätzlich verwenden
-        style_string = self._config.render_template(self.PAGE_STYLE, self._variables, deep_replace=True )
-        stylesheets.append(CSS(string=style_string))
+        self.PAGE_STYLE = self._config.render_template(self.PAGE_STYLE, self._variables, deep_replace=True )
+        
+        stylesheets.append(CSS(string=self.PAGE_STYLE))
+
 
         # html mit stylesheets rendern
         main_doc = html.render(stylesheets=stylesheets)
@@ -578,7 +799,7 @@ class PdfGenerator:
         # alle seiten durchgehen und overlays einfügen
         pagenum = 0
         for page in main_doc.pages:
-
+            
             # Die Seitennummern beginnen bei 1
             pagenum += 1
             # gibt es einen pagename, dann verwenden
@@ -587,16 +808,16 @@ class PdfGenerator:
             else:
                 pagename = pagenum
             # body der aktuellen Seite bestimmen
-            page_body = PdfGenerator.get_element(page._page_box.all_children(), 'body')
+            page_body = self.get_element(page._page_box.all_children(), 'body')
             # header und/oder footer element erstellen
             # dabei variables erweitern
             attrs["pagenum"] = pagenum
             overlay, overlay_html = self._page_overlays( attrs )
 
             overlays[ pagename ] = overlay_html
-
-            # header einfügen
-            page_body.children += overlay.all_children()
+            if page_body:
+                # header einfügen
+                page_body.children += overlay.all_children()
 
         self.isRendered = True
         return main_doc, overlay_html, body_html
@@ -644,7 +865,7 @@ class PdfGenerator:
         # Include additional css file, overwrite the default with the config information
         #
         css_file = osp.join(
-            self._variables["resources"],
+            self._variables["templates"],
             self._config.get( "pdf.overlay-style", "mpdf_overlay.css" )
         )
 
@@ -664,6 +885,24 @@ class PdfGenerator:
         element_body = element_body.copy_with_children(element_body.all_children())
 
         return element_body, overlay_html
+
+    def addTemplateContent(self, template:str=None, template_file:str=None):
+        """Add template or template_file content to addContent
+
+        Parameters
+        ----------
+        template : str, optional
+            Template string. The default is None.
+        template_file : str, optional
+            template filename. The default is None.
+
+        """
+        
+        if template:
+            self.addContent += template
+        if template_file:
+            self.addContent += self._getTemplateFromFile( osp.join( self._variables["templates"], template_file ) )
+        
 
     @staticmethod
     def get_element(boxes:list=[], element:str=""):
@@ -710,8 +949,6 @@ class PdfGenerator:
         style = ""
         has_position = False
         for attr_name in [ 'left', 'top', 'width', 'height', 'bottom', 'right']:
-           # attr_value = getattr(area, attr_name, None)
-           # print( attr_name, attr_value )
             if attr_name in area:
                 style += "{attr}:{value}mm;".format( attr=attr_name, value=area[attr_name] )
                 if attr_name in ['left','top', 'bottom', 'right']:
@@ -858,6 +1095,7 @@ class PdfGenerator:
 
         if render:
             self._html( element_html )
+            
         return element_html
 
     def _text( self, text="", area:dict={}, attrs:dict={}, render=None, replaceNewLine=False  ):
@@ -904,7 +1142,8 @@ class PdfGenerator:
 
         element_html = '\n\t<div class="text {_class}" style="{_style} {_area}" >{content}</div>'.format(
                 _class = _class,
-                _style = _style, _area=_area,
+                _style = _style, 
+                _area=_area,
                 content=text
         )
 
@@ -982,7 +1221,7 @@ class PdfGenerator:
             return self._text( text, area, attrs, render, replaceNewLine )
 
     def textFile( self, filename:str=None, area:dict={}, attrs:dict={}, render=None, replaceNewLine=False ):
-        r"""Lädt aus self._data["resources"] eine Datei und zeigt sie wie bei add_text an.
+        r"""Lädt aus self._data["templates"] eine Datei und zeigt sie wie bei add_text an.
 
         Bei der Dateiendung .txt wird eine Ersetztung von ``\n`` zu ``<br>`` vorgenommen
 
@@ -1008,20 +1247,20 @@ class PdfGenerator:
         if not filename:
             return
 
-        text = None
-        filepath = osp.join( self._variables["resources"], filename )
-        if osp.exists( filepath ):
-            with open( filepath, 'r', encoding="utf-8") as myfile:
-                text = myfile.read()
-
+        text = self._getTemplateFromFile( osp.join( self._variables["templates"], filename ) )
+        
         if text:
             root, ext = osp.splitext( filename )
             if ext.lower() == ".txt":
                 replaceNewLine = True
             elif ext.lower() == ".md":
                 return self.markdown( text, area, attrs, render )
+            elif ext.lower() == ".tmpl" or ext.lower() == ".jinja":
+                return self.html( text, area, attrs, render )
 
             return self._text( text, area, attrs, render, replaceNewLine )
+        else:
+            return "<!-- missig:'{}' -->".format( filename )
 
     def mathtext(self, text, area:dict={}, attrs:dict={}, render=None, fontsize=12, dpi=300):
         r"""Rendert Text und TeX Formel nach SVG mit mathtext.
@@ -1090,10 +1329,12 @@ class PdfGenerator:
             HTML des erzeugten Elements
 
             .. code::
-
-                <img src="data:image/png;base64,{{image}}" />
-                oder
-                <img src="file://{{image}}" />
+                image is io.BytesIO
+                    <img src="data:image/png;base64,{{image}}" />
+                image starts with /
+                    <img src="{{image}}" />
+                image with resources
+                    <img src="{{image}}" />
 
         """
         if render == None:
@@ -1122,23 +1363,36 @@ class PdfGenerator:
 
         elif type(image) is str:
             # Image liegt als Datei vor
-            if image[0] == "/":
+            if image == "" or image[0] == "/":
                 # absolute Angabe verwenden
                 filepath = image
             else:
                 # aus resources
-                filepath = osp.join(self._variables["resources"], image )
+                filepath = osp.join( self._variables["resources"], image )
 
+            element_html = '\n\t<img class="image {_class}" style="{_style} {_area}" src="{filepath}" />'.format(
+                _class = _class,
+                _style = _style,
+                _area=_area,
+                filepath=filepath
+            )
             # gibt es die Datei dann einbinden
+            '''
             if osp.exists( filepath ):
-
-                element_html = '\n\t<img class="image {_class}" style="{_style} {_area}" src="file://{filepath}"></>'.format(
-                        _class = _class,
-                        _style = _style,
-                        _area=_area,
-                        filepath=filepath
+                element_html = '\n\t<img class="image {_class}" style="{_style} {_area}" src="{filepath}" />'.format(
+                    _class = _class,
+                    _style = _style,
+                    _area=_area,
+                    filepath=filepath
                 )
-
+            else:
+                element_html = '\n\t<img class="image {_class}" style="{_style} {_area}" src="{filepath}" />'.format(
+                    _class = _class,
+                    _style = _style,
+                    _area=_area,
+                    filepath=filepath
+                )
+            '''
         if render:
             self._html(element_html)
         return element_html

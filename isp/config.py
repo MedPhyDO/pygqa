@@ -31,6 +31,11 @@ logging level:
 CHANGELOG
 =========
 
+0.1.1 / 2022-03-28
+------------------
+- add jinja Filter: fromisoformat, datetimeformat and jsondumps
+- use secrets.token_hex() instead of os.urandom(16) for SECRET_KEY
+
 0.1.0 / 2021-01-16
 ------------------
 - First Release
@@ -41,7 +46,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R. Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __status__ = "Prototype"
 
 import sys
@@ -55,7 +60,8 @@ from datetime import datetime
 import glob
 import re
 import threading
-import os
+
+import secrets
 
 import logging
 
@@ -74,8 +80,9 @@ default_config = {
             "debug": True,
             "reloader": True,
             "TESTING": False,
+            "resources_test" : "{{BASE_DIR}}/tests/",
             "checkNetarea": True,
-            "SECRET_KEY": os.urandom(16)
+            "SECRET_KEY": secrets.token_hex()
         },
         "api": {
             "prefix" : "/api",
@@ -175,6 +182,7 @@ class ispConfig( object ):
             mit dieser Angabe wird keine Konfiguration geladen, sondern die angegebenen Daten verwendet
 
         """
+        
         # _basedir festlegen mit __file__ damit ein testaufruf von hier funktioniert
         self._basedir = osp.abspath( osp.join( osp.dirname( osp.abspath( __file__ ) ) , "../" ) )
         # name des startenden programms
@@ -464,22 +472,22 @@ class ispConfig( object ):
         return str(self._config)
 
     def get(self, name:str=None, default=None, replaceVariables:bool=False):
-        """Konfiguration auslesen.
+        """Read from configuration. 
 
-        ohne Angaben wird die komplette Konfiguration zurückgegeben
+         without specifying complete config returned 
 
         Parameters
         ----------
         name : str|list
-            Bezeichner dessen Inhalt ausgelesen wird . operator für die tiefe
+            Identifier whose content is read out. Dot operator for depth 
         default :
-            Rückgabe wenn name nicht gefunden wurde
+            Return if name not found 
         replaceVariables: bool
-            Bei strings variables Angaben ersetzen. Default is False
-
+            Replace variable information in strings. Default is False
 
         """
-        # ohne Angabe komplette config zurückgegeben
+        
+        # without specifying complete config returned 
         if not name:
             return self._config.toDict()
 
@@ -493,9 +501,9 @@ class ispConfig( object ):
 
         for key in keys:
             if val == None:
-                # erste ebene versuchen
+                # try first level 
                 val = self._config.get( key )
-                # undefined : immer DotMap verwenden
+                # undefined : always use DotMap 
                 if not val:
                     self._config[ key ] = DotMap()
             else:
@@ -503,35 +511,35 @@ class ispConfig( object ):
                     try:
                         val = val.get(key, default)
                     except Exception as e: # pragma: no cover
-                        # kommt vor wenn ein nicht vorhandener sub key gesucht wird, a.b = 12 aber a.b.c gesucht wird
-                        print("CONFIG: config.get error bei get", keys, key, type(val), e )
+                        # occurs when a non-existent sub key is searched for, a.b = 12 but search for a.b.c
+                        print("CONFIG: config.get error on get", keys, key, type(val), e )
                         val = default
                         pass
 
         if val == None:
             val = default
 
-        # wenn gewünscht variables ersetzen
+        # replace variables if desired 
         if isinstance(val, str) and replaceVariables==True:
             val = self.render_template( val )
 
         return val
 
     def set(self, setkeys:str=None, value=None):
-        """Einen Wert in der Konfiguration ablegen.
+        """set a value in the configuration. 
 
         Parameters
         ----------
         setkeys : str|list
-            Bezeichner dessen Inhalt gesetzt wird . operator für die tiefe
+            Identifier whose content is set use dot operator for the depth.
         value :
-            Zu setzener Inhalt
+            Content to set 
 
         """
-        # Startpunkt ist die config selbst
+        # starting point is the config itself 
         here = self._config
 
-        # setkeys in list umwandeln
+        # convert setkeys to list 
         keys = []
         if isinstance(setkeys, str):
             keys = setkeys.split(".")
@@ -548,7 +556,7 @@ class ispConfig( object ):
         here[keys[-1]] = value
 
     def rootInitLogger( self, level:int=None ):
-        """Initialisiert den root logger
+        """Initializes the root logger 
 
         Parameters
         ----------
@@ -562,16 +570,16 @@ class ispConfig( object ):
         """
         baselogger = logging.getLogger(  )
 
-        # level wenn angegeben neu setzen
+        # set level if specified 
         if level:
             baselogger.setLevel( level  )
 
     # ---- Jinja Environment
     #
     def jinjaEnv(self):
-        """Jinja Environment erzeugen.
+        """Create Jinja Environment.
 
-        Weitere Extensions hinzufügen:
+        to add more extensions read:
 
         - https://github.com/jpsca/jinja-markdown
 
@@ -580,8 +588,8 @@ class ispConfig( object ):
         env: Environment
 
         """
-        # template Ort bestimmen,
-        # da das templatesystem noch nicht bereit steht BASE_DIR einfach ersetzen
+        # 
+        # since the template system is not yet ready, simply replace BASE_DIR 
         #
         tpl_dir = self.server.webserver.get("resources", ".").replace("{{BASE_DIR}}",  self.BASE_DIR )
         from jinja2 import select_autoescape
@@ -594,81 +602,106 @@ class ispConfig( object ):
                 default=True,
             )
         )
-
+        def fromisoformat(value):
+            try:
+                value = datetime.fromisoformat( value )
+            except Exception:
+                pass
+            return value
+            
+        def datetimeformat(value, format="%Y-%m-%d"):
+            try:
+                value = value.strftime(format)
+            except Exception:
+                pass
+            return value
+        
+        def jsondumps(value):
+            try:
+                value = json.dumps(value, indent=2)
+            except Exception:
+                pass                
+            return value
+        
+        env.filters["fromisoformat"]  = fromisoformat
+        env.filters["datetimeformat"]  = datetimeformat
+        env.filters["jsondumps"]  = jsondumps
         return env
 
     def render_template( self, tpl:str="", variables:dict=None, deep_replace:bool=False ):
-        """Ersetzt in tmp alle variablen aus variables.
+        """Replaces all variables from variables in tpl. 
 
-        Wird variables nicht angegeben wird _config["variables"] verwendet
+        If variables are not specified, _config["variables"] is used 
 
         Parameters
         ----------
         tpl : str, optional
             Jinja template string. The default is "".
         variables : dict, optional
-            Zu ersetzende variables Angaben. The default is _config["variables"].
+            Variable information to be replaced. The default is _config["variables"].
         deep_replace: bool, optional
-            Führt render zweimal aus um in variables liegende Anweisungen auch zu ersetzen. The default is False
+            Executes render twice to also replace statements in variables. The default is False
 
         Returns
         -------
-        None.
+        tpl: str
+            rendered template
 
         """
         if not variables:
             variables = self._config["variables"]
-        # immer now mit der aktuellen Zeit mitgeben
+            
+        # always give now with the current time 
         variables["now"] = datetime.now()
-        # je nach deep_replace einfacher Durchlauf oder mehrere
+        # depending on deep_replace single or multiple runs
         n = range(1)
         if deep_replace:
             n = range(3)
 
         for i in n:
-            _tpl = self._env.from_string( tpl )
             try:
+                _tpl = self._env.from_string( tpl )
                 tpl = _tpl.render( **variables )
             except Exception as e: # pragma: no cover
-                print("CONFIG: config.render_template error bei _tpl.render", e)
+                print("CONFIG: config.render_template error on _tpl.render", e)
         return tpl
 
 
     # ---- MQTT Logging
     #
     def mqttInitLogger( self, level:int=None, cleanup:bool=False  ):
-        """Logging über MQTT einschalten.
+        """Turn on logging via MQTT. 
 
         Parameters
         ----------
         level : int, optional
             NOTSET=0, DEBUG=10, INFO=20, WARN=30, ERROR=40, and CRITICAL=50. Default: NOTSET
         cleanup : bool, optional
-            MQTT Cleanup vor dem initialisieren durchführen. Default = False
+            Perform MQTT cleanup before initializing. Default = False
 
         Returns
         -------
         None.
 
         """
-        # zuerst root logger
+        # root logger first 
         self.logger_name = "root"
 
-        # wenn gewünscht handler neu aufsetzen
+        # set up a new handler if desired 
         if cleanup:
             self.mqttCleanup()
 
         if self._config.server.mqtt:
-            # MQTT Logger seltezn
+            # Set MQTT logger 
             logger = logging.getLogger( "MQTT" )
 
-            # Handler auf MQTT
+            # Handler for MQTT
             mqtthdlr = self.mqttGetHandler( )
 
             if not mqtthdlr:
 
                 #
-                # wenn hier was geändert wird muss der kernel neu gestartet bzw. mqttCleanup aufgerufen werden
+                # if something is changed here, the kernel must be restarted or mqttCleanup called 
                 #
 
                 mqtt_init_ready = threading.Event()
@@ -676,12 +709,11 @@ class ispConfig( object ):
                 self._thread_mqtthdlr = None
 
                 def signalStartup( msg ):
-                    #print( "MQTT signalStartup", msg)
-                    #print( time.strftime("%Y%m%d %H:%M:%S", time.localtime(time.time()) ) )
+
                     mqtt_init_ready.set()
 
                 def startMQTTclass():
-                    """MQTTclass über threading starten und auf signalStartup warten.
+                    """Start MQTTclass via threading and wait for signalStartup. 
 
                     Returns
                     -------
@@ -689,52 +721,51 @@ class ispConfig( object ):
 
                     """
                     self._thread_mqtthdlr = MQTTclass( self._config.server.mqtt.toDict() )
-                    # auf eine signalisierung
+                    # wait for signal
                     self._thread_mqtthdlr.signalStartup.connect( signalStartup )
 
-                # Als Thread aufrufen, über mq.get() wird die Rückgabe von  _retrieve abgerufen
+                # Call as a thread,via mq.get() to get the return of _retrieve 
                 thread = threading.Thread( target=startMQTTclass )
                 thread.start()
 
-                # max 2 sekunden oder auf mqtt_init_ready signalStartup warten
+                # wait for 2 seconds or mqtt_init_ready signalStartup 
                 while not mqtt_init_ready.wait( timeout=2 ):
                     mqtt_init_ready.set()
 
-                # wenn der mqtt handler initialisiert wurde logging und _mqtthdlr setzen
+                # if mqtt handler has been initialized set logging and _mqtthdlr 
                 if self._thread_mqtthdlr and self._thread_mqtthdlr._mqttc:
                     _mqtthdlr = self._thread_mqtthdlr
-                    # logging Handler mit der MQTTclass Klasse initialisieren
+                    # Initialize the logging handler with the MQTTclass class 
                     logging.Handler.__init__( _mqtthdlr )
                     logger.addHandler( _mqtthdlr )
 
-                    # einen Verweis auf _mqtthdlr sowie send bereitstellen
+                    # put _mqtthdlr reference and send to logger
                     logger._mqtthdlr = _mqtthdlr
                     logger.send = _mqtthdlr.send
 
-                    # progress bereitstellen
+                    # provide progress 
                     logger.progressStart = _mqtthdlr.progress_start
                     logger.progress = _mqtthdlr.progress_run
                     logger.progressReady = _mqtthdlr.progress_ready
 
-                    # wenn alles fertig ist _mqtthdlr in self merken
+                    # when everything is ready put reference to _mqtthdlr 
                     self._mqtthdlr = _mqtthdlr
 
-                    # logger name merken
+                    # remember logger name 
                     self.logger_name = logger.name
 
             else:
-                # logger ist vorhanden verweis wieder in _mqtthdlr ablegen
+                # logger is available put reference to _mqtthdlr 
                 self._mqtthdlr = mqtthdlr
-                # logger name merken
+                # remember logger name 
                 self.logger_name = logger.name
 
-            # level wenn angegeben neu setzen
+            # set level if specified 
             if level:
                 logger.setLevel( level )
 
-
     def mqttGetHandler(self):
-        """Bestimmt den mqtt Handler wenn er initialisiert wurde.
+        """Specifies the mqtt handler when initialized. 
 
         Returns
         -------
@@ -742,27 +773,24 @@ class ispConfig( object ):
 
         """
         mqtthdlr = None
-        # gibt es noch keinen logger in self._mqtthdlr, dann über logging bestimmen
+        # If there is no logger in self._mqtthdlr, use logging to determine it 
         if self._mqtthdlr:
             mqtthdlr = self._mqtthdlr
         else:
             logger = logging.getLogger( "MQTT" )
             if hasattr(logger, '_mqtthdlr'):
                 mqtthdlr = logger._mqtthdlr
-        # Handler zurückgeben
         return mqtthdlr
 
-
     def mqttCleanup( self ):
-        """Schließt mqtt und entfernt den logger.
+        """shutdown mqtt and remove the logger. 
 
         """
         if self._mqtthdlr:
-            # mqtt beenden
+            # shutdown mqtt 
             self._mqtthdlr.shutdown()
-            #print( "config.cleanup _mqtthdlr" )
             logger = logging.getLogger( "MQTT" )
-            # verbindung zu _mqtthdlr im logger entfernen
+            # remove connection to _mqtthdlr in logger 
             del( logger._mqtthdlr )
 
             for h in logger.handlers:
@@ -770,7 +798,7 @@ class ispConfig( object ):
 
             self._mqtthdlr = None
 
-# ----  Hilfsfunktionen
+# ----  
 import collections
 def dict_merge(dct, merge_dct, add_keys=True):
     """Recursive dict merge.

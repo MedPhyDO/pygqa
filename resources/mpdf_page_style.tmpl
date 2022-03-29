@@ -1,4 +1,14 @@
 @page {
     size: {{ page.size }}; 
-    margin: {{page.header_height}}mm {{page.right}}mm {{page.footer_height}}mm {{page.left}}mm;
+    margin: {{(page.top+page.header+page["header-margin"])|int}}mm {{page.right}}mm {{(page.bottom+page.footer+page["footer-margin"])|int}}mm {{page.left}}mm;
+}
+
+@media screen {
+    header: {
+        height: {{(page.header+page["header-margin"])|int}}mm;
+    }
+    .pageContent{
+        top: {{(page.header+page["header-margin"])|int}}mm;
+        position: relative;
+    }
 }

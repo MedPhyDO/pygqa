@@ -10,7 +10,7 @@ There are two types of AEs:
 CHANGELOG
 =========
 
-0.1.2 / 2021-05-19
+0.1.2 / 2022-03-28
 ------------------
 - change debug messages
 

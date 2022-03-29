@@ -10,6 +10,11 @@ webapp
 CHANGELOG
 =========
 
+0.1.3 / 2022-03-28
+------------------
+- add route for tests
+- change start message
+
 0.1.2 / 2021-12-08
 ------------------
 - changes for Python 3.8
@@ -29,7 +34,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R. Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 __status__ = "Prototype"
 
 import uuid
@@ -319,11 +324,17 @@ class ispBaseWebApp():
                 self._config.get("server.webserver.port"),
                 self._config.get("server.api.prefix", "")
             )
+            print( "Starting '{}' with BASE_DIR={}".format( 
+                self._config.get("server.webserver.name", "" ), 
+                self._config.get("BASE_DIR", "")
+            ))
+            
             # Webserver startparameter anzeigen
-            print("Starting '{}' in '{}' Mode".format(
+            print("use apiurl:'{}' in '{}' Mode".format(
                 self.apiurl,
                 mode
             ))
+            
             #return
             if mode == "TESTING":
                 # im testing mode  starten
@@ -477,16 +488,23 @@ class ispBaseWebApp():
         swaggerui_blueprint.json_encoder = JSONEncoder
         self.app.register_blueprint(swaggerui_blueprint, url_prefix=prefix)
 
+        #import sys
+        #print( "server.api.models", sys.modules["db"] )
         # go through all models and add a pointer to api
         for model in self._config.get("server.api.models"):
             # model bekannt machen
+            #print("server.api.models", dir(model), dir(model.__weakref__), model.__module__ )
+            
             self.api.expose_object( model )
-
+            
+            
+            
             # create swagger docu for extensions without a database
             if hasattr( model, "no_flask_admin") and model.no_flask_admin == True:
                 expose_object(self.api, model)
             model._api = self.api
-
+            
+        #print( "server.api.models", sys.modules['db.dbtests'] )
 
     def _checkNetarea( self ): # pragma: no cover
         """Simple check whether the access is from the same subnetwork.
@@ -639,8 +657,12 @@ class ispBaseWebApp():
         elif filepath[:9] == "unittest_":
             # Spezielle render aufruf für unittest
             return self.routeRender( filepath )
+        elif filepath[:6] == "tests/":
+            # Spezieller aufruf für Dateien in tests
+            root = self._config.get("server.webserver.resources_test", "{{BASE_DIR}}/tests/", replaceVariables = True)
+            filepath = filepath[6:]
         else:
-            # alles andere - ohne angaben index aufrufen
+            # alles andere - ohne Angaben index aufrufen
             if filepath == "" or filepath == "index.html" or filepath == "index.phtml":
                 filepath = "index"
                 return self.routeRender( filepath )
@@ -665,13 +687,14 @@ class ispBaseWebApp():
 
         """
         # sonst nur die Datei laden
-        filepath = osp.join( root, filepath ) # .format( **{"BASE_DIR": self._config.BASE_DIR} )
-
+                 
+    
         try:
-
-            output = send_file( filepath )
+            _filepath = osp.join( root, filepath ) # .format( **{"BASE_DIR": self._config.BASE_DIR} )
+            output = send_file( _filepath )
         except:
             output = "<h1>Datei {} wurde nicht gefunden</h1>".format( filepath )
+            #print("routeFile: filepath error", _filepath)
             self.status_code = 404
             pass
         return output

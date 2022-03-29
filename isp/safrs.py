@@ -7,11 +7,11 @@ safrs
 swagger yaml definition
 -----------------------
 
-Die Definition steht am Anfang des docstring und beginnt für sphinx mit ``.. restdoc::``
+The definition is at the beginning of the docstring and starts with ``.. restdoc::`` for sphinx 
 
-Sie kann mit ``----`` abgeschlossen werden, um weitere Dokumentation für sphinx anzuschließen
+It can be terminated with ``----`` to add further documentation for sphinx 
 
-Beispiel::
+example ::
 
     description -
     summary -
@@ -28,7 +28,7 @@ Beispiel::
     pageable -
     filterable - fields mit anzeigen
 
-Hilfen und snippets::
+help und snippets::
 
     from flask import current_app
     print( current_app.config )
@@ -36,7 +36,7 @@ Hilfen und snippets::
     import safrs
     print( safrs.SAFRS.config )
 
-Beispiele::
+examples ::
 
     /api/<modul>/?fields[<modul>]=<feld1,feld2>&_ispcp={"Test":"Hallo"}&filter=eq(aktiv,true),in(<modul>,(Rapp,SA43))
     /api/<modul>/groupby?fields[<modul>]=<feld1,feld2>&groups=Geraet&filter=eq(aktiv,true)
@@ -47,6 +47,20 @@ Beispiele::
 
 CHANGELOG
 =========
+
+0.1.4 / 2022-03-28
+- remove error check in wrapped_fn() use original abort()
+- add check for empty String in iso2date()
+- add method _as_dict() to ispSAFRS
+- change ispSAFRS classmethod getConnection() to _get_connection()
+- change ispSAFRS.undefined() change array to object as result in data
+- change result info from list to dict  
+- add python_type to isoDateType and isoDateTimeType to avoid "Failed to get python type for column" message
+- change find column in _int_groupby() 
+- remove delimiter from groupby() and create seperate function groupsplit()
+
+0.1.3 / 2022-01-03
+- remove entities check in RQLQuery.rql_parse()
 
 0.1.2 / 2021-12-28
 ------------------
@@ -67,7 +81,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R. Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.2"
+__version__ = "0.1.4"
 __status__ = "Prototype"
 
 import json
@@ -80,12 +94,12 @@ from flask import Response, request, current_app
 
 import sqlalchemy
 from sqlalchemy import func, text # , case, or_, inspect
+from sqlalchemy.orm import sessionmaker, scoped_session
+from sqlalchemy.orm import Query as BaseQuery
+import sqlalchemy.types as types
 
 from safrs import SAFRSBase  # db Mixin
 from safrs.config import get_request_param
-from safrs.errors import ValidationError, GenericError, NotFoundError
-import werkzeug
-
 
 from safrs import SAFRSFormattedResponse, jsonapi_format_response, log #, paginate, SAFRSResponse
 from safrs import jsonapi_rpc # rpc decorator
@@ -98,23 +112,21 @@ from sqlalchemy.ext.hybrid import hybrid_property
 
 db = SQLAlchemy()
 
-from sqlalchemy.orm import Query as BaseQuery
 from rqlalchemy import RQLQueryMixIn
 from pyrql import RQLSyntaxError
 from pyrql import parse
-import sqlalchemy.types as types
 
-from datetime import datetime
+from datetime import datetime, date
 
 # ------------ Typen Umwandlungen
 
 def iso2date( value:str=None, toDate:bool=False ):
-    """Wandelt über fromisoformat oder strptime einen String in ein ``datetime`` oder ``date`` Object um.
+    """Converts a string to a ``datetime`` or ``date`` object via fromisoformat or strptime. 
 
-    Versucht zuerst eine Umwandlung über fromisoformat
-    Bei Fehlern wird versucht es mit strptime umzuwandeln umzuwandeln
+    First try a conversion via fromisoformat 
+    In case of errors it tries to convert it with strptime 
 
-    Beispiele für Value::
+    Value examples::
         2018-04-15 - datetime.datetime(2018, 4, 15, 0, 0)
         2018-04-15 14:36 - datetime.datetime(2018, 4, 15, 14, 36)
         2018-04-15 14:36:25 - datetime.datetime(2018, 4, 15, 14, 36, 25)
@@ -124,7 +136,7 @@ def iso2date( value:str=None, toDate:bool=False ):
         20180415 14:36 - datetime.datetime(2018, 4, 15, 14, 36)
         20180415 14 - datetime.datetime(2018, 4, 15)
 
-        mit toDate=True
+        with toDate=True
 
         2018-04-15 14:36:25 - datetime.date(2018, 4, 15)
         20180415 14:36:25 - datetime.date(2018, 4, 15)
@@ -132,23 +144,25 @@ def iso2date( value:str=None, toDate:bool=False ):
     Parameters
     ----------
     value : str
-        String mit Datumsangaben.
+        String with dates .
     toDate : bool
-        Gibt bei true ein date Object statt datetime zurück. Default is False.
+        If true, returns a date object instead of datetime. Default is False.
 
     Returns
     -------
     datetime|None
-        Umgewandelter ISO String oder None
+        Converted ISO String or None 
 
     """
     result = None
-    if value and isinstance(value, str):
+    
+    if value and isinstance(value, str) and not value == "":
         try:
             result = datetime.fromisoformat( value )
         except ValueError:
+            
             pass
-
+             
         if not result:
             if len(value) >= 17:
                 try:
@@ -165,34 +179,52 @@ def iso2date( value:str=None, toDate:bool=False ):
                     result = datetime.strptime(value[:8], "%Y%m%d")
                 except ValueError:
                     pass
-        if result and toDate:
-            result = result.date()
-
+        
+    else:
+        result = value
+        
+    if result and toDate:
+        result = result.date()
+            
     return result
 
 
 # ------------ Typen Erweiterungen
 
 class isoDateType( types.TypeDecorator ):
-    """TypeDecorator für ISO-8601 Datum.
+    """TypeDecorator for ISO-8601 date.
 
-    Verwendet iso2date() für die Umwandlung.
+    Uses iso2date() for conversion.
 
     """
 
     impl = types.Date
+    
+    @property
+    def python_type(self):
+        return date
+    
+    def __init__(self, *arg, **kw):
+        types.TypeDecorator.__init__(self, *arg, **kw)
+            
     def process_bind_param(self, value, dialect):
         return iso2date( value, True)
 
 
-class isoDateTimeType( types.TypeDecorator ):
-    """TypeDecorator für ISO-8601 Datum Zeit.
 
-    Verwendet iso2date() für die Umwandlung.
+class isoDateTimeType( types.TypeDecorator ):
+    """TypeDecorator for ISO-8601 datetime.
+
+    Uses iso2date() for conversion.
 
     """
 
     impl = types.DateTime
+    
+    @property
+    def python_type(self):
+        return datetime
+    
     def process_bind_param(self, value, dialect):
         return iso2date( value, False)
 
@@ -203,14 +235,14 @@ class RQLQuery(BaseQuery, RQLQueryMixIn):
     _rql_max_limit = 100
 
     def rql_parse(self, rql, limit=None):
-        """Wie rql, es wird aber nur ausgewertet und nicht die query geändert.
+        """Like rql, but it is only evaluated and the query is not changed .
 
         Parameters
         ----------
         rql : string
             rql query string.
         limit : int, optional
-            Limit Angabe, wird hier aber nicht verwendet. The default is None.
+            Limit specification, but not used here . The default is None.
 
         Raises
         ------
@@ -221,11 +253,7 @@ class RQLQuery(BaseQuery, RQLQueryMixIn):
         _rql_where_clause
 
         """
-
-
-        if len(self._entities) > 1: # pragma: no cover
-            raise NotImplementedError("Query must have a single entity")
-
+        
         expr = rql
 
         if not expr:
@@ -259,16 +287,15 @@ class RQLQuery(BaseQuery, RQLQueryMixIn):
 
 
 def ispSAFRS_decorator( fn ):
-    """Api Aufrufe vorbereiten und durchführen.
+    """Prepare and execute API calls.
 
-    Im decorator wird wrapped_fn() aufgerufen um die Anfrage zu verarbeiten
+    Note: In decorator, wrapped_fn() is called to process the request 
 
     JSON:API Response formatting follows filter -> sort -> paginate
 
     Parameters
     ----------
     fn : safrs/jsonapi.py|SAFRSRestAPI
-
 
     Returns
     -------
@@ -278,9 +305,9 @@ def ispSAFRS_decorator( fn ):
 
     @wraps(fn)
     def wrapped_fn(*args, **kwargs):
-        """Funktion zum verarbeiten eine API Anfrage.
+        """Function to process an API request.
 
-        Arten von fn - safrs/jsonapi.py
+        types of fn - safrs/jsonapi.py
 
              GET /api/<modul> - SAFRSRestAPI.get
              GET /api/<modul>/11 - SAFRSRestAPI.get
@@ -305,13 +332,14 @@ def ispSAFRS_decorator( fn ):
 
         SAFRSRestAPI::
 
-            das Vorhandensein einer _s_object_id unterscheidet zwischen dem holen eines Datensatzes oder einer Liste
+            if _s_object_id is available, only one record object is fetched, otherwise a list of record objects 
+            
             id = kwargs.get( fn.SAFRSObject._s_object_id , None)
 
         Parameters
         ----------
         *args : tuple
-            mit einem object
+            with an object.
             .. code::
 
                 /api/gqadb/?zahl=12 - ( safrs._api.gqadb_API, ) - {}
@@ -322,7 +350,7 @@ def ispSAFRS_decorator( fn ):
                 /api/gqa/test?zahl=12 - ( safrs._api.gqa_API, ) - {'gqaId': 'test'}
 
         **kwargs : dict
-            beliebige Parameter.
+            any parameters. 
 
         Returns
         -------
@@ -368,7 +396,6 @@ def ispSAFRS_decorator( fn ):
         else:
             safrs_obj = fn.SAFRSObject
 
-
         #
         # Das SAFRSObject vor jedem Aufruf Vorbereiten
         #
@@ -382,7 +409,6 @@ def ispSAFRS_decorator( fn ):
 
         swagger_path = ""
 
-        #print("wrapped_fn", q )
         # nur bei get parameter prüfen
         if method == "get":
 
@@ -409,7 +435,6 @@ def ispSAFRS_decorator( fn ):
                 # swagger_path zuerst nur der Modulname
                 swagger_path = "/{}".format(name)
 
-                #print( "wrapped_fn", swagger_path, safrs_obj._s_object_id, kwargs )
                 func = None
                 # b, c) gibt es eine passende jsonapi_rpc methode
                 if safrs_obj._s_object_id in kwargs:
@@ -452,15 +477,15 @@ def ispSAFRS_decorator( fn ):
                     if variante == "a":
                         swagger_path = "/{}/".format( name )
                     elif variante == "b":
-                        # objectId merken
+                        # Remember objectId for later insertion 
                         objectId = kwargs[ safrs_obj._s_object_id ]
                         swagger_path = "/{}/{}/".format( name, "{" + safrs_obj._s_object_id + "}" )
                     elif variante == "c":
                         swagger_path = "/{}/{}".format(name, func_name )
                 else:
-                    # es gibt keine passende Funktion also Fehler anzeigen
+                    # there is no matching function so show error 
                     status_code = 400
-                    message = "Funktion nicht gefunden"
+                    message = "funktion not found"
 
                     safrs_obj.appError(
                         "{}".format( message ),
@@ -474,13 +499,12 @@ def ispSAFRS_decorator( fn ):
 
             elif q[0] == "SAFRSJSONRPCAPI":
 
-                # dieser Bereich wird in db bei groupby, undefined oder funktionen aufgerufen
+                # this area is called in db for groupby, undefined or functions 
                 doArgParse = True
-                # den request endpoint bestimmen - wird benötigt um Swagger parameter zu prüfen
-                # der erste teil ist immer api der letzte Teil die aufzurufende Funktion
+                # Determine the request endpoint - needed to check Swagger parameters 
+                # the first part is always api the last part is the function to be called 
                 ep_list = request.endpoint.split(".")
                 func_name = ep_list[-1]
-                # bei diesem
                 swagger_path = "/{}/{}".format(name, ep_list[-1])
 
             else:
@@ -489,12 +513,12 @@ def ispSAFRS_decorator( fn ):
                 # SAFRSRestRelationshipAPI - get - dbtestsrelId - {"dbtestsId": "2"}
                 doArgParse = False
 
-            # nur in swagger abgelegte paramter verwenden und ggf umwandeln
-            # in safrs methoden selbst wird args = dict(request.args) verwendet
-            # _int_parse_args entfernt _s_object_id
+            # only use parameters stored in swagger and convert them if necessary 
+            # args = dict(request.args) is used in safr's methods 
+            # Note: function _int_parse_args() removes _s_object_id
             if doArgParse:
                 kwargs = safrs_obj._int_parse_args( kwargs, method, swagger_path )
-                #  gemerkte objectId wieder einfügen
+                # insert remembered objectId 
                 if objectId:
                     kwargs[ safrs_obj._s_object_id ] = objectId
 
@@ -513,27 +537,27 @@ def ispSAFRS_decorator( fn ):
                 group_type = groups_attr.group(1)
                 request.groups[group_type] = val.split(",")
             elif arg == "groups":
-                # groups ohne andere tabelle verwendet die aktuelle tabelle
+                # groups without a other table use the current table
                 request.groups[ safrs_obj.__name__ ] = val.split(",")
 
-        # funktion in der Klasse ausführen sonst fn selbst
+        # execute function in class else call fn itself 
         if func_name:
-            # gewünschte Funktion in fn.SAFRSObject aufrufen
+            # call function in fn.SAFRSObject
             meth = fn.SAFRSObject
-            meth.appInfo( "safrs", "Funktion: {}.{}.{}()".format( meth.__module__, meth.__name__, func_name ) )
+            meth.appInfo( "wrapped_fn", "function: {}.{}.{}()".format( meth.__module__, meth.__name__, func_name ) , area="safrs")
 
             if hasattr(meth, func_name):
                 if func_name[:4] == "api_":
-                    # api_ Funktionen benötigen die Klasse selbst als ersten parameter
+                    # api_ functions require the class itself as the first parameter 
                     result = getattr( meth, func_name )( meth, **kwargs )
                 else:
                     result = getattr( meth, func_name )( **kwargs )
             else: # pragma: no cover
-                # kann eigentlich nicht passieren da oberhalb gestetet wird
-                meth.appError( "ispSAFRSDummy", "Fehlende Funktion: {}.{}.{}()".format( meth.__module__, meth.__name__, func_name ) )
+                # can not actually happen because above is tested 
+                meth.appError( "ispSAFRSDummy", "missing function: {}.{}.{}()".format( meth.__module__, meth.__name__, func_name ) )
                 result = meth._int_json_response( {} )
 
-            # abfangen das result auch etwas anderes als ein dict sein kann (z.b. html, pdf ...)
+            # if not dict, list or SAFRSFormattedResponse stop here. Result maybe html, pdf, ...
             if not type( result ) in [dict, list, SAFRSFormattedResponse]:
                 return result
 
@@ -541,7 +565,8 @@ def ispSAFRS_decorator( fn ):
                 result = jsonify( result )
             except Exception as exc:  # pragma: no cover
                 status_code = getattr(exc, "status_code", 500)
-                message = getattr(exc, "message", "unbekannter Fehler")
+                message = getattr(exc, "message", "unknown error")
+               
                 safrs_obj.appError(
                         "{} - {}".format( func_name, message ),
                         str( status_code )
@@ -550,58 +575,36 @@ def ispSAFRS_decorator( fn ):
 
         else:
             #
-            # die ursprüngliche Funktion aufrufen
-            #
-
-            # print(args)
-            # log.error("wrapped_fn - post:"  )
-            # print("wrapped_fn", q, args, kwargs, fn )
-            status_code = 200
-            try:
-                result = fn(*args, **kwargs)
-            except (ValidationError, GenericError, NotFoundError) as exc: # pragma: no cover
-                status_code = getattr(exc, "status_code", 500)
-                message = getattr(exc, "message", "")
-            except werkzeug.exceptions.NotFound:
-                status_code = 404
-                message = "Not Found"
-            except Exception as exc:  # pragma: no cover
-
-                status_code = getattr(exc, "status_code", 500)
-                message = getattr(exc, "message", "unbekannter Fehler")
-
-            # gab es einen Fehler dann in appError setzen
-            if not status_code == 200:
-                safrs_obj.appError(
-                    "{} - {}".format(method, message ),
-                    str( status_code )
-                )
-                result = jsonify( {} )
-                result.status_code = status_code
-
-
+            # call the original function 
+            
+            # Note: this calls on errors :
+            #   errors = dict(title=title, detail=detail, code=api_code)
+            #   abort(status_code, errors=[errors])
+            
+            result = fn(*args, **kwargs)
+            
+            
         #----------------------------------------------------------------------
-        # Auswertung der Ergebnisse
+        # evaluation of results 
         #
 
-        # result holen und zusätzliche informationen einfügen
+        # fetch result and insert additional information 
         _data = { }
 
         _data = result.get_json()
 
-        # _data muss immer ein dict sein (dict, list, SAFRSFormattedResponse)
-
+        # _data must always be a dict (dict, list, SAFRSFormattedResponse)
         if not type( _data ) == dict:
-            # ist _data list dann als data verwenden, sonst in _wrongdatatype einfügen
+            # is _data a list use as data
             if type( _data ) == list:
                 _data = {"data": _data}
 
-        # data bereich in data muss immer list sein
+        # data area in _data must always be list 
         if not 'data' in _data or _data['data'] is None:
             _data['data'] = []
 
         if not 'meta' in _data:
-            # ohne meta mind. count mitgeben
+            # without meta insert count
             _data['meta'] = {
                 "count": len( _data.get("data", [] ) )
             }
@@ -609,14 +612,14 @@ def ispSAFRS_decorator( fn ):
         if not 'count' in _data['meta'] or _data['meta']['count'] is None:
             _data['meta']['count'] = 0
 
-        # offset für die Bestimmung des letzten im Grid
+        # offset for determining the last one in the grid 
         try:
             _data['meta']["offset"] = int( get_request_param("page_offset") )
         except ValueError: # pragma: no cover
             _data['meta']["offset"] = 0
-            #raise ValidationError("Pagination Value Error")
+           
 
-        # die Angaben aus _resultUpdate (App-Error, App-Info,...) des Datenbankobjects hinzufügen
+        # add the information from _resultUpdate (App-Error, App-Info,...) from databaseobject
         #
         _data.update( safrs_obj._resultUpdate )
 
@@ -626,17 +629,16 @@ def ispSAFRS_decorator( fn ):
             result.status_code = 500
             log.error("wrapped_fun data error")
 
-        # http statuscode auswerten
+        # set http status code if given
         if "status_code" in result.json:
             result.status_code = result.json["status_code"]
-
 
         return result
 
     return wrapped_fn
 
 
-# ----------- ispSAFRS ohne db.Model
+# ----------- ispSAFRS without db.Model
 class ispSAFRS(SAFRSBase, RQLQueryMixIn):
 
     __abstract__ = True
@@ -644,7 +646,7 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
     custom_decorators = [ispSAFRS_decorator]
 
     _resultUpdate = {
-        "infos": []
+        "infos": {}
     }
 
     exclude_attrs = []  # list of attribute names that should not be serialized
@@ -655,17 +657,17 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
 
     @classmethod
     def access_cls(cls, key:str=""):
-        """Versucht das mit key angegebene Model zu bestimmen.
+        """try to determine the model specified by key
 
         Parameters
         ----------
         key : str
-            Bezeichnung des gesuchten model.
+            name of searched model .
 
         Returns
         -------
         None|model
-            Das gefundene model oder None.
+            the found model or None.
 
         """
         if hasattr(cls, "_decl_class_registry") and key in cls._decl_class_registry:
@@ -676,10 +678,17 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
             if key in sqlalchemy.__dict__:
                 return sqlalchemy.__dict__[key]
         return None
-
+    
+    def _as_dict(self):
+       """.. restdoc::
+       summary : gives record as dict
+        
+       """
+       return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+   
     @classmethod
-    def getConnection(cls):
-        """Get connetion from session bind or config binds.
+    def _get_connection(cls):
+        """Get connetion string from session bind or config binds.
         Returns
         -------
         connection: str
@@ -693,6 +702,16 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
             connection = query.session.bind
         return connection
 
+    @classmethod
+    def _get_session(cls):
+        """Get session of query class.
+        Returns
+        -------
+        connection: object
+            session object
+        """
+        return cls.query.session
+      
     @classproperty
     def _s_column_names(cls):
         """
@@ -701,19 +720,36 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         return [c.name for c in cls._s_columns]
 
     @classmethod
-    def _int_init( cls ):
-        """Initialisierung vor jedem Aufruf.
+    def _s_column_by_name(cls, name, model=None):
+        """Get column by name. If model then get from model instead cls
+            :return: get column with name
+        """
+        column = None
+        if model == None:
+            # use __mapper__ from class
+            if hasattr(cls, "__mapper__"):
+                column = cls.__mapper__.columns.get( name )
+        if isinstance(model, sqlalchemy.sql.schema.Table):
+            column = model.columns.get( name )  
+        else:
+            column = getattr( model, name, None )
+       
+        return column
 
-        Setzt _resultUpdate vor jedem Aufruf::
+    @classmethod
+    def _int_init( cls ):
+        """Initialization before each call.
+
+        Sets _resultUpdate before each call::
 
             {
-                "infos" : []
+                "infos" : {}
                 "errors" : []
             }
 
-        Stellt _config und _configOverlay des Flask Servers bereit
+        Provides Flask Server's _config and _configOverlay 
 
-        Diese Funktion wird von ispSAFRS_decorator aufgerufen
+        Note: This function is called from ispSAFRS_decorator 
 
         Returns
         -------
@@ -721,17 +757,16 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
 
         """
         cls._resultUpdate = {
-            "infos" : [],
+            "infos" : {},
             "errors" : []
         }
         cls._config = current_app._config
         cls._configOverlay = current_app._configOverlay
-        # die Argumente über swagger bestimmen
-        #kwargs = cls._int_parse_args( kwargs )
+   
 
     @classmethod
     def _int_parse_args(cls, kwargs:dict={}, method=None, swagger_path=None ):
-        """Parsed die request parameter mit den Angaben aus cls._swagger_paths.
+        """Parses the request parameters with the information from cls._swagger_paths .
 
         Swagger datatypes::
 
@@ -745,18 +780,18 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         Parameters
         ----------
         kwargs : dict, optional
-            Alle request Parameter. The default is {}.
+            All request parameters. The default is {}.
         method : str, optional
             The request method. (For example ``'GET'`` or ``'POST'``). The default is None.
         swagger_path : str, optional
-            Der zum request passende Pfad der swagger Beschreibung. The default is None.
+            The swagger description path matching the request. The default is None.
 
         Returns
         -------
         has_args : dict
-            Die überprüften Parameter.
+            The checked parameters .
 
-       RequestParser kann auch so bestimmt werden::
+       Note: RequestParser can also be specified in this way::
 
             from flask_restplus import RequestParser
             parser = RequestParser()
@@ -767,13 +802,13 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
 
         paths = cls._api.get_swagger_doc().get("paths", {})
 
-        # parameter für swagger_path holen (cls._swagger_paths)
+        # get parameters for swagger_path (cls._swagger_paths)
         parameters = paths.get(swagger_path, {}).get( method, {} ).get("parameters", {} )
 
         parser = get_parser( parameters )
-        # alle fehler sammeln (TypeError in value)
+        # collect all errors  (TypeError in value)
         parser.bundle_errors = True
-        # request parsen
+        # parse request
         args = parser.parse_args( )
 
         has_args = {}
@@ -816,19 +851,19 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         return has_args
 
     @classmethod
-    def _int_add_meta( cls, meta:str="App-Info", title:str="", detail:str="", status_code:int=None ):
-        """App-Info, App-Error, App-Dialog, errors Informationen anfügen.
+    def _int_add_meta( cls, meta:str="App-Info", title:str="", detail:str="", status_code:int=None, area:str="general" ):
+        """Insert App-Info, App-Error, App-Dialog, errors information.
 
         Parameters
         ----------
         meta: str
-            der Bereich in dem angefügt wird
+           type of inserted message
         title : str, optional
-            title Bereich. The default is "".
+            Title of message. The default is "".
         detail : str, optional
-            detail Bereich. The default is "".
+            ddetailed message. The default is "".
         status_code: int, optional
-            Wenn gesetzt der http statuscode
+            set http status code if given. The default is None.
 
         Returns
         -------
@@ -836,54 +871,64 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
 
         """
         # Versuchen in json umzuwandeln
-        try:
-            json_data = json.loads( detail )
-            if type(json_data) is dict:
-                detail = json_data
-        except:  # includes simplejson.decoder.JSONDecodeError
-            pass
-
-        if meta in ["App-Info", "App-Dialog"]:
-            cls._resultUpdate[ "infos" ].append( { 'title':title, 'detail': detail, 'code': meta } )
+        
+        if type(detail) is str:
+          try:
+              json_data = json.loads( detail )
+              if type(json_data) is dict:
+                  detail = json_data
+          except:  # includes simplejson.decoder.JSONDecodeError
+              
+              pass 
+        
+        if meta in ["App-Dialog", "App-Info"]:
+            if meta == "App-Dialog":
+                # always use dialog as area
+                area = "dialog"
+            
+            if not area in cls._resultUpdate[ "infos" ]:
+                cls._resultUpdate[ "infos" ][area] = []
+            cls._resultUpdate[ "infos" ][area].append( { 'title':str(title), 'detail': detail, 'code': status_code } )                
         else:
-            cls._resultUpdate[ "errors" ].append( { 'title':title, 'detail': detail, 'code': meta } )
+            cls._resultUpdate[ "errors" ].append( { 'title':str(title), 'detail': detail, 'code': status_code } )
         if status_code:
             cls._resultUpdate[ "status_code" ] = status_code
 
     @classmethod
-    def appInfo(cls, title:str="", detail:str="", status_code:int=None):
-        """App-Info Informationen anfügen.
+    def appInfo(cls, title:str="", detail:str="", status_code:int=None, area:str="general"):
+        """Insert App-Info information into infos.
 
         Parameters
         ----------
         title : str, optional
-            Message Bereich. The default is "".
+            Title of Information. The default is "".
         detail : str, optional
-            Info Bereich. The default is "".
+            detailed info message. The default is "".
         status_code: int, optional
-            Wenn gesetzt der http statuscode
-
+            set http status code if given. The default is None.
+        area: str, optional
+            area to insert info. The default is "general".
+            
         Returns
         -------
         None.
 
         """
-        cls._int_add_meta( "App-Info", title, detail, status_code )
+        cls._int_add_meta( "App-Info", title, detail, status_code, area )
 
     @classmethod
     def appError(cls, title:str="", detail:str="", status_code:int=None):
-        """App-Error Informationen in errors anfügen.
+        """Insert App-Error information into errors.
 
-        diese werden z.b. bei einer Form im status icon angezeigt
-
+        
         Parameters
         ----------
         title : str, optional
-            Message Bereich. The default is "".
+            Title of Information. The default is "".
         detail : str, optional
-            Info Bereich. The default is "".
+            detailed error message. The default is "".
         status_code: int, optional
-            Wenn gesetzt der http statuscode
+            set http status code if given. The default is None.
 
         Returns
         -------
@@ -893,28 +938,31 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         cls._int_add_meta( "App-Error", title, detail, status_code )
 
     @classmethod
-    def appDialog(cls, title:str="", detail:dict={}):
-        """App-Dialog Informationen für den client anfügen.
+    def appDialog(cls, title:str="", detail:dict={}, status_code:int=None):
+        """Insert App-Dialog information for client.
 
-        Diese Informationen führen zu einer Dialog Anzeige im client::
+        This information can be used for a dialog display in the client::
 
-            appDialog("Fehler beim anlegen", { "content" : message, "dimensions" : [ 500, 200] })
+            appDialog("Error on insert", { "message" : message, "class" : "myClassname" })
 
-            Übergabe für den client Dialog
+            gives parameters for client Dialog
             {
-                "title" => "Fehler beim anlegen",
-    			"content" : message,
-    			"dimensions" : [ 500, 200]
+                "title" => "Error on insert",
+    			"message" : message,
+    			"class" : "myClassname"
+                ... other parameter
     		}
 
         Parameters
         ----------
         title : str, optional
-            title Bereich. The default is "".
+            Title of Dialog. The default is "".
         detail : str, optional
-            Info Bereich. The default is "".
-            ist title hier nicht angegeben wird message verwendet
-
+            detailed dialog message. The default is "".
+            If no titel in detail use title parameter
+        status_code: int, optional
+            set http status code if given. The default is None.  
+            
         Returns
         -------
         None.
@@ -923,8 +971,29 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         if not "title" in detail:
             detail[ "title" ] = title
 
-        cls._int_add_meta( "App-Dialog", title, detail )
+        cls._int_add_meta( "App-Dialog", title, detail, status_code )
 
+            
+    @classmethod
+    def _log_query( cls, query=None, always:bool()=False):  
+        """log last query informations.
+        Only log if sever.logging.safrs higher or equal 10 (info) 
+        """
+                
+        if cls._config.server.logging.get("safrs", 0) >= 10 or always:
+            if query:   
+                # add query information 
+                full_query = query.statement.compile( query.session.bind, compile_kwargs={"literal_binds": True} ) 
+                query_info = { 
+                    "query": str(full_query), 
+                    "params": full_query.params 
+                } 
+            else:
+                query_info = "query is None" 
+                
+            cls.appInfo("sql-lastquery",  query_info, area="query" )
+
+            
     @classmethod
     def _int_query( cls, query=None, **kwargs):
         """Eine query ohne paginate durchführen.
@@ -951,29 +1020,35 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
 
         """
 
+        cls._log_query( query )
+        
         _type = cls.__name__
         if 'type' in kwargs:
             _type = kwargs['type']
 
         data = []
         if query:
-            for row in query:
-                # dies geht nur wenn in row _asdict vorhanden ist (z.B. group)
-                if "_asdict" in dir(row):
-                    _row = row._asdict()
-                    _id = None
-                    if "id" in _row:
-                        _id = _row["id"]
-                        del _row["id"]
-                   # _id =
-                    data.append({
-                        "attributes" : _row,
-                        "id": _id,
-                        "type": _type
-                    })
-                else:
-                    data.append( row )
-
+            try:
+                for row in query:
+                    # dies geht nur wenn in row _asdict vorhanden ist (z.B. group)
+                    if "_asdict" in dir(row):
+                        _row = row._asdict()
+                        _id = None
+                        if "id" in _row:
+                            _id = _row["id"]
+                            del _row["id"]
+                       # _id =
+                        data.append({
+                            "attributes" : _row,
+                            "id": _id,
+                            "type": _type
+                        })
+                    else:
+                        data.append( row )
+            except Exception as exc:
+                print( "_int_query", exc )
+                cls.appError( "_int_query", str(exc) )
+                
         # Anzahl aus query
         count = len( data )
         result = {
@@ -982,7 +1057,7 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
              "meta": {},
              "errors": [],
         }
-        cls.appInfo("sql-lastquery", str( query ) )
+        
         return result
 
     @classmethod
@@ -1051,12 +1126,14 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
             die query mit zusätzlichem Filter
 
         """
+        
+        cls.appInfo("filter", qs, area="rql" )
+        
         # RQLQuery bereitstellen die eigene Klasse muss mit _set_entities angegeben werden
         rql = RQLQuery( cls )
         rql._set_entities( cls )
-
+       
         # rql_filter auswerten
-        #rql.rql_parse( qs )
         try:
             rql.rql_parse( qs )
         except NotImplementedError as exc:
@@ -1071,10 +1148,12 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         # die Bedingung an die query anfügen
         if rql._rql_where_clause is not None:
             query = query.filter( rql._rql_where_clause )
+            cls.appInfo("_rql_where_clause", {
+               "where": str(rql._rql_where_clause),
+               "params" :  query.statement.compile().params
+            }, area="rql" )
 
-            cls.appInfo("_int_filter",  str( rql._rql_where_clause ) )
         return query
-
 
     @classmethod
     def _int_groupby(cls, query, params:dict={} ):
@@ -1123,21 +1202,22 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         _params.update( params )
 
         #
-        cls.appInfo("_int_groupby", _params )
+        cls.appInfo("_int_groupby", _params, area="query" )
 
         try:
 
             # ist groups angegeben worden dann verwenden
             if len( _params["groups"].items() ) > 0:
                 for name, fields in _params["groups"].items():
+                    # das passende Model bestimmen
+                    model = cls.access_cls( name )
                     for field in fields:
 
-                        # das passende Model bestimmen
-                        model = cls.access_cls( name )
-
-                        # und daraus mit getattr die richtige column holen
-                        column = getattr( model, field, None )
-                        if column:
+                        #column = getattr( model, field, None )
+                        # und daraus die richtige column holen
+                        #column = model.columns.get( field )
+                        column = cls._s_column_by_name(field, model) 
+                        if not column is None:
                             #
                             if "{}.{}".format(name, field) in _params["labels"]:
                                 labels = _params["labels"]["{}.{}".format(name, field)]
@@ -1151,14 +1231,15 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
 
             # alle felder aus request verwenden
             for name, fields in _params["fields"].items():
+                # das passende Model bestimmen
+                model = cls.access_cls( name )
                 for field in fields:
-                    # das passende Model bestimmen
-                    model = cls.access_cls( name )
-                    # und daraus mit getattr die richtige column
-                    column = getattr( model, field, None )
-                    if column:
-                        if "{}.{}".format(name, field) in _params["labels"]:
-                            labels = _params["labels"]["{}.{}".format(name, field)]
+                    # und daraus die richtige column
+                    column = cls._s_column_by_name(field, model)  
+                    if not column is None:
+                        column_name = str( column )
+                        if column_name in _params["labels"].keys():
+                            labels = _params["labels"][column_name]
                             if type(labels) is list:
                                 for labelname in labels:
                                     field_entities.append( column.label( labelname ) )
@@ -1166,8 +1247,7 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
                                 field_entities.append( column.label( labels ) )
                         else:
                             field_entities.append( column )
-
-
+            
             # ohne gruppenfelder die in fields angegebenen Verwenden
             if len(group_entities) == 0:
                 group_entities = field_entities
@@ -1175,16 +1255,15 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
             if len(field_entities) == 0:
                 field_entities = group_entities
 
-
             # gruppen felder als Gruppierung verwenden
             query = query.group_by( *group_entities )
-
+            
             # bisher alles ok
             ok = True
         except Exception as exc: # pragma: no cover
             cls.appError( "Fehler bei _int_group", str( exc ) )
 
-            log.exception(exc)
+            #log.exception(exc)
             ok = False
 
         # die in fields angegebenen Felder als Anzeigefelder verwenden
@@ -1193,13 +1272,12 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         )
 
         return query, group_entities, ok
-
+    
     @classmethod
     def _int_groupby_query(cls, query, params:dict={} ):
         """Führt eine group query aus und gibt das Abfrage Ergebnis zurück.
 
-        Wird delimiter angegeben, wird nur das erste group Feld mit delimiter gesplittet zurückgegeben
-
+       
         Parameters
         ----------
         query : obj
@@ -1211,8 +1289,7 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
                     "groups": {},
                     "fields": { "<tablename>":[ <fieldname1...fieldnameX>] },
                     "labels": {"<tablename>.<fieldname1>":"<label1>", ... },
-                    "filter": "",
-                    "delimiter": ""
+                    "filter": ""
                 }
 
         Returns
@@ -1224,8 +1301,7 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
                 "groups": {},
                 "fields": {},
                 "labels": {},
-                "filter": "",
-                "delimiter": ""
+                "filter": ""
         }
         _params.update( params )
 
@@ -1242,33 +1318,13 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         # filter berücksichtigen
         if not _params["filter"] == "":
             query = cls._int_filter( query, _params["filter"] )
-
+        
+        # full_query = query.statement.compile( compile_kwargs={"literal_binds": True} ) 
+        cls.appInfo( "groupsplit", {
+            "query": str(query)
+        })
         # die query durchführen
         _result = cls._int_query( query )
-
-        # wenn angegeben nach delimter splitten
-        if _params["delimiter"] and not _params["delimiter"] == "":
-            words = {}
-            if len(group_entities) > 0:
-                # das erste feld bestimmen
-                s_field = str( group_entities[0] )
-                field = s_field.split(".")
-                for item in _result["data"]:
-                    if field[0] == item["type"] and field[1] in item["attributes"]:
-                        # den feldinhalt spliten und anfügen
-                        val = item["attributes"][ field[1] ]
-                        if type(val) is str:
-                            p = val.split( _params[ "delimiter" ])
-                            for s in p:
-                                words[ s.strip() ] = s.strip()
-
-            data = []
-            for d in sorted( words.keys() ):
-                if not d == None and not d=="" and not d=="None":
-                    data.append( { "attributes":{ field[1]:d } } )
-
-            _result["data"] = data
-            _result["count"] = len( data )
 
         return _result
 
@@ -1321,16 +1377,13 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
     @jsonapi_rpc( http_methods=['GET'] )
     def groupby( cls, **kwargs):
         """.. restdoc::
-        description : Gruppiert die Daten und gibt zusätzlichdie Anzahl in hasChildren zurück
+        description : Gruppiert die Daten und gibt zusätzlich die Anzahl in hasChildren zurück
         summary : mit filter und gruppierung
         pageable : false
         parameters:
             - name : groups
               default :
               description : Gruppierungsfelder mit , getrennt ohne Angabe wird fields verwendet
-            - name : delimiter
-              description : den Feldinhalt des ersten Feld (fields|group) zusätzlich mit delimiter trennen
-              type: string
             - name : filter
               description : RQL Filter
               type: string
@@ -1354,7 +1407,7 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
 
             /api/<modul>/groupby?fields[<modul>]=<feld1,feld2>&groups=<feld1,feld2>
 
-        * mit groups und delimiter::
+        * mit groups::
 
             /api/<modul>/groupby?fields[<modul>]=<feld1,feld2>&groups[<modul>]=<feld1,feld2>
 
@@ -1364,7 +1417,7 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
 
         * mit labels::
 
-            /api/<modul>/groupby?groups=<feld1,feld2>&labels=
+            /api/<modul>/groupby?groups=<feld1,feld2>&labels={"dbtests.gruppe": ["lGruppeA", "lGruppeB"]}
 
         JSON:API Response formatting follows filter -> sort -> paginate
 
@@ -1375,12 +1428,12 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
 
         # wenn labels angegeben wurden versuchen sie zu verwenden
         labels = {}
-        if "labels" in kwargs:
-            labels = kwargs.get('labels')
-
+        if "labels" in kwargs :
+            labels = kwargs['labels']  or "{}"
             try:
                 labels = json.loads( labels )
-            except:
+            except Exception as exc:
+                cls.appError( "Fehler bei groupby json.loads lables", str( exc ) )
                 labels = {}
                 pass
 
@@ -1388,14 +1441,118 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
             "fields" : request.fields,
             "groups" : request.groups,
             "labels" : labels,
-            "filter" : kwargs.get('filter', ""),
-            "delimiter" :  kwargs.get('delimiter', "")
+            "filter" : kwargs.get('filter', "")
         }
 
         _result = cls._int_groupby_query( cls._s_query, args )
         return cls._int_json_response( _result )
 
-
+    @classmethod
+    @jsonapi_rpc( http_methods=['GET'] )
+    def groupsplit( cls, **kwargs ):
+        """
+        description: creates result by splitting group contents by delimiter
+        parameters:
+            - name : group
+              default :
+              description : Gruppierungsfeld 
+            - name : delimiter
+              description : split group field on delimiter. Default is ' '
+              type: string
+            - name : filter
+              description : RQL Filter
+              type: string
+        ----
+                 
+        /api/<db>/groupsplit?group=<fieldname>&delimiter=,
+       
+        WITH split(word, str) AS (
+            -- alternatively put your query here
+            -- SELECT '', category||',' FROM categories
+            -- SELECT '', 'Auto,A,1234444'||','
+        	SELECT '', wofuer||',' FROM ersatz
+            UNION ALL SELECT
+            substr(str, 0, instr(str, ',')),
+            substr(str, instr(str, ',')+1)
+            FROM split WHERE str!=''
+        ) SELECT word, count(*) FROM split WHERE word!='' GROUP BY word 
+       
+        """
+        _result = []
+         
+        con = cls._get_connection()
+        engine = sqlalchemy.create_engine(con)
+        Session = scoped_session(sessionmaker(bind=engine))
+        db_session = Session()
+        
+        cls.appInfo( "kwargs", kwargs )
+        
+        field = kwargs["group"] 
+        if not field:
+            return cls._int_json_response( { "data" : _result } )
+            
+        column = getattr(cls, field, None )
+        delimiter = kwargs[ 'delimiter' ] or " "
+       
+        # TODO: sub_query erstellung besser lösen 
+        if kwargs[ 'filter' ]:
+            sub_query = text("""
+                '',{field}||'{delimiter}'
+            """.format( **{"field":str(column), "delimiter":delimiter, "table": cls.__table__  } ) ) 
+        else:
+             # withot filter set table in query
+           sub_query = text("""
+                '',{field}||'{delimiter}' FROM {table}
+            """.format( **{"field": str(column), "delimiter":delimiter, "table": cls.__table__  } ) ) 
+        
+        if sqlalchemy.__version__ == '1.3.23':
+             query = cls.query.with_entities( str(sub_query ) ) # py37
+        else:
+            query = cls.query.with_entities( text(str(sub_query )) ) # py38
+        
+        if kwargs[ 'filter' ]:
+            query = cls._int_filter(query, kwargs[ 'filter' ] )
+        
+        full_sub_query = query.statement.compile( compile_kwargs={"literal_binds": True} ) 
+        
+        
+        # https://stackoverflow.com/questions/31620469/sqlalchemy-select-with-clause-statement-pgsql
+        statement = text("""
+            WITH split(word, str) AS (
+            	{qs}
+                UNION ALL SELECT
+                    substr(str, 0, instr(str, '{delimiter}')),
+                    substr(str, instr(str, '{delimiter}')+1)
+                FROM split WHERE str!=''
+            ) 
+            SELECT word as {field}, count(*) AS hasChildren FROM split WHERE word!='' GROUP BY word                          
+        """.format( **{ "qs":str(full_sub_query), "field": field, "delimiter":delimiter } ) )
+            
+        #print( "statement", str(statement) )
+        
+        info = {
+            "sub_query" : str(full_sub_query),
+            "query" : str(statement)
+        }
+        query_result = []
+        try:
+            query_result = db_session.execute( statement )
+            cls.appInfo( "groupsplit", info )
+        except Exception as exc:       
+            info[ {"Exception": exc } ]
+            cls.appError( "groupsplit", info )
+        
+        
+        for row in query_result:
+            #print( dict(row) )
+            _result.append( {
+                "attributes":  dict(row), #row._asdict(),
+                "id": None,
+                "type": cls.__tablename__
+            })
+        
+        return cls._int_json_response( { "data" : _result } )
+        
     @classmethod
     @jsonapi_rpc( http_methods=['GET'] )
     def undefined( cls, **kwargs):
@@ -1408,6 +1565,7 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
               default : {}
               description : zusätzliche parameter
         ---
+        
         Einen leeren Datensatz zurückgeben ggf. mit parametern füllen.
 
         Parameters
@@ -1416,9 +1574,7 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
             named arguments from restdoc parameters
         """
         _result = {
-            "data" : [
-                cls._int_get_empty_record(  )
-            ]
+            "data" : cls._int_get_empty_record(  )
         }
         return cls._int_json_response( _result )
 
@@ -1460,7 +1616,7 @@ class ispSAFRSDummy( ispSAFRS ):
     # keine automatischen get|post|put|delete usw. erlauben
     http_methods = ["get"]
 
-    # id des records
+    # id of record
     id = None
 
     #
@@ -1516,8 +1672,6 @@ class ispSAFRSDummy( ispSAFRS ):
         dict
             dictionary of exposed attribute names and values
         """
-
-        # log.warning("ispSAFRSDummy._s_jsonapi_attrs")
         return {}
 
     @classproperty
@@ -1529,7 +1683,6 @@ class ispSAFRSDummy( ispSAFRS ):
         list
             list of columns that are exposed by the api
         """
-        # log.warning("ispSAFRSDummy._s_columns")
         return []
 
     @classmethod
@@ -1550,7 +1703,7 @@ class ispSAFRSDummy( ispSAFRS ):
         Returns
         -------
         obj
-            sqla query object
+            sql query object
         """
         class dummyQuery(object):
             def __init__(cls):
@@ -1568,8 +1721,6 @@ class ispSAFRSDummy( ispSAFRS ):
 
 
         dobj = dummyQuery(  )
-
-        #q.attribute
         return dobj
 
     @hybrid_property
@@ -1779,7 +1930,6 @@ class system( ispSAFRSDummy ):
         # module bestimmen
         import sys
         import pkg_resources
-        # print( sys.executable )
 
         cmnd = [sys.executable, '-m', 'pip', 'list', '--format=json', '--disable-pip-version-check']
         columns = ['name', 'version', 'license']
