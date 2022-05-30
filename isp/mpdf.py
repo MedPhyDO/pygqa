@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+
 """
 
 mpdf
@@ -16,10 +17,6 @@ It is based on weasyprint, jinja and html5lib
 * Pandas tables
 * CSS support for HTML integration 
 * Using materialdesignicons-webfont for icons 
-
-Use Ghostscript (gs) to convert pdf to png. Solution found in /tests/conftest.py
-
-render_png() shape size A4 210x297mm
 
 - python 3.7 - cairo 1.16.0 (https://cairographics.org) (1120, 790, 3) - %PDF-1.5
 - python 3.8 - WeasyPrint 53.4 (1123, 794, 3) - %PDF-1.7
@@ -67,6 +64,11 @@ Configuration in config.json
 
 CHANGELOG
 =========
+
+0.1.3 / 2002-05-23
+------------------
+- remove render_png() and render_pdf_and_png() only used in unittests
+- change finish() remove unittest switch
 
 0.1.2 / 2022-03-29
 ------------------
@@ -505,156 +507,7 @@ class PdfGenerator:
             "pdf_filename": pdf_filename,
             "pdf_filepath": pdf_filepath,
         }
-
-    def render_png(self ):
-        """Generate PNG with all Pages.
-
-        Returns
-        -------
-        result: dict
-            - body
-                html content of generated pages
-            - overlays
-                html content of generated overlay
-            - content
-                dict mit gerendertern html content
-            - pages
-                Number of pages in generated file
-            - png_filename: str
-                Name of the generated file
-            - png_filepath: str
-                 Name and path of the generated file
-
-
-        shape size A4 210x297mm
-        - python 3.7 - cairo 1.16.0 (https://cairographics.org) (1120, 790, 3) - %PDF-1.5
-        - python 3.8 - WeasyPrint 53.4 (1123, 794, 3) - %PDF-1.7   
-          
-        """
-        png_filepath, png_filename = self._getFilePath( "png" )
-        main_doc, overlay_html, body_html = self.render()
-        
-        # adds a PNG export based on Ghostscript. found in v53.0/tests/conftest.py
-        import io
-        import os
-        import shutil
-        from subprocess import PIPE, run
-        from tempfile import NamedTemporaryFile
-        from PIL import Image
-        from weasyprint import HTML
-        from weasyprint.document import Document
-        
-        MAGIC_NUMBER = b'\x89\x50\x4e\x47\x0d\x0a\x1a\x0a'
-
-        def document_write_png(self, target=None, resolution=96, antialiasing=1,
-                               zoom=4/30, split_images=False):
-            # Use temporary files because gs on Windows doesn’t accept binary on stdin
-            with NamedTemporaryFile(delete=False) as pdf:
-                pdf.write(self.write_pdf(zoom=zoom))
-            command = [
-                'gs', '-q', '-dNOPAUSE', '-dBATCH', 
-                f'-dTextAlphaBits={antialiasing}',
-                f'-dGraphicsAlphaBits={antialiasing}', 
-                '-sDEVICE=png16m',
-                f'-r{resolution / zoom}', 
-                '-sOutputFile=-', pdf.name]
-            pngs = run(command, stdout=PIPE).stdout
-            os.remove(pdf.name)
-            
-            if not pngs.startswith(MAGIC_NUMBER):
-               return False
-
-            # TODO: use a different way to find PNG files in stream
-            magic_numbers = pngs.count(MAGIC_NUMBER)
-            if magic_numbers == 1:
-                if target is None:
-                    return [pngs] if split_images else pngs
-                png = io.BytesIO(pngs)
-            else:
-                images = [MAGIC_NUMBER + png for png in pngs[8:].split(MAGIC_NUMBER)]
-                if split_images:
-                    return images
-                images = [Image.open(io.BytesIO(image)) for image in images]
-                width = max(image.width for image in images)
-                height = sum(image.height for image in images)
-                output_image = Image.new('RGBA', (width, height))
-                top = 0
-                for image in images:
-                    output_image.paste(image, (int((width - image.width) / 2), top))
-                    top += image.height
-                png = io.BytesIO()
-                output_image.save(png, format='png')
-        
-            png.seek(0)
-        
-            if target is None:
-                return png.read()
-        
-            if hasattr(target, 'write'):
-                shutil.copyfileobj(png, target)
-            else:
-                with open(target, 'wb') as fd:
-                    shutil.copyfileobj(png, fd)
-                
-        def html_write_png(self, target=None, stylesheets=None, resolution=96,
-                           presentational_hints=False, optimize_size=('fonts',),
-                           font_config=None, counter_style=None, image_cache=None):
-            return self.render(
-                stylesheets, presentational_hints=presentational_hints,
-                optimize_size=optimize_size, font_config=font_config,
-                counter_style=counter_style, image_cache=image_cache).write_png(
-                    target, resolution)
-        
-        Document.write_png = document_write_png
-        HTML.write_png = html_write_png
-        
-        main_doc.write_png( png_filepath )
-
-        # Seiteninhalt zurückgeben
-        return {
-            "body": body_html,
-            "overlays": overlay_html,
-            "content": self.pageContent,
-            "pages" : len(main_doc.pages),
-            "png_filename": png_filename,
-            "png_filepath": png_filepath,
-        }
-
-    def render_pdf_and_png(self ):
-        """Generate PDF and PNG with all Pages in one step.
-
-        Returns
-        -------
-        result: dict
-            - body
-                html content of generated pages
-            - overlays
-                html content of generated overlay
-            - content
-                dict mit gerendertern html content
-            - pages
-                Number of pages in generated file
-            - pdf_filename: str
-                Name of the generated pdf file
-            - pdf_filepath: str
-                Name and path of the generated pdf file
-            - png_filename: str
-                Name of the generated png file
-            - png_filepath: str
-                Name and path of the generated png file
-
-        """
-        pdf_result = self.render_pdf()
-        png_result = self.render_png()
-
-        result = pdf_result
-        result[ "png_filename" ] = png_result[ "png_filename" ]
-        result[ "png_filepath" ] = png_result[ "png_filepath" ]
-
-        # Seiteninhalt zurückgeben
-        return result
-
-
+    
     def render(self ):
         """Generate document.
 
@@ -826,19 +679,12 @@ class PdfGenerator:
     def finish(self):
         """Complete document and return content.
 
-        If unittest=True create additional png
-
         Returns
         -------
         pdf_data: dict
             information about the created pdf
         """
-        if "unittest" in self._variables and self._variables[ "unittest" ] == True:
-            pdf_data = self.render_pdf_and_png()
-        else:
-            pdf_data = self.render_pdf()
-
-        return pdf_data
+        return self.render_pdf()
 
     def _page_overlays(self, attrs:dict={}):
         """Create page overlays header, footer and exchange attr.

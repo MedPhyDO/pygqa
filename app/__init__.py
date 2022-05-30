@@ -80,9 +80,11 @@ class system( system ):
         loaded_config = config.get( ["database", _database_key] )
         db_config = {
             "dbname":"notset",
-            "host":"notset",
+            "host":"notset/unused",         
             "user":"notset",
-            "password":"notset"
+            "password":"notset",
+            "engine":"notset/unused",
+            "dsn":"notset/unused"
         }
         if loaded_config:
             db_config = dict_merge( db_config, loaded_config.toDict() )
@@ -95,7 +97,7 @@ class system( system ):
         db_config_copy = db_config.copy()
         db_config_copy["password"] = "******"
         html += '</br> <pre>{}</pre>'.format( json.dumps( db_config_copy, indent=2 ) )
-        info_text = "Der Zugriff auf die Datenbank dbname:<b>{dbname}</b>, host:<b>{host}</b>, user:<b>{user}</b>".format( **db_config )
+        info_text = "Der Zugriff auf die Datenbank dbname:<b>{dbname}</b>, user:<b>{user}</b>".format( **db_config )
         if not connect:
             info_class = "danger"
             info_text = "{} ist nicht möglich.".format( info_text )
@@ -268,7 +270,7 @@ def run( overlay:dict={}, load_tests_db:bool=False ):
     }
     
     if load_tests_db: # pragma: no cover
-        import tests.db as testdb
+        import tests.testdb as testdb
         _apiConfig["models"].append( testdb.dbtests )
         
     # Webserver starten

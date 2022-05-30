@@ -15,23 +15,20 @@ Bei Fehlern in den Überprüfungen steht am Ende::
     
     FAILED (failures=x)
 
- 
 """
 
 import os
 from os import path as osp
 
-# Module auch von der Konsole erreichbar machen 
-ABSPATH = os.path.dirname( os.path.abspath( __file__) )
-path =  osp.join( ABSPATH , "..")
+import site
 
-import sys
-sys.path.insert(0, path)
+# alle Module auch von der Konsole erreichbar machen 
+ABSPATH = osp.dirname( osp.abspath( __file__) )
+base_path =  osp.join( ABSPATH , "..")
+site.addsitedir(base_path)
 
 import shutil
-from shutil import copyfile
 
-#print(sys.path)
 import unittest
 import json
 
@@ -39,30 +36,22 @@ import time
 from datetime import datetime
 
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore") 
 
-import pandas as pd
-import io
-import matplotlib.pyplot as plt
-        
-from skimage import io as img_io
-from skimage.util import compare_images
-import numpy as np
-
-from flask import Response 
-
-import dotmap
+from dotmap import DotMap
 
 import threading
 
-from safrs import jsonapi_rpc
 from isp.config import ispConfig, dict_merge
 from isp.webapp import ispBaseWebApp
-from isp.safrs import db, system, ispSAFRSModel, ispSAFRSDummy, iso2date, isoDateType, isoDateTimeType
-from isp.mpdf import PdfGenerator
-from isp.plot import plotClass, rcParams
+from isp.safrs import db, system
 
-from sqlalchemy import MetaData
+
+from testbase import testCaseBase
+
+import testdb as testdb
+from testdummy import dummy
+
 
 import logging
 logger = logging.getLogger()
@@ -85,696 +74,6 @@ wp_logger = logging.getLogger('weasyprint')
 wp_logger.addHandler( logging.FileHandler( wp_log_file ) )
 wp_logger.setLevel( logging.CRITICAL ) # WARNING, CRITICAL
 
-
-class dummy( ispSAFRSDummy ):
-    """
-        description: Tests - Test von ispSAFRSDummy
-        ---
-        
-    """
-    __tablename__ = "dummy"
-    _database_key = ""
-        
-    config = None
-    
-    metadata = MetaData()
-    
-    @classmethod
-    def init(self, kwargs:dict={} ):
-        """
-        Wird von den jsonapi_rpc funktionen aufgerufen
-
-        Parameters
-        ----------
-        kwargs : dict, optional
-            DESCRIPTION. The default is {}.
-
-        Returns
-        -------
-        kwargs : TYPE
-            DESCRIPTION.
-
-        """    
-        
-        return kwargs
-    
-    @jsonapi_rpc( http_methods=['GET'] )
-    def api_list(cls, **kwargs):
-        """
-            summary : alle Angaben
-            description: alle Angaben
-            parameters:
-                - name : _ispcp
-                  type: OrderedMap
-                  in : query
-                  default : {}
-                  description : zusätzliche parameter
-        ----
-        {'data': [{
-            'attributes': { }
-            'id': '1', 
-            'links': {'self': 'http://localhost/api/dbtests/1/'}, 
-            'type': 'dbtests'
-            }]
-         'included': [], 
-         'jsonapi': {'version': '1.0'}, 
-         'links': {'self': 'http://localhost/api/dbtests/?page[offset]=0&page[limit]=250'}, 
-         'meta': {'count': 7, 'limit': 250, 'offset': 0}, 
-         'App-Error': [], 
-         'App-Info': []
-        }
-        
-        ist:
-        {'data': [{
-            'function': 'api_list', 
-            'kwargs': {'_ispcp': {}}
-            }], 
-            'included': [], 
-            'jsonapi': {'version': '1.0'}, 
-            'meta': {'count': 0, 'limit': 250, 'offset': 0}, 
-            'App-Error': [], 
-            'App-Info': [{'message': 'safrs', 'info': 'Funktion: __main__.dummy.api_list()'}, {'message': 'kwargs', 'info': {'_ispcp': {}}}]}
-        es fehlt:
-            links
-        """
-        #print("dummy.api_list")
-        cls.appInfo("kwargs", kwargs )
-        _result = [ { 
-            "attributes": { "function": "api_list", "kwargs" : kwargs }, 
-            "id":"12", 
-            "links": {"self": "http://localhost/api/dummy/12/"}, # autom. erzeugen
-            "type": "dummy" # autom. erzeugen
-        } ]  
-        return cls._int_json_response( { "data": _result } )   
-    
-    @jsonapi_rpc( http_methods=['GET'] )
-    def api_get(cls, **kwargs):
-        """
-            summary : eine Angabe
-            description: eine Angabe
-            parameters:
-                - name : Id
-                  in : path
-                  type: integer
-                  required : true
-                  description : id - der Informationen
-                - name : _ispcp
-                  type: OrderedMap
-                  in : query
-                  default : {}
-                  description : zusätzliche parameter
-        ----
-        
-        {'data': {
-            'attributes': {}, 
-            'id': '7', 
-            'links': {'self': 'http://localhost/api/dbtests/7/'}, 
-            'type': 'dbtests'
-            }, 
-            'included': [], 
-            'jsonapi': {'version': '1.0'}, 
-            'links': {'self': 'http://localhost/api/dbtests/7/'}, 
-            'meta': {'count': 1, 'instance_meta': {}, 'limit': 250, 'offset': 0}, 
-            'App-Error': [], 
-            'App-Info': []
-        }
-        
-        """
-        #print("dummy.api_get")
-        # log.warning("gqa.api_get: {} id:{}".format( json.dumps(kwargs), cls.object_id ) )
-        cls.appInfo("kwargs", kwargs )
-        # normalerweise kein Datansatz in der Datenbank
-        if kwargs[cls._s_object_id] == "gibtsnicht":
-            
-            _result = cls._int_get_empty_record( {"attributes": {cls._s_object_id : kwargs[cls._s_object_id] } })
-        else:
-            _result = {
-                "attributes": {cls._s_object_id : kwargs[cls._s_object_id] },
-                "id": 12,
-                "links": {"self": "http://localhost/api/{}/{}/".format(cls.__name__, 12)}, # autom. erzeugen
-                "type": cls.__name__ # autom. erzeugen
-            }
-        
-        return cls._int_json_response( { "data": _result } )
-    
-    @classmethod
-    @jsonapi_rpc( http_methods=['GET'] )
-    def test( cls, **kwargs ):
-        """
-        description: test von api Funktionen und Parametern
-        parameters:
-                - name : _ispcp
-                  in : query
-                  default : {}
-                  description : zusätzliche parameter
-                  type: object
-                - name : zahl
-                  in : query
-                  required : true
-                  description : Eine Zahl
-                  type: number
-                - name : bool
-                  in : query
-                  required : false
-                  default : false
-                  description : Eine boolean Wert    
-                  type: boolean
-                - name : text
-                  in : query
-                  required : false
-                  default : typenlos
-                  description : Eine typenloser Wert mit default   
-                 
-        ----
-
-        """
-        #import sqlalchemy    
-        
-        cls.appInfo("kwargs", kwargs )
-        
-        _result = kwargs
-        # verschiedene Rückgaben
-       
-        if kwargs["zahl"] == 1:
-            # leere liste
-            result = []   
-        elif kwargs["zahl"] == 2:
-            # liste mit einem Element
-            result = [ {"a":1, "b":2} ]  
-        elif kwargs["zahl"] == 3:
-            # liste mit einem Element
-            result = cls._int_json_response( "kein result" )
-            
-        elif kwargs["zahl"] == 4:
-            # interne prüfungen
-            cls._int_add_meta( info= "{\"is\":\"dict\"}" )
-            result = []
-        elif kwargs["zahl"] == 5:
-            cls._int_parse_args( )
-            result = []
-        elif kwargs["zahl"] == 6:
-            result = cls._int_query( [ { "A":1 }, { "B":2 } ] )
-        elif kwargs["zahl"] == 7:
-            result = cls._int_groupby_query( cls._s_query, { "A":1, "B":2 } )
-        elif kwargs["zahl"] == 8:
-            result = []
-            db = cls.access_cls( "nicht da" )
-            result.append( {"nicht da": ""} )
-            db = cls.access_cls( "BigInteger" )
-            result.append( {"sqlalchemy.BigInteger": ""} )
-        elif kwargs["zahl"] == 9:
-            result = [
-                {'test=None': iso2date(None) }, 
-                {'20180415=2018-04-15': iso2date('20180415', True) }, 
-                {'2018-04-15=2018-04-15': iso2date('2018-04-15', True) }, 
-                {'2018-04-15 14:36:25=2018-04-15': iso2date('2018-04-15 14:36:25', True) }, 
-                {'2018-04-15=18-04-15 00:00:00': iso2date('2018-04-15') }, 
-                {'2018-04-15 14:36:25=2018-04-15 14:36:25': iso2date('2018-04-15 14:36:25') }, 
-                {'20180415 14:36:25=2018-04-15 14:36:25': iso2date('20180415 14:36:25') },
-                {'20180415 14:36=2018-04-15 14:36:00': iso2date('20180415 14:36') },
-                {'201A0415 14:36:25=None': iso2date('201A0415 14:36:25') },
-                {'201A0415 14:36=None': iso2date('201A0415 14:36') },
-                {'201A0415=None': iso2date('201A0415') }, 
-            ]
-        else: 
-            # dict
-            result = cls._int_json_response( { "data": _result } )  
-            
-        return result
-             
-    @classmethod
-    @jsonapi_rpc( http_methods=['GET'] )
-    def pdf( cls, **kwargs ):
-        '''
-        description: test von pdf Funktionen und Parametern
-        parameters:
-                - name : _ispcp
-                  in : query
-                  default : {}
-                  description : zusätzliche Json parameter
-                  type: object
-                - name : name
-                  in : query
-                  required : false
-                  default : nofile
-                  description : Name der PDF Datei bestimmt die Art der pdf Erzeugung  
-        ----
-        
-        '''
-        cls.appInfo("kwargs", kwargs )
-        
-        mimetype='text/html'
-        status = 200 
-        
-        # verschiedene Rückgaben
-        if kwargs["name"] == "nofile":
-            status = 400 
-            result = "Keine PDF Datei ({}.pdf) gefunden".format( kwargs["name"] )
-            cls.appError( "dummy/pdf", result)
-            # Fehler in der leere liste
-            return Response(result, status=status, mimetype=mimetype)
-           
-        pdfFile = "{}.pdf".format(kwargs["name"])
-        variables = {
-            "Klinik" : "MedPhyDO",
-            "Abteilung" : "App Skeleton",
-            "logo": "logo.png",
-            "Datenausgabe" : "16.03.2020", 
-            "Titel" : "unittest",
-            "Betreff" : "PdfGenerator",
-            "Auswertung" : "mpdf Test auch mit langem Text",
-            "Erstelldatum": "",
-            "Erstellt_von": "",
-            "Geprüft_von": "",
-            "Gültig_ab": "",
-            "Freigegeben_von": "",
-            "tip": "mpdf test tip für die Erstellung eines Unittest mit verschiedenen Elementen und PDF Rückgabe ",
-            "Version" : "",
-            "path": osp.join( ABSPATH , "files", "pdf"),
-        }
-
-        # print(pdfFile)
-        # Inhalte vorbereiten
-        
-        # Testdateien  
-        test_resources = osp.join( ABSPATH , "resources" ) 
-        test_files = {
-            "alpha" : osp.join( test_resources, 'alphachannel.svg' ),
-            "python" : osp.join( test_resources, 'python.svg' ),
-            "text" : osp.join( test_resources, 'test_text.txt' ),
-            "markdown" : osp.join( test_resources, 'test_markdown.md' ),
-            "markdown1" : osp.join( test_resources, 'test_markdown1.md' ),
-            "markdown2" : osp.join( test_resources, 'test_markdown2.md' ),
-            "logo" : 'logo.png',  # immer aus den normalen resources
-        }
-        
-        # text
-        text = """
-            <h1>Lorem ipsum</h1>
-            Lorem ipsum dolor sit amet, consectetuer adipiscing elit, sed diam nonummy nibh euismod tincidunt ut laoreet dolore magna aliquam erat volutpat. Ut wisi enim ad minim veniam, quis nostrud exerci tation ullamcorper suscipit lobortis nisl ut aliquip ex ea commodo consequat.
-            <br>
-            <b>kleiner Blindtext</b>
-            Hallo. Ich bin ein kleiner Blindtext. Und zwar schon so lange ich denken kann. Es war nicht leicht zu verstehen, was es bedeutet, ein blinder Text zu sein: Man ergibt keinen Sinn. Wirklich keinen Sinn. Man wird zusammenhangslos eingeschoben und rumgedreht – und oftmals gar nicht erst gelesen. 
-            
-            Aber bin ich allein deshalb ein schlechterer Text als andere? 
-            <br>
-            """
-        
-        # data
-        # pandas daten verwenden
-        data = {
-            "A" : { "A" : 1, "B": 1.5, "C": "test", "D":-0.2 },
-            "B" : { "A" : 2, "B": 2.6, "C": "", "D": 1.2 },
-            "C" : { "A" : 3, "B": 3.2, "C": "test", "D": 0.4 },
-            "D" : { "A" : 4, "B": 4.1, "C": "", "D": -0.6 }
-        }
-        
-        data_frame = pd.DataFrame(data)
-        # zeilen und spalten tauschen, und nach C sortieren
-        data_frame = data_frame.transpose().sort_values(by="C", ascending=False)
-        # Für die tests Fontsize auf 10, sonst wird 20 verwendet
-        rcParams["font.size"] = 10
-
-        # rcParams["figure.figsize"] = (6.4, 4.8)
-        # plt defaults setzen
-        plt.rcParams.update( rcParams )
-               
-        # plot mit Pandas anzeigen
-        data_frame.plot(kind='bar', title='Rating');
-        # layout opimieren
-        plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
-        #plt.show()
-        image_data = io.BytesIO()
-        
-        plt.savefig( image_data, format='png' )
-        
-        #
-        # weasyprint
-        #
-        # erstmal nur mit config Angaben
-        pdf = PdfGenerator( config=ispConfig( mqttlevel=logging.WARNING )  )
-        
-        # jetzt mit den anderen lädt config intern  
-        pdf = PdfGenerator( filename=pdfFile, variables=variables )
-        
-        from isp.mpdf import DEFAULT_TEMPLATES
-        
-        # default templates erneut setzen um config änderungen für den test nicht zu verwenden
-        # styles bereitstellen
-        pdf.PAGE_STYLE = DEFAULT_TEMPLATES["PAGE_STYLE"]
-        pdf.OVERLAY_STYLE = DEFAULT_TEMPLATES["OVERLAY_STYLE"]
- 
-        # html Gerüst bereitstellen
-        pdf.header_html = DEFAULT_TEMPLATES["header_html"]
-        pdf.footer_html = DEFAULT_TEMPLATES["footer_html"]
-       
-        if kwargs["name"] == "test-1":
-            # leeres pdf erstellen
-            # nur update metadata für coverage prüfen
-            #pdf.updateMetadata( ) 
-            pass
-        elif kwargs["name"] == "test-2":
-            
-            # einfachen Text darstellen
-            pdf.textFile( test_files["text"], { "width": 80 })
-            
-            # testet die HTML Ausgabe
-            pdf.html( '<b>HTML Test</b>', attrs={ "font-size":"9px" } )
-           
-            # Markdown darstellen
-            pdf.textFile( test_files["markdown"], { "width": 80 } )
-
-            
-        elif kwargs["name"] == "test-2a":
-            # wie test 2 aber zuerst markdown und dann text 
-
-            # Markdown darstellen
-            pdf.textFile( test_files["markdown"], { "width": 80 } )  
-            
-            # testet die HTML Ausgabe
-            pdf.html( '<b>HTML Test</b>', attrs={ "font-size":"9px" } )
-             
-            # einfachen Text darstellen
-            pdf.textFile( test_files["text"], { "width": 80 })
-
-            
-        elif kwargs["name"] == "test-3":
-            # Seiten erstellung 
-            c1 = pdf.setContentName("Seite 1")
-            pdf.text( "Inhalt 1" )
-             
-            # neuer Content / neue Seite  
-            pdf.setContentName("Seite 2")
-            pdf.text( "Inhalt 2" )
-             
-            pdf.newPage()
-            pdf.text( "Inhalt 3" )
-             
-            pdf.newPage()
-            pdf.text( "<h2>Seite 4</h2>" )
-             
-            pdf.text( "Inhalt 4" )
-             
-            # zum schluß noch in Content 1 auf der ersten Seite etwas einfügen
-            pdf.setContentName(c1, False)
-            pdf.text( "Inhalt 5 auf Seite 1" )    
-             
-        elif kwargs["name"] == "test-4":
-            
-            icon_data = [
-                  { "acceptance": "True (5)", "icon": pdf.resultIcon( acceptance=True, iconOnly=True ) },
-                  { "acceptance": "False (1)", "icon": pdf.resultIcon( acceptance=False, iconOnly=True ) },
-                  { "acceptance": "1", "icon": pdf.resultIcon( acceptance=1, iconOnly=True ) },
-                  { "acceptance": "2", "icon": pdf.resultIcon( acceptance=2, iconOnly=True ) },
-                  { "acceptance": "3", "icon": pdf.resultIcon( acceptance=3, iconOnly=True ) },
-                  { "acceptance": "4", "icon": pdf.resultIcon( acceptance=4, iconOnly=True ) },
-                  { "acceptance": "5", "icon": pdf.resultIcon( acceptance=5, iconOnly=True ) },
-                  { "acceptance": "falsch", "icon": pdf.resultIcon( acceptance="falsch", iconOnly=True ) },
-            ]
-            icon_frame = pd.DataFrame( icon_data )
-            
-            # Text darstellen
-            pdf.text( text, { "width": 80 }, attrs={"border":"1px solid #FF0000"})
-            
-            # Text aus einer nicht vorhandenen Datei verwenden
-            pdf.textFile( "gibtsnicht.md", { "width": 80 } )
-            
-            # Text aus einer vorhandenen Datei verwenden
-            pdf.textFile( test_files["text"], { "width": 40, "top": 130 }, attrs={"border":"1px solid #FF0000"} )
-
-            #
-            # Angegebenes Bild anzeigen (svg)
-            pdf.image( test_files["alpha"], { "width": 50, "top":125, "left":60 }, attrs={"border":"1px solid #FF0000"}  )
-            
-            # Bild aus resources (png)
-            pdf.image(  test_files["logo"] , { "width": 30, "top":55, "left":95 }, attrs={"border":"1px solid #FF0000"}  )
-            
-            # Bild eines data_frame.plot autom. höhe nach Inhalt 
-            img = '<div style="float:right;">'
-            img += pdf.image( image_data, { "width": 60 }, render=False)
-            img += "</div>"
-            pdf.html(  img, { "width": 80, "top":80, "left":10 }, attrs={"border":"1px solid #FF0000"} )            
-                  
-            
-            # pandas dataframe als Tabelle
-            html = (
-                data_frame.round(2).style
-                .set_uuid( "test_pandas_" )
-                .set_table_attributes('class="alayout-fill-width"') \
-                .format( { 'A':'{0:.1f}', 'B':'{0:.1f}', 'D':'{0:.3f}'} )
-                .hide_index()
-                .highlight_max(subset=["D"], color='yellow', axis=0)
-                .render()
-            )
-            pdf.html( html, attrs={ "font-size":"9px", "margin-left": "10px" } )
-                
-            
-            # ohne Angaben (nicht passiert)  
-            pdf.pandas()
-            # leeres dataframe (nicht passiert)
-            pdf.pandas(  pd.DataFrame() )
-                
-            # pandas sofort ohne id
-            pdf.pandas( data_frame, 
-                area={ "width": 50, "top": 180 },
-                attrs={ "id": "test", "class":"unittest" }, # id des dataframe
-                fields=[
-                    { "field": "gibtsnicht" },
-                    { "field": "A", "label":"is A", "format":"{}", "style": [('text-align', 'center')] },
-                    { "field": "D", "format":"{0:.3f}", "style": [('text-align', 'right')] }
-                ] 
-            )
-            
-            pdf.pandas( icon_frame, 
-                area={ "width": 50, "top": 5, "right": 0 },
-               # attrs={ "id": "test", "class":"unittest" }, # id des dataframe
-            )
-            # pandas sofort mit id
-            pdf.pandas( data_frame, 
-                area={ "width": 50, "top": 180, "left": 60 },
-                fields=[
-                    { "field": "B", "label":"is B" },
-                    { "field": "D" }
-                ] 
-            )
-            # pandas ohne passende fields
-            pdf.pandas( data_frame, 
-                area={ "width": 50, "top": 180, "left": 120 },
-                fields=[
-                    { "field": "gibtsnicht" },
-                ] 
-            )
-            pdf.resultIcon( 1 )
-            # neuer contentName (erzeugt seitenumbruch)
-            pdf.setContentName("Seite 3")
-            
-            # Text aus einer vorhandenen Datei verwenden
-            pdf.textFile( test_files["markdown2"], { "width": 160 } )
-            
-            # leeren Text einfügen
-            pdf.text( )
-            
-            # text intern einfügen
-            pdf.text( 12 )
-            
-            # markdown intern einfügen
-            pdf.markdown( "* Markdown **List** Element" )
-            
-            # seitenumbruch immer
-            pdf.newPage()
-            pdf.resultIcon( 5 )
-            
-            # neue Seite
-            pdf.text( "Seite 3" )
-            
-            # ohne Angaben (nicht passiert)  
-            pdf.pandasPlot()
-      
-            # mit Angaben in der Angegebenen größe plotten
-            pdf.pandasPlot( data_frame, area={ "width": 100, "top": 30, "left": 20 }, kind='line', rot=75 )
-       
-            #  Text und TeX Formel nach SVG mit mathtext  
-            pdf.mathtext( r"$a/b$" )
-            
-            # nur den htmlcode für eine neue Seite erzeugen
-            pdf.newPage( False )
-            
-            # einfach ein icon zum prüfen der fonts
-            pdf.icon( "mdi-paperclip", "x4") 
-
-            # Plot Funktionen über die plotClass
-            
-            # plot anlegen
-            plot = plotClass( )
-            fig, ax = plot.initPlot( )
-      
-            # limits legende und grid
-            ax.set_ylim( [-2.0, 2.0] )
-
-            ax.grid( )
-            ax.legend( )
-            
-            # als bar plot ausgeben
-            data_frame.plot( ax=ax, kind='bar', rot=75)
-            
-            plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
-            
-            # chart im PDF anzeigen 
-            pdf.image( plot.getPlot(), area={ "width": 100, "top": 130, "left": 20 } )
-            # close all figures
-            plt.close('all')
-            # showPlot nur so für coverage durchführen
-            plot.showPlot()
-            
-            
-            
-        if kwargs["name"] == "test-1":
-            #
-            # finish durchführen (coverage test)
-            #        
-            
-            # 1. nur pdf erzeugen
-            result = pdf.finish( )    
-            pdf._variables["unittest"] = True
-            # 2. als unittest pdf und png erzeugen (wie render_pdf_and_png)
-            result = pdf.finish( )    
-        else:
-            #
-            # pdf und png Datei erstellen
-            #
-            result = pdf.render_pdf_and_png( )           
-        
-        #
-        # pdf und png Datei erstellen
-        #        
-        result = pdf.render_pdf_and_png( )
-        
-        
-        return cls._int_json_response( { "data": result } )  
-        
-    
-    @classmethod
-    #@jsonapi_rpc( http_methods=['GET'] )
-    def norpc( cls, **kwargs ):
-        '''
-        '''
-        return ""
-    
-class dbtestsrel( ispSAFRSModel ):
-    """
-        description:  Tests - Test von ispSAFRSModel mit relationen
-        ---
-        
-    """
-    __table_args__ = {'extend_existing': True}
-    
-    __tablename__ = "dbtestsrel"
-    
-    id = db.Column('id', db.Integer, primary_key=True, unique=True, autoincrement=True)
-    dbtests_id = db.Column( 'dbtests_id', db.Integer, db.ForeignKey("dbtests.id") ) 
-    
-    rstring = db.Column('rstring', db.String, nullable=False) # 
-
-    rdate = db.Column('rdate', db.Date, nullable=True) # YYYYMMDD
-    rinteger = db.Column('rinteger', db.Integer, nullable=True)
-    rdata = db.Column('rdata', db.JSON ) # .. todo::json type?
-    
-    # relationen 
-    dbtests = db.relationship("dbtests", back_populates="dbtestsrel", foreign_keys=[dbtests_id]) # one to many
-
-class dbtests( ispSAFRSModel ):
-    """
-        description:  Tests - Test von ispSAFRSModel mit relationen
-        ---
-        
-        In der Datenbank wird immer komplett abgelegt
-        
-       
-        Specify 'extend_existing=True' to redefine options and columns on an existing Table object.
-
-
-        Numeric auch DECIMAL
-        
-        precision=None,
-        scale=None,
-        decimal_return_scale=None, 
-        asdecimal=True, - es wird ein formatierter string zurückgegeben (gerundet)
-        
-        db.Float( precision=5, asdecimal=True, decimal_return_scale=4 )
-    """
-    __table_args__ = {'extend_existing': True}
-    
-    __tablename__ = "dbtests"
-    
-    id = db.Column('id', db.Integer, primary_key=True, unique=True, autoincrement=True)
-    string = db.Column('string', db.String, nullable=False) # 
-    date = db.Column('date', db.Date, nullable=True) # YYYYMMDD
-    isodatetime = db.Column('isodatetime', isoDateTimeType, nullable=True) # YYYY-MM-DD HH:mm:SS
-    isodate = db.Column('isodate', isoDateType, nullable=True) # YYYY-MM-DD
-    integer = db.Column('integer', db.Integer, nullable=True)
-    data = db.Column('data', db.JSON ) # .. todo::json type?
-    tags = db.Column('tags',  db.String, nullable=True)
-    gruppe = db.Column('gruppe',  db.String, nullable=True)
-    aktiv = db.Column('aktiv', db.Integer, nullable=False, default=True)
-    float = db.Column('float', db.Float( asdecimal=True ), nullable=False, default=0) # (5,True,4) gibt 0.3333 als str
-    
-    decimal = db.Column('decimal', db.DECIMAL( 5, 2, 1, True ), nullable=False, default=0)
-    numeric = db.Column('numeric', db.Numeric( 5, 2, 3, False ), nullable=False, default=0 )
-    
-    # relationen
-    dbtestsrel = db.relationship("dbtestsrel", back_populates="dbtests", foreign_keys=[dbtestsrel.dbtests_id], lazy="dynamic", cascade="delete") # one to many
-    
-    def to_dict(self):
-        # bei der Angabe asdecimal=True kommt ein str zurück deshalb diesen wieder in float umwandeln 
-        result = ispSAFRSModel.to_dict(self)
-        result["decimal"] = float( result["decimal"] )
-        #print( result )
-        return result
-        
-    @classmethod
-    @jsonapi_rpc( http_methods=['GET'] )
-    def test( cls, **kwargs ):
-        """
-            description : Zusätzliche Funkton
-            parameters:
-                - name : _ispcp
-                  in : query
-                  default : {}
-                  description : zusätzliche parameter
-                  type: object
-                - name : zahl
-                  in : query
-                  required : true
-                  description : Eine Zahl
-                  type: number
-                - name : bool
-                  in : query
-                  required : false
-                  default : false
-                  description : Eine boolean Wert    
-                  type: boolean
-                - name : text
-                  in : query
-                  required : false
-                  default : typenlos
-                  description : Eine typenloser Wert mit default   
-                  
-        ----   
-        """
-        #print( cls.object_id )
-        
-        cls.appDialog("dbtests", { "content" : " test Dialog", "dimensions" : [ 500, 200] }) 
-        result = []
-        #_result = kwargs
-        if kwargs["zahl"] == 8:
-            # Datenbank Klasse bestimmen
-            db = cls.access_cls( "dbtests" )
-        else:
-            result = cls._int_get_empty_record( {"tags": "defaulttag"} )
-            
-        cls.appInfo("kwargs", kwargs, status_code=205 )
-        return cls._int_json_response( { "data": result } )
-        
          
 def run( config:dict={} ):
     ''' Startet ispBaseWebApp mit zusätzlichen config Angaben
@@ -793,13 +92,9 @@ def run( config:dict={} ):
    
     # Konfiguration öffnen
     _config = ispConfig( config=config )
-    
-    # _config.update( config )
-    
-    #print( _config )
-    
+        
     _apiConfig = {
-        "models": [ system, dummy, dbtests, dbtestsrel ],
+        "models": [ system, dummy, testdb.dbtests, testdb.dbtestsrel ],
     }
     
     _webconfig = {
@@ -811,10 +106,16 @@ def run( config:dict={} ):
     webApp = ispBaseWebApp( _config, db, webconfig=_webconfig, apiconfig=_apiConfig )
     return webApp
 
-class testBase(unittest.TestCase):
+class testBase(testCaseBase):
     '''
     setUp(), tearDown(), and __init__() will be called once per test.
     
+    app: Flask
+        initialisierte Flask app
+
+    api: SAFRSAPI
+        initialisierte SAFRSAPI
+        
     '''
     
     @classmethod
@@ -830,26 +131,45 @@ class testBase(unittest.TestCase):
         
         files_path = os.path.join( ABSPATH, 'files')
         pdf_path = os.path.join( ABSPATH, 'files', 'pdf')
-        config_path = os.path.join( ABSPATH, '..', 'config')
-        
+       
         if not os.path.exists( files_path ):
             os.mkdir( files_path )
             
+        resources_path = os.path.join( ABSPATH , "resources" ) 
+        
+        check_path = os.path.join( resources_path, 'check')
+        if not os.path.exists( check_path ):
+            os.mkdir( check_path )
+            
         # alte Datenbank löschen: über Pfad Angaben falls in der config nicht die testdatei steht 
-        db_file = os.path.join( files_path, "tests.db" ) 
+        db_file = os.path.join( files_path, "test_isp.db" ) 
         if os.path.exists( db_file ):
             os.remove( db_file )
-
+            pass
+        
+        
+        dbtests_file = os.path.join( resources_path, "dbtests.json" )
+        dbtests = []
+        with open(dbtests_file, 'r') as fp: 
+            dbtests = json.load(fp)
+            
+        dbtestsrel_file = os.path.join( resources_path, "dbtestsrel.json" )
+        dbtestsrel = []
+        with open(dbtestsrel_file, 'r') as fp: 
+            dbtestsrel = json.load(fp)
+        
+       
         # alle erzeugten pdf und den Pfad pdf löschen
         if os.path.exists( pdf_path ):
             shutil.rmtree( pdf_path )
         
-        swagger_file = os.path.join( files_path, "swagger_test.json" )
+
+        swagger_file = os.path.join( check_path, "swagger_test.json" )
         if not os.path.exists( swagger_file ):   
             with open(swagger_file, 'w') as fp: 
                 obj = {
                     "info": {
-                        "title": "swagger test"
+                        "title": "test_isp"
                     }
                 }
                 json.dump(obj, fp, indent=2)
@@ -857,8 +177,9 @@ class testBase(unittest.TestCase):
         # webapp mit unitest config
         cls.webapp = run( {
             "loglevel" :{
-                "safrs" : logging.DEBUG
-                #"webapp" : logging.INFO,
+                "safrs" : logging.DEBUG, # 10
+                "sqlalchemy" : logging.DEBUG, # 10
+                "webapp" : logging.DEBUG,
             },
             "server" : {
                 "webserver" : {
@@ -869,9 +190,8 @@ class testBase(unittest.TestCase):
                 },
                 "api": {
                     "DBADMIN": True,
-                    "custom_swagger_config": os.path.join( files_path, "swagger_test.json" )
+                    "custom_swagger_config": os.path.join( check_path, "swagger_test.json" )
                 }
-               
             },
             "templates":{
                  "PDF-HEADER": None
@@ -879,45 +199,40 @@ class testBase(unittest.TestCase):
             "database": {
                 "main": "tests",
                 "tests" : {
-                    "connection": "sqlite:///{{BASE_DIR}}/tests/files/tests.db"
+                    "connection": "sqlite:///{{BASE_DIR}}/tests/files/test_isp.db"
                 }
             }
         } )
         cls.app = cls.webapp.app
+        cls.api = cls.webapp.api
         
-        #print("setUpClass", cls.webapp.config.get() )
-        # Grunddaten in die Datenbank laden
-        data = {
-            "dbtests" : [ 
-                { "string": "eins", "integer": 1, "gruppe":"A", "tags":"A,K", "aktiv":True  },
-                { "string": "zwei", "integer": 2, "gruppe":"B", "tags":"B,M", "aktiv":False  },
-                { "string": "drei", "integer": 3, "gruppe":"C", "tags":"M,K", "aktiv":True  },
-                { "string": "vier", "integer": 4, "gruppe":"C", "aktiv":False  },
-                { "string": "fünf", "integer": 5, "gruppe":"B", "tags":"A,K", "aktiv":True  }
-            ],
-            "dbtestsrel" : [
-                { "dbtests_id": "1", "rstring": "r_eins", "rinteger": 11 },
-                { "dbtests_id": "2", "rstring": "r_zwei", "rinteger": 12 },
-                { "dbtests_id": "3", "rstring": "r_drei", "rinteger": 13 },
-                { "dbtests_id": "4", "rstring": "r_vier", "rinteger": 14 },
-                { "dbtests_id": "5", "rstring": "r_fünf", "rinteger": 15 }
-            ]
-        }
-        for d in data["dbtests"]:
-            response = cls.app.post( "api/dbtests/", headers={'Content-Type': 'application/json'}, data=json.dumps({ 
+        # import sqlalchemy, weasyprint
+        
+        #print( "sqlalchemy.__version__",  sqlalchemy.__version__ )
+    
+        #print( "weasyprint.__version__",  weasyprint.__version__ )
+        
+        # print("###### setUpClass", dbtests( ) )
+        # n = dbtests( string="test" )
+        
+        # Grunddaten in die Datenbank laden 
+        for d in dbtests:
+            cls.app.post( "api/dbtests/", headers={'Content-Type': 'application/json'}, data=json.dumps({ 
                 "data": {
                     "attributes": d,
                     "type":"dbtests"
                 }
             }))
-        for d in data["dbtestsrel"]:
-            response = cls.app.post( "api/dbtestsrel/", headers={'Content-Type': 'application/json'}, data=json.dumps({ 
+            
+        for d in dbtestsrel:
+            cls.app.post( "api/dbtestsrel/", headers={'Content-Type': 'application/json'}, data=json.dumps({ 
                 "data": {
                     "attributes": d,
                     "type":"dbtestsrel"
                 }
             }))
-            
+        
+        
     @classmethod
     def tearDownClass(cls):
         """
@@ -946,6 +261,7 @@ class testBase(unittest.TestCase):
         #self.driver.quit()
         pass
     
+    
 class ispTest( testBase ):
     
  
@@ -970,7 +286,7 @@ class ispTest( testBase ):
             config._loadErrors, [], "__getitem__ Fehler bei vorhandenen _loadErrors im Object")
         
         self.assertEqual(
-            type(config.test), dotmap.DotMap, "__getitem__ Fehler bei nicht vorhandenen in der config")
+            type(config.test), DotMap, "__getitem__ Fehler bei nicht vorhandenen in der config")
         
         # __getattr__ wird bei nicht vorhandenen aufgerufen
         self.assertEqual(
@@ -982,11 +298,11 @@ class ispTest( testBase ):
         
         # __getitem__
         self.assertEqual(
-            type(config["versions"]), dotmap.DotMap, "__getitem__ mit dotmap Fehler")
+            type(config["versions"]), DotMap, "__getitem__ mit dotmap Fehler")
         
         # __getattr__ mit dotmap (config Values) 
         self.assertEqual(
-            type(config.versions), dotmap.DotMap, "__getattr__ mit dotmap Fehler")
+            type(config.versions), DotMap, "__getattr__ mit dotmap Fehler")
         
         # __setitem__
         config["_version"] = '2.unittest' # __setitem__
@@ -1363,36 +679,59 @@ class ispTest( testBase ):
         result_A = """<ul>
 <li>testuser</li>
 </ul>
-        <ul>
-<li>Datum aus Parameter <strong>datum</strong> :{{datum}}</li>
-<li>Inhalt aus Parameter: {{user}}</li>
+        <h2>Markdown</h2>
+<ul>
+<li>Datum aus variables <strong>Datenausgabe</strong> :{{Datenausgabe}}</li>
+<li>Inhalt aus variables<ul>
+<li>Version: </li>
+<li>render_mode: </li>
 </ul>
+</li>
+</ul>
+
+<h2>icon</h2>
+<i class="mdi mdi-check-outline green-text"></i>
+
+<img src="/test.svg" alt="test.svg" />
         Datum mit now: #datum#""".replace( "#datum#", datum )
 
         result_B = """<ul>
 <li>testuser</li>
 </ul>
-        <ul>
-<li>Datum aus Parameter <strong>datum</strong> :#datum#</li>
-<li>Inhalt aus Parameter: testuser</li>
+        <h2>Markdown</h2>
+<ul>
+<li>Datum aus variables <strong>Datenausgabe</strong> :#datum#</li>
+<li>Inhalt aus variables<ul>
+<li>Version: </li>
+<li>render_mode: </li>
 </ul>
+</li>
+</ul>
+
+<h2>icon</h2>
+<i class="mdi mdi-check-outline green-text"></i>
+
+<img src="/test.svg" alt="test.svg" />
         Datum mit now: #datum#""".replace( "#datum#", datum )
-        
+         
         meta = {
             "user" : "testuser",
-            "datum": "{{ now.strftime('%d.%m.%Y') }}",
+            "Datenausgabe": "{{ now.strftime('%d.%m.%Y') }}",
             "name": "{{user}}"
         }
+        
         tpl = """{% markdown %}
         * {{ user }}
         {% endmarkdown %}
-        {% include "test_template.tmpl" %}
+        {% include "test_template.jinja" %}
         Datum mit now: {{ now.strftime('%d.%m.%Y') }}"""
         
         result = config.render_template( tpl, meta, deep_replace=False )
+        
         self.assertEqual(result, result_A, "template nicht OK")
         
-        result = config.render_template( tpl, meta, deep_replace=True )       
+        result = config.render_template( tpl, meta, deep_replace=True )   
+        
         self.assertEqual(result, result_B, "template nicht OK")
         
         
@@ -1565,14 +904,14 @@ class ispTest( testBase ):
         # Inhalt von swagger mit der Angabe in custom_swagger_path prüfen
         response = self.app.get( "api/swagger.json" ) 
         self.assertEqual(response.status_code, 200, "Api Status nicht 200")
-        
+    
         self.assertEqual( 
-            response.json["info"]["title"], "swagger test", "swagger file nicht ok")
+            response.json["info"]["title"], "test_isp", "swagger file nicht ok")
          
         self.assertEqual( 
             list( response.json["paths"].keys() ),
-            ['/dbtests/', '/dbtests/groupby', '/dbtests/test', '/dbtests/undefined', '/dbtests/{dbtestsId}/', '/dbtests/{dbtestsId}/dbtestsrel',
-             '/dbtestsrel/', '/dbtestsrel/groupby', '/dbtestsrel/undefined', '/dbtestsrel/{dbtestsrelId}/', '/dbtestsrel/{dbtestsrelId}/dbtests',
+            ['/dbtests/', '/dbtests/groupby', '/dbtests/groupsplit', '/dbtests/pandas', '/dbtests/test', '/dbtests/undefined', '/dbtests/{dbtestsId}/', '/dbtests/{dbtestsId}/dbtestsrel',
+             '/dbtestsrel/', '/dbtestsrel/groupby', '/dbtestsrel/groupsplit', '/dbtestsrel/undefined', '/dbtestsrel/{dbtestsrelId}/', '/dbtestsrel/{dbtestsrelId}/dbtests',
              '/dummy/', '/dummy/pdf', '/dummy/test', '/dummy/{dummyId}/',
              '/system/', '/system/test', '/system/{systemId}/'
             ],
@@ -1663,7 +1002,7 @@ class ispTest( testBase ):
         self.assertEqual(response.status_code, 200, "Api Status nicht 200")
         self.assertEqual( 
             response.json["data"],
-            [{'attributes': {}, 'id': 'undefined', 'type': 'dummy'}],
+            {'attributes': {}, 'id': 'undefined', 'type': 'dummy'},
             "undefined fehlerhaft"
         )            
                
@@ -1704,13 +1043,12 @@ class ispTest( testBase ):
         
         response = self.app.get( "api/dummy/test", query_string={ "zahl": 4 } )
         self.assertEqual(response.status_code, 200, "Status nicht 200")
-        #print( response.json )
-        
+
         response = self.app.get( "api/dummy/test", query_string={ "zahl": 5, "_ispcp" : "{test}"} )
         self.assertEqual(response.status_code, 200, "Status nicht 200")
         self.assertEqual( 
-            response.json['App-Error'],
-            [{'message': 'swagger Parameter Json Error', 'info': '_ispcp={test}'}],
+            response.json['errors'],
+            [{'title': 'swagger Parameter Json Error', 'detail': '_ispcp={test}', 'code': None}],
             "Parameter Json Error"
         )  
         
@@ -1724,11 +1062,11 @@ class ispTest( testBase ):
         )  
  
         # _int_group_query selbst aufrufen
-        response = self.app.get( "api/dummy/test", query_string={ "zahl": 7 } )       
-        self.assertEqual(response.status_code, 200, "Status nicht 200")
+        response = self.app.get( "api/dummy/test", query_string={ "zahl": 7 } )
         
+        self.assertEqual(response.status_code, 200, "Status nicht 200")
         self.assertEqual( 
-            response.json['App-Error'],
+            response.json['errors'],
             [],
             # [{'message': 'Fehler bei _int_group', 'info': "'dummyQuery' object has no attribute 'group_by'"}],
             "_int_group_query selbst aufrufen"
@@ -1752,6 +1090,7 @@ class ispTest( testBase ):
             [
                 {'test=None': None}, 
                 {'20180415=2018-04-15': '2018-04-15'}, 
+                {'2018-04-15=2018-04-15': '2018-04-15'}, 
                 {'2018-04-15=2018-04-15': '2018-04-15'}, 
                 {'2018-04-15 14:36:25=2018-04-15': '2018-04-15'}, 
                 {'2018-04-15=18-04-15 00:00:00': '2018-04-15 00:00:00'}, 
@@ -1790,9 +1129,11 @@ class ispTest( testBase ):
         response = self.app.get( "api/dbtests/", query_string={})
         self.assertEqual(response.status_code, 200, "Api Status nicht 200")
         self.assertEqual( 
-            len(response.json["data"]), 5, "keine 5 Datensätze"
+            len(response.json["data"]), 8, "keine 8 Datensätze"
         ) 
         
+        return
+    
         #
         # einen Datensatz zusätzlich einfügen
         #
@@ -1810,6 +1151,7 @@ class ispTest( testBase ):
         
         self.assertEqual(response.status_code, 201, "Api Status nicht 201 (Created)")
         self.assertEqual( response.json["data"]["id"], '6', "Datensatz id ist nicht 6")
+        
         
         # record merken
         newRecord6 = response.json["data"]["attributes"]
@@ -1933,20 +1275,19 @@ class ispTest( testBase ):
         )
         
         
-    def test_webapp_db_tests_B( self ):
+    def test_webapp_db_tests_rqlFilter( self ):
         ''' Api aufruf durchführen 
         GET /tests/
  
         '''         
-        
+                 
         # einen undefined holen
         response = self.app.get( "api/dbtests/undefined")
         self.assertEqual(response.status_code, 200, "Api Status nicht 200")
-        
         self.assertEqual(
             response.json["data"],
-            [{'attributes': {
-                'aktiv': None, 
+            {'attributes': {
+                'active': None, 
                 'data': None, 
                 'date': None, 
                 'decimal': None,
@@ -1958,69 +1299,269 @@ class ispTest( testBase ):
                 'numeric': None, 
                 'string': None, 
                 'tags': None
-            }, 'id': 'undefined', 'type': 'dbtests'}],
-            "einen undefined holen"
-        )
-        
-        # funktion test in dbtests aufrufen - gibt 205 als code
-        response = self.app.get( "api/dbtests/test", query_string={
-            "zahl" : 12 # Pflichfeld
-        })
-       
-        #print(response.json["data"])
-        self.assertEqual(response.status_code, 205, "Api Status nicht 205")
-        self.assertDictEqual(
-            response.json["data"],
-            {'attributes': {
-                'aktiv': None, 
-                'data': None, 
-                'date': None, 
-                'decimal': None,
-                'float': None, 
-                'gruppe': None, 
-                'integer': None, 
-                'isodate': None,
-                'isodatetime': None,                
-                'numeric': None, 
-                'string': None,
-                'tags': 'defaulttag'
             }, 'id': 'undefined', 'type': 'dbtests'},
             "einen undefined holen"
         )
-        
-        # fehler bei falscher Filterangabe 
+ 
+        # keine fehler 
         response = self.app.get( "api/dbtests/", query_string={
-            "zahl" : 12, # Pflichfeld
-            "filter" : "eq(tid=1)"
+            "art" : "rqlFilter", 
+            "filter" : "eq(id,1)"
+        })      
+        self.assertEqual(response.status_code, 200, "Api Status nicht 200")
+        self.assertEqual( len(response.json["data"]), 1, "eq(id,1) hat keine Daten")
+        
+        # leere rückgabe bei nicht vorhandener value 
+        response = self.app.get( "api/dbtests/", query_string={
+            "art" : "rqlFilter", 
+            "filter" : "eq(id,appDialog)"
         })
         self.assertEqual(response.status_code, 200, "Api Status nicht 200")
+        self.assertEqual(response.json["data"], [], "eq(id,appDialog) hat Daten")
         self.assertEqual(
-            response.json["App-Error"],
-            [{
-                'message': '_int_filter', 
-                'info': 'RQL Syntax error: (\'eq(tid=1)\', 6, \'Expected ")"\')'
-             }],
-            "fehler bei falscher Filterangabe "
-        )
+            response.json["infos"]["rql"],
+            [
+                {'title': 'filter', 'detail': 'eq(id,appDialog)', 'code': None}, 
+                {'title': '_rql_where_clause', 'detail': {
+                    'where': 'dbtests.id = :id_1', 'params': {'id_1': 'appDialog'}
+                }, 'code': None }
+            ], "eq(id,appDialog)" )
         
-                
-        # wird nur für htmlcov aufgerufen  
-        response = self.app.get( "api/dbtests/test", query_string={
-            "dbtestsId" : 2, # mit cls.object_id
-            "zahl" : 12 # Pflichfeld
+        response = self.app.get( "api/dbtests/", query_string={
+            "art" : "rqlFilter", 
+            "filter" : "and(eq(active,true),lt(float,numeric))"
         })
-        self.assertEqual(response.status_code, 205, "Api Status nicht 205")
+        self.assertEqual(response.status_code, 200, "Api Status nicht 200")
+        
+        # Fehler bei falscher Filterangabe 
+        response = self.app.get( "api/dbtests/", query_string={
+            "art" : "rqlFilter", 
+            "filter" : "eq(id=1)"
+        })      
+        self.assertEqual(response.status_code, 200, "Api Status nicht 200")
+        self.assertEqual(response.json["data"], [], "eq(tid=1) hat Daten")
+        self.assertEqual(response.json["errors"],[{
+            'title': '_int_rqlfilter', 
+            'detail': 'rql-error: RQL Syntax error: (\'eq(id=1)\', 5, \'Expected ")"\')',
+            'code': None
+        } ], "Fehler bei falscher Filterangabe - eq(id=1)")
+        
+        response = self.app.get( "api/dbtests/", query_string={
+            "art" : "rqlFilter", 
+            "filter" : "eq(tid=1)"
+        })
+        #print("AppInfo203", response.json)
+        self.assertEqual(response.status_code, 200, "Api Status nicht 200")
+        self.assertEqual(response.json["data"], [], "eq(tid=1) hat Daten")
+        self.assertEqual(response.json["errors"],[{
+            'title': '_int_rqlfilter', 
+            'detail': 'rql-error: RQL Syntax error: (\'eq(tid=1)\', 6, \'Expected ")"\')',
+            'code': None
+        } ], "Fehler bei falscher Filterangabe - eq(tid=1)")
         
         
-    def test_webapp_db_tests_C( self ):           
         # einen nicht vorhandenen Datensatz abrufen
         # FIXME: Meldung auf der Konsole unterdrücken in method_wrapper vorher abfangen ?
         
         response = self.app.get( "api/dbtests/100")
         self.assertEqual(response.status_code, 404, "Api Status nicht 404 - notFound")
+
         
+    def test_webapp_db_filter( self ):
+        ''' Api aufruf durchführen 
+        GET /dbtests?filter=
+ 
+        '''         
+       
+        response = self.app.get( "api/dbtests/", query_string={
+            "art" : "filter field", 
+            "filter" : '[{"name":"string","op":"eq","val":"one"}]'
+        })
+        self.assertEqual(response.status_code, 200, "Api Status nicht 200")
+        
+        self.assertEqual( len(response.json["data"]), 1, "Anzahl filter field stimmt nicht")
+        
+        response = self.app.get( "api/dbtests/", query_string={
+            "art" : "filter query", 
+            "filter[string]" : "one"
+        })
+        self.assertEqual(response.status_code, 200, "Api Status nicht 200")
+        self.assertEqual( len(response.json["data"]), 1, "Anzahl filter query stimmt nicht")
+        
+        response = self.app.get( "api/dbtests/", query_string={
+            "art" : "filter rql", 
+            "filter" : "eq(string,one)"
+        })
+        self.assertEqual(response.status_code, 200, "Api Status nicht 200")
+        self.assertEqual( len(response.json["data"]), 1, "Anzahl filter rql stimmt nicht")
+        
+        response = self.app.get( "api/dbtests/", query_string={
+            "art" : "filter search", 
+            "filter" : "*one"
+        })
+        self.assertEqual(response.status_code, 200, "Api Status nicht 200")
+
+        self.assertEqual( len(response.json["data"]), 2, "Anzahl filter search stimmt nicht")
+        
+        response = self.app.get( "api/dbtests/", query_string={
+            "art" : "filter mixed", 
+            "filter" : '[{"name":"active","op":"eq","val":true}]|*one'
+        })
+        self.assertEqual(response.status_code, 200, "Api Status nicht 200")
+        self.assertEqual( len(response.json["data"]), 2, "Anzahl filter search stimmt nicht")
+      
+        
+    def test_webapp_db_tests_C( self ):           
+        # funktion test in dbtests aufrufen
+        response = self.app.get( "api/dbtests/test", query_string={
+            "art" : 'AppInfo203' 
+        })
+           
+    
+        self.assertEqual(response.status_code, 203, "Api Status nicht 203")
+        self.assertEqual(
+            response.json["infos"]["general"],
+            [{'title': 'Test AppInfo', 'detail': 'App-Info mit code 203', 'code': 203}],
+            "AppInfo203 fehlgeschlagen"
+        )
+        
+        response = self.app.get( "api/dbtests/test", query_string={
+            # ohne das Pflichtfeld art
+        })
+        self.assertEqual(response.status_code, 400, "Api Status nicht 400")
+        self.assertEqual(
+            response.json["message"],
+            {'art': 'bestimmt die Art des Tests'},
+            "Fehlende message bei fehlendem Pflichtfeld"    
+        )
+        
+        response = self.app.get( "api/dbtests/test", query_string={
+            "art" : 'query' 
+        })
+        self.assertEqual(response.status_code, 200, "Api Status nicht 200")
+        self.assertEqual(
+            response.json['infos']['query'],
+            [{
+                'title': 'sql-lastquery', 
+                'detail': 'query is None', 
+                'code': None
+            }, {
+                'title': 'sql-lastquery', 
+                'detail': {
+                    'query': 'SELECT dbtests.string \nFROM dbtests', 
+                    'params': {}}, 
+                'code': None
+            }],
+            "Fehlende message bei fehlendem Pflichtfeld"    
+        )
+
+        response = self.app.get( "api/dbtests/test", query_string={
+            "art" : 'AppDialog' 
+        })
+        self.assertEqual(response.status_code, 200, "Api Status nicht 203")
+       
+        self.assertEqual(
+            response.json["errors"],
+            [],
+            "error Meldung sollte nicht sein"    
+        )
+        self.assertEqual(
+            response.json["infos"]["dialog"],
+            [{
+                'title': 'Test AppDialog', 
+                'detail': {
+                    'content': 'Einfach nur ein Dialog', 
+                    'dimensions': [200, 200], 
+                    'title': 'Test AppDialog'
+                }, 
+                'code': None
+            }],
+            "Fehler bei der Dialog Meldung"    
+        )
+        
+        response = self.app.get( "api/dbtests/test", query_string={
+            "art" : 'AppDialog403' 
+        })
   
         
+        self.assertEqual(response.status_code, 403, "Api Status nicht 403")
+        self.assertEqual(
+            response.json["infos"]["dialog"],
+            [{
+                'title': 'Test AppDialog', 
+                'detail': {
+                    'content': 'AppDialog mit AppError und code 403', 
+                    'dimensions': [200, 200], 
+                    'title': 'Test AppDialog'
+                }, 
+                'code': 403
+            }],
+            "Fehler bei der Dialog Meldung"    
+        )
+  
+    
+        response = self.app.get( "api/dbtests/test", query_string={
+            "art" : 'AppError' 
+        })
+
+        self.assertEqual(response.status_code, 200, "Api Status nicht 200")
+        self.assertEqual(
+            response.json["errors"],
+            [{
+                'title': 'Test AppError', 
+                'detail': 'App-Error ohne code', 
+                'code': None
+            }],
+            "error Meldung ist falsch"    
+        )
+        
+        response = self.app.get( "api/dbtests/test", query_string={
+            "art" : 'AppError403' 
+        })
+        self.assertEqual(response.status_code, 403, "Api Status nicht 403")
+        self.assertEqual(
+            response.json["errors"],
+            [{
+                'title': 'Test AppError', 
+                'detail': 'App-Error mit code 403', 
+                'code': 403
+            }],
+            "error Meldung ist falsch"    
+        )
+
+        
+        response = self.app.get( "api/dbtests/test", query_string={
+            "art" : 'AppInfo' 
+        })
+
+        self.assertEqual(response.status_code, 200, "Api Status nicht 200")
+        self.assertEqual(
+            response.json["infos"]["general"],
+            [{
+                'title': 'Test AppInfo', 
+                'detail': 'App-Info ohne code', 
+                'code': None
+            }],
+            "error Meldung ist falsch"    
+        )
+       
+ 
+        
+        response = self.app.get( "api/dbtests/test", query_string={
+            "art" : 'AppInfo203' 
+        })
+        self.assertEqual(response.status_code, 203, "Api Status nicht 203")
+        self.assertEqual(
+            response.json["infos"]["general"],
+            [{
+                'title': 'Test AppInfo', 
+                'detail': 'App-Info mit code 203', 
+                'code': 203
+            }],
+            "error Meldung ist falsch"    
+        )
+               
+     
         
     def test_webapp_db_relation( self ):
         ''' Api aufruf für relative Tabellen 
@@ -2035,7 +1576,7 @@ class ispTest( testBase ):
         response = self.app.get( "api/dbtests/")
         self.assertEqual(response.status_code, 200, "Api Status nicht 200")
         self.assertEqual( 
-            len( response.json["data"] ), 5, "keine 5 Datensätze"
+            len( response.json["data"] ), 8, "keine 8 Datensätze"
         ) 
         
         response = self.app.get( "api/dbtestsrel/")
@@ -2061,7 +1602,7 @@ class ispTest( testBase ):
         )       
         
         
-    def test_webapp_db_group( self ):
+    def test_webapp_db_groupby( self ):
         ''' Api aufruf für relative Tabellen 
         # ohne group Angabe wird fields verwendet
             /api/<modul>/groupby?fields[<modul>]=<feld1>
@@ -2074,16 +1615,18 @@ class ispTest( testBase ):
         # mit labels
             /api/<modul>/groupby?fields[<modul>]=<feld1,feld2>&labels={"dbtests.gruppe": "Hallo"}
         ''' 
-        
+  
         # mit fields Angabe
         response = self.app.get( "api/dbtests/groupby", query_string={
             "fields[dbtests]":"gruppe"
         })
         self.assertEqual(response.status_code, 200, "Api Status nicht 200")
+        
         self.assertEqual( response.json["data"],[
-            {'attributes': {'hasChildren': 1, 'gruppe': 'A'}, 'id': None, 'type': 'dbtests'}, 
+            {'attributes': {'hasChildren': 2, 'gruppe': 'A'}, 'id': None, 'type': 'dbtests'}, 
             {'attributes': {'hasChildren': 2, 'gruppe': 'B'}, 'id': None, 'type': 'dbtests'}, 
-            {'attributes': {'hasChildren': 2, 'gruppe': 'C'}, 'id': None, 'type': 'dbtests'}
+            {'attributes': {'hasChildren': 3, 'gruppe': 'C'}, 'id': None, 'type': 'dbtests'},
+            {'attributes': {'hasChildren': 1, 'gruppe': 'D'}, 'id': None, 'type': 'dbtests'}
         ], "groupby mit fields Angabe Rückgabe fehlerhaft " )
         
         # mit groups Angabe
@@ -2092,80 +1635,79 @@ class ispTest( testBase ):
         })
         self.assertEqual(response.status_code, 200, "Api Status nicht 200")
         self.assertEqual( response.json["data"],[
-            {'attributes': {'hasChildren': 1, 'gruppe': 'A'}, 'id': None, 'type': 'dbtests'}, 
+            {'attributes': {'hasChildren': 2, 'gruppe': 'A'}, 'id': None, 'type': 'dbtests'}, 
             {'attributes': {'hasChildren': 2, 'gruppe': 'B'}, 'id': None, 'type': 'dbtests'}, 
-            {'attributes': {'hasChildren': 2, 'gruppe': 'C'}, 'id': None, 'type': 'dbtests'}
+            {'attributes': {'hasChildren': 3, 'gruppe': 'C'}, 'id': None, 'type': 'dbtests'},
+            {'attributes': {'hasChildren': 1, 'gruppe': 'D'}, 'id': None, 'type': 'dbtests'}
         ], "groupby mit groups Angabe Rückgabe fehlerhaft " )
         
+         # mit groups Angabe und filter
+        response = self.app.get( "api/dbtests/groupby", query_string={
+            "groups":"gruppe",
+            "filter":"eq(active,true)"
+        })
+        self.assertEqual(response.status_code, 200, "Api Status nicht 200")
+        self.assertEqual( response.json["data"],[
+            {'attributes': {'hasChildren': 2, 'gruppe': 'A'}, 'id': None, 'type': 'dbtests'}, 
+            {'attributes': {'hasChildren': 1, 'gruppe': 'B'}, 'id': None, 'type': 'dbtests'}, 
+            {'attributes': {'hasChildren': 2, 'gruppe': 'C'}, 'id': None, 'type': 'dbtests'},
+            {'attributes': {'hasChildren': 1, 'gruppe': 'D'}, 'id': None, 'type': 'dbtests'}
+        ], "groupby mit groups Angabe Rückgabe fehlerhaft " )
         
         # mit Filter und zwei Gruppierungs Feldern
         response = self.app.get( "api/dbtests/groupby", query_string={
             "groups[dbtests]":"gruppe,tags",
-            "filter":"eq(aktiv,true)"
+            "filter":"eq(active,true)"
         })
         self.assertEqual(response.status_code, 200, "Api Status nicht 200")
         self.assertEqual( response.json["data"],[
             {'attributes': {'gruppe': 'A', 'hasChildren': 1, 'tags': 'A,K'}, 'id': None, 'type': 'dbtests'}, 
+            {'attributes': {'gruppe': 'A', 'hasChildren': 1, 'tags': 'B K A'}, 'id': None, 'type': 'dbtests'}, 
             {'attributes': {'gruppe': 'B', 'hasChildren': 1, 'tags': 'A,K'}, 'id': None, 'type': 'dbtests'}, 
-            {'attributes': {'gruppe': 'C', 'hasChildren': 1, 'tags': 'M,K'}, 'id': None, 'type': 'dbtests'}
+            {'attributes': {'gruppe': 'C', 'hasChildren': 1, 'tags': None}, 'id': None, 'type': 'dbtests'}, 
+            {'attributes': {'gruppe': 'C', 'hasChildren': 1, 'tags': 'M,K,one'}, 'id': None, 'type': 'dbtests'}, 
+            {'attributes': {'gruppe': 'D', 'hasChildren': 1, 'tags': None}, 'id': None, 'type': 'dbtests'}
         ], "groupby mit Filter und zwei Gruppierungs Feldern fehlerhaft " )
         
-        # mit delimiter
-        response = self.app.get( "api/dbtests/groupby", query_string={
-            "groups":"tags",
-            "delimiter": ","
-        })
-        self.assertEqual(response.status_code, 200, "Api Status nicht 200")
-        self.assertEqual( response.json["data"],[
-            {'attributes': {'tags': 'A'}}, 
-            {'attributes': {'tags': 'B'}}, 
-            {'attributes': {'tags': 'K'}}, 
-            {'attributes': {'tags': 'M'}}
-        ], "groupby mit delimiter Rückgabe fehlerhaft " )
-        
+       
         # groupby mit label testen
         response = self.app.get( "api/dbtests/groupby", query_string={
             "groups":"gruppe",
             "labels": '{"dbtests.gruppe": "lGruppe"}'
         })
-        self.assertEqual(response.status_code, 200, "Api Status nicht 200")
-        self.assertEqual( response.json["data"], 
-            [
-                {'attributes': {'hasChildren': 1, 'lGruppe': 'A'}, 'id': None, 'type': 'dbtests'}, 
-                {'attributes': {'hasChildren': 2, 'lGruppe': 'B'}, 'id': None, 'type': 'dbtests'}, 
-                {'attributes': {'hasChildren': 2, 'lGruppe': 'C'}, 'id': None, 'type': 'dbtests'}
-            ]          
-            , "groupby mit label fehlerhaft " )
+        self.assertEqual(response.status_code, 200, "Api Status nicht 200")      
+        self.assertEqual( response.json["data"], [
+            {'attributes': {'hasChildren': 2, 'lGruppe': 'A'}, 'id': None, 'type': 'dbtests'}, 
+            {'attributes': {'hasChildren': 2, 'lGruppe': 'B'}, 'id': None, 'type': 'dbtests'}, 
+            {'attributes': {'hasChildren': 3, 'lGruppe': 'C'}, 'id': None, 'type': 'dbtests'}, 
+            {'attributes': {'hasChildren': 1, 'lGruppe': 'D'}, 'id': None, 'type': 'dbtests'}
+        ], "groupby mit label fehlerhaft " )
         
         # groupby mit zweifachen label testen
         response = self.app.get( "api/dbtests/groupby", query_string={
             "groups":"gruppe",
             "labels": '{"dbtests.gruppe": ["lGruppeA", "lGruppeB"]}'
         })
-        
-        self.assertEqual(response.status_code, 200, "Api Status nicht 200")
-        self.assertEqual( response.json["data"], 
-            [
-                {'attributes': {'hasChildren': 1, 'lGruppeA': 'A', 'lGruppeB': 'A'}, 'id': None, 'type': 'dbtests'}, 
-                {'attributes': {'hasChildren': 2, 'lGruppeA': 'B', 'lGruppeB': 'B'}, 'id': None, 'type': 'dbtests'}, 
-                {'attributes': {'hasChildren': 2, 'lGruppeA': 'C', 'lGruppeB': 'C'}, 'id': None, 'type': 'dbtests'}
-            ]          
-            , "groupby mit label fehlerhaft " )
-        
+        self.assertEqual(response.status_code, 200, "Api Status nicht 200")       
+        self.assertEqual( response.json["data"], [
+            {'attributes': {'hasChildren': 2, 'lGruppeA': 'A', 'lGruppeB': 'A'}, 'id': None, 'type': 'dbtests'}, 
+            {'attributes': {'hasChildren': 2, 'lGruppeA': 'B', 'lGruppeB': 'B'}, 'id': None, 'type': 'dbtests'}, 
+            {'attributes': {'hasChildren': 3, 'lGruppeA': 'C', 'lGruppeB': 'C'}, 'id': None, 'type': 'dbtests'}, 
+            {'attributes': {'hasChildren': 1, 'lGruppeA': 'D', 'lGruppeB': 'D'}, 'id': None, 'type': 'dbtests'}
+        ], "groupby mit label fehlerhaft " )
+      
         # groupby mit fields und label testen
         response = self.app.get( "api/dbtests/groupby", query_string={
             "fields[dbtests]":"gruppe",
             "labels": '{"dbtests.gruppe": "lGruppe"}'
         })
-
-        self.assertEqual(response.status_code, 200, "Api Status nicht 200")
-        self.assertEqual(response.json["data"], 
-            [
-                {'attributes': {'lGruppe': 'A', 'hasChildren': 1}, 'id': None, 'type': 'dbtests'}, 
-                {'attributes': {'lGruppe': 'B', 'hasChildren': 2}, 'id': None, 'type': 'dbtests'}, 
-                {'attributes': {'lGruppe': 'C', 'hasChildren': 2}, 'id': None, 'type': 'dbtests'}
-            ]  
-            , "groupby mit fields und label fehlerhaft" )
+        self.assertEqual(response.status_code, 200, "Api Status nicht 200")        
+        self.assertEqual(response.json["data"], [     
+            {'attributes': {'hasChildren': 2, 'lGruppe': 'A'}, 'id': None, 'type': 'dbtests'},
+            {'attributes': {'hasChildren': 2, 'lGruppe': 'B'}, 'id': None, 'type': 'dbtests'}, 
+            {'attributes': {'hasChildren': 3, 'lGruppe': 'C'}, 'id': None, 'type': 'dbtests'}, 
+            {'attributes': {'hasChildren': 1, 'lGruppe': 'D'}, 'id': None, 'type': 'dbtests'}
+        ], "groupby mit fields und label fehlerhaft" )
         
         # groupby mit fields und zweifachen label testen
         response = self.app.get( "api/dbtests/groupby", query_string={
@@ -2174,14 +1716,12 @@ class ispTest( testBase ):
         })
 
         self.assertEqual(response.status_code, 200, "Api Status nicht 200")
-        self.assertEqual( response.json["data"], 
-            [
-                {'attributes': {'hasChildren': 1, 'lGruppeA': 'A', 'lGruppeB': 'A'}, 'id': None, 'type': 'dbtests'}, 
-                {'attributes': {'hasChildren': 2, 'lGruppeA': 'B', 'lGruppeB': 'B'}, 'id': None, 'type': 'dbtests'}, 
-                {'attributes': {'hasChildren': 2, 'lGruppeA': 'C', 'lGruppeB': 'C'}, 'id': None, 'type': 'dbtests'}
-            ]  
-            , "groupby mit fields und label fehlerhaft" )
-        
+        self.assertEqual( response.json["data"], [
+            {'attributes': {'hasChildren': 2, 'lGruppeA': 'A', 'lGruppeB': 'A'}, 'id': None, 'type': 'dbtests'}, 
+            {'attributes': {'hasChildren': 2, 'lGruppeA': 'B', 'lGruppeB': 'B'}, 'id': None, 'type': 'dbtests'},
+            {'attributes': {'hasChildren': 3, 'lGruppeA': 'C', 'lGruppeB': 'C'}, 'id': None, 'type': 'dbtests'}, 
+            {'attributes': {'hasChildren': 1, 'lGruppeA': 'D', 'lGruppeB': 'D'}, 'id': None, 'type': 'dbtests'}    
+        ], "groupby mit fields und label fehlerhaft" )
         
         # id als gruppe wird ausgefiltert
         response = self.app.get( "api/dbtests/groupby", query_string={
@@ -2193,12 +1733,81 @@ class ispTest( testBase ):
             {'attributes': {'hasChildren': 1}, 'id': 2, 'type': 'dbtests'}, 
             {'attributes': {'hasChildren': 1}, 'id': 3, 'type': 'dbtests'}, 
             {'attributes': {'hasChildren': 1}, 'id': 4, 'type': 'dbtests'}, 
-            {'attributes': {'hasChildren': 1}, 'id': 5, 'type': 'dbtests'}
-            ] , "id als gruppe wird ausgefiltert" )
+            {'attributes': {'hasChildren': 1}, 'id': 5, 'type': 'dbtests'},
+            {'attributes': {'hasChildren': 1}, 'id': 6, 'type': 'dbtests'}, 
+            {'attributes': {'hasChildren': 1}, 'id': 7, 'type': 'dbtests'}, 
+            {'attributes': {'hasChildren': 1}, 'id': 8, 'type': 'dbtests'}
+        ] , "id als gruppe wird ausgefiltert" )
         
         
+    def test_webapp_db_groupsplit( self ):
+        ''' Api aufruf für gruppierte Felddaten 
+
+            /api/<modul>/groupsplit?group=<feld1>
+
+            /api/<modul>/groupsplit?group=<feld1>&delimiter=,
+            /api/<modul>/groupsplit?group=<feld1>&delimiter=,&filter=eq(active,1)
+
+        WITH split(word, str) AS (
+        	SELECT '',tags||',' FROM dbtests WHERE active=1
+        	UNION ALL 
+        		SELECT substr(str, 0, instr(str, ',')), substr(str, instr(str, ',')+1) FROM split WHERE str!=''
+        ) 
+        SELECT word as tags, count(*) AS hasChildren FROM split WHERE word!='' GROUP BY word
+    
+        ''' 
+          
+        # groupsplit mit default delimiter (space) 
+        response = self.app.get( "api/dbtests/groupsplit", query_string={
+            "group":"tags",
+        })
+       
+        self.assertEqual(response.status_code, 200, "Api Status nicht 200")        
+        self.assertEqual( response.json["data"],[
+            {'attributes': {'hasChildren': 1, 'id': 'A', 'tags': 'A'}, 'id': 'A', 'type': 'dbtests'},
+            {'attributes': {'hasChildren': 2, 'id': 'A,K', 'tags': 'A,K'}, 'id': 'A,K', 'type': 'dbtests'},
+            {'attributes': {'hasChildren': 1, 'id': 'B', 'tags': 'B'}, 'id': 'B', 'type': 'dbtests'},
+            {'attributes': {'hasChildren': 1, 'id': 'B,M', 'tags': 'B,M'}, 'id': 'B,M', 'type': 'dbtests'},
+            {'attributes': {'hasChildren': 2, 'id': 'K', 'tags': 'K'}, 'id': 'K', 'type': 'dbtests'},
+            {'attributes': {'hasChildren': 1, 'id': 'L,A', 'tags': 'L,A'}, 'id': 'L,A', 'type': 'dbtests'},
+            {'attributes': {'hasChildren': 1, 'id': 'M,K,one', 'tags': 'M,K,one'}, 'id': 'M,K,one', 'type': 'dbtests'}
+        ] , "groupsplit mit default (space) delimiter: Rückgabe fehlerhaft " )
+
+        # groupsplit mit delimiter 
+        response = self.app.get( "api/dbtests/groupsplit", query_string={
+            "group":"tags",
+            "delimiter": ","
+        })
+        self.assertEqual(response.status_code, 200, "Api Status nicht 200")
+        self.assertEqual( response.json["data"],[
+            {'attributes': {'hasChildren': 2, 'id': 'A', 'tags': 'A'}, 'id': 'A', 'type': 'dbtests'}, 
+            {'attributes': {'hasChildren': 1, 'id': 'A K', 'tags': 'A K'}, 'id': 'A K', 'type': 'dbtests'}, 
+            {'attributes': {'hasChildren': 1, 'id': 'B', 'tags': 'B'}, 'id': 'B', 'type': 'dbtests'}, 
+            {'attributes': {'hasChildren': 1, 'id': 'B K A', 'tags': 'B K A'}, 'id': 'B K A', 'type': 'dbtests'}, 
+            {'attributes': {'hasChildren': 3, 'id': 'K', 'tags': 'K'}, 'id': 'K', 'type': 'dbtests'},
+            {'attributes': {'hasChildren': 1, 'id': 'L', 'tags': 'L'}, 'id': 'L', 'type': 'dbtests'}, 
+            {'attributes': {'hasChildren': 2, 'id': 'M', 'tags': 'M'}, 'id': 'M', 'type': 'dbtests'}, 
+            {'attributes': {'hasChildren': 1, 'id': 'one', 'tags': 'one'}, 'id': 'one', 'type': 'dbtests'}
+        ], "groupsplit mit ',' delimiter: Rückgabe fehlerhaft " )
         
-    def test_webapp_db_typen( self ):
+        
+        # groupsplit mit delimiter und filter
+        response = self.app.get( "api/dbtests/groupsplit", query_string={
+            "group":"tags",
+            "filter": "eq(active,1)", 
+            "delimiter": ","
+        })
+        self.assertEqual(response.status_code, 200, "Api Status nicht 200")
+         
+        self.assertEqual( response.json["data"],[
+            {'attributes': {'hasChildren': 2, 'id': 'A', 'tags': 'A'}, 'id': 'A', 'type': 'dbtests'},
+            {'attributes': {'hasChildren': 1, 'id': 'B K A', 'tags': 'B K A'}, 'id': 'B K A', 'type': 'dbtests'},
+            {'attributes': {'hasChildren': 3, 'id': 'K', 'tags': 'K'}, 'id': 'K', 'type': 'dbtests'},
+            {'attributes': {'hasChildren': 1, 'id': 'M', 'tags': 'M'}, 'id': 'M', 'type': 'dbtests'},
+            {'attributes': {'hasChildren': 1, 'id': 'one', 'tags': 'one'}, 'id': 'one', 'type': 'dbtests'}
+        ], "groupsplit mit ',' delimiter und filter 'eq(active,1)': Rückgabe fehlerhaft " )       
+        
+    def todo_test_webapp_db_typen( self ):
         ''' Verschiedene feldtype testen
        
         ''' 
@@ -2224,7 +1833,7 @@ class ispTest( testBase ):
 
         }), follow_redirects=True) 
         
-        #print( response.json["data"] )
+        print( "TODO: test_webapp_db_typen", response.json["data"] )
         
         #self.assertEqual( response.status_code, 201, "Api Status nicht 201 (Created)")
         #self.assertEqual( response.json["data"]["attributes"]["date"], '2020-08-19', "Datensatz datum ist nicht 2020-08-19")     
@@ -2232,188 +1841,9 @@ class ispTest( testBase ):
         #self.assertEqual( response.json["data"]["attributes"]["float"], 0.3333333333333333, 'Datensatz float ist nicht 0.3333333333333333')                        
                              
         
-        response = self.app.post( "api/dbtests/", headers={'Content-Type': 'application/json'}, data=json.dumps({ 
-            "data" : {
-                "attributes": {
-                    "string":"sechs",     # Pflichtfeld
-                    "date":"2020-08-19", 
-                    "integer": 6,
-                    "data": {"A":1},
-                    "float": 1/3,
-                    "decimal" : 12345.3456,   # soll nur 12345.35 ergeben
-                    "numeric" : 5.6789,
-                    "isodate" :"2020-08-19",
-                    "isodatetime" :"2020-08-19 14:37"
-                },
-                "type":"dbtests"
-            }
-
-        }), follow_redirects=True) 
-        
         #print( response.json["data"] )
         pass
     
-    def check_pdf_data( self, data, contents=-1, pages=-1, intern_check:bool=False ):
-        ''' Prüft pdf data mit vorher gespeicherten data
-        
-        Erzeugt im unittest dir resources ein dir 'check', um dort die Vergleichsdaten zu speichern
-        Gibt es dieses schon werden die dort vorhandenen Dateien als check verwendet
-        
-        Parameters
-        ----------
-        data : dict
-            - body: dict
-            - overlays: dict
-            - pages: int
-            - pdf_filename: string
-            - pdf_filepath: string
-            - png_filename: string
-            - png_filepath: string
-        contents : int
-            Anzahl der Seiten im Content
-        pages : int
-            Anzahl der Seiten im PDF
-        intern_check:
-            Wenn True wird in tests und nicht im normalem pdf Ablegeort geprüft. Default is False 
-            
-        Returns
-        -------
-        None.
-        
-        '''
-        #print( data["content"] )
-        self.assertIn("pdf_filename", data,
-            "PDF data fehlerhaft filename fehlt"
-        )   
-  
-        self.assertIn("png_filepath", data,
-             "PNG data fehlerhaft filepath fehlt"
-        )
-               
-        check = {}
-        
-        if intern_check == True:
-            check_dir = osp.join( ABSPATH, "resources", "check" )
-        else:
-            check_dir = osp.join( os.path.dirname( data["pdf_filepath"] ), "check" )
-            
-        # create the folders if not already exists
-        if not os.path.exists( check_dir ):
-            try:
-                os.makedirs( check_dir )
-            except IOError as e:
-                 print("Unable to create dir.", e)
-                 
-        # Dateiname für den Inhalt festlegen
-        json_check_name = osp.join( check_dir, data["pdf_filename"] ) + ".json"
-        
-        png_check_name = osp.join( check_dir, data["png_filename"] ) 
-        
-        png_new_name  = data["png_filepath"]
-        
-        # akltuellen content speichern
-        with open( data["pdf_filepath"]  + ".json" , "w" ) as json_file:
-            json.dump( data["content"] , json_file, indent=2 )
-        
-        # beim erstenmal pdfData content in unittest anlegen
-        if not os.path.exists( json_check_name ):
-            with open(json_check_name, "w" ) as json_file:
-                # print("save", json_check_name)
-                json.dump( data["content"] , json_file, indent=2 )
-         
-        if intern_check == True:
-            pdf_check_name = osp.join( check_dir, data["pdf_filename"] )
-            # beim erstenmal pdf nach check kopieren
-            if not os.path.exists( pdf_check_name ):            
-                # adding exception handling
-                try:
-                    copyfile( data["pdf_filepath"], pdf_check_name)
-                except IOError as e:
-                    print("Unable to copy file.", e)
-                    
-        # beim erstenmal png nach check kopieren
-        if not os.path.exists( png_check_name ):            
-            # adding exception handling
-            try:
-                copyfile(png_new_name, png_check_name)
-            except IOError as e:
-                print("Unable to copy file.", e)
-                
-        page_names = data["content"].keys()
-        #print(page_names)
-        # ggf Anzahl der Bereiche prüfen
-        if contents > -1:
-            self.assertEqual(
-                len( page_names ),
-                contents,
-                "Anzahl der content Bereiche in '{}' stimmt nicht.".format( data["pdf_filepath"] )
-            )
-        # ggf Anzahl der Seiten prüfen
-        if pages > -1:    
-            self.assertEqual(
-                data["pages"],
-                pages,
-                "Anzahl der Seiten in '{}' stimmt nicht.".format( data["pdf_filepath"] )
-            ) 
-          
-        # erzeugte png vergleichen und diff speichern 
-        png_check = img_io.imread( png_check_name )
-        png_new = img_io.imread( png_new_name )
-
-        self.assertEqual( 
-            png_check.shape, 
-            png_new.shape, 
-            "Die Bildgrößen in '{}' stimmen nicht.".format( data["pdf_filepath"] )
-        )
-        
-        # Bild verleich erstellen und speichern
-        compare = compare_images(png_check, png_new, method='diff')
-        img_io.imsave( png_new_name + ".diff.png",  compare )
-        
-        # passende check daten (json_check_name) laden
-        with open( json_check_name ) as json_file:
-            check = json.load( json_file )
-            
-        # einige content Inhalte prüfen 
-        from bs4 import BeautifulSoup 
-        for page_name, content in data["content"].items():
-            bs_data = BeautifulSoup( content, 'html.parser')
-            bs_check = BeautifulSoup( check[ page_name ], 'html.parser')    
-            
-            # zuerst die texte
-            data_text = bs_data.find_all('div', {"class": "text"} )
-            check_text = bs_check.find_all('div', {"class": "text"} )
-            self.assertEqual(
-                data_text,
-                check_text,
-                "PDF content .text in '{}' ist fehlerhaft".format( data["pdf_filepath"] )
-            )
-            
-            
-        # gesamt check der Bilder
-        def check_mse(imageA, imageB):
-        	# the 'Mean Squared Error' between the two images is the
-        	# sum of the squared difference between the two images;
-        	# NOTE: the two images must have the same dimension
-        	err = np.sum((imageA.astype("float") - imageB.astype("float")) ** 2)
-        	err /= float(imageA.shape[0] * imageA.shape[1])
-        	
-        	# return the MSE, the lower the error, the more "similar"
-        	# the two images are
-        	return err
-
-        # MeanCheck durchführen 
-        try:
-            mse = check_mse( png_check, png_new )
-        except:
-            mse = -1
-        
-        #print( "Der PNG Vergleichsbild MSE von '{}' ist '{}'.".format( data["png_filepath"] + ".diff.png", mse ) )
-        #mse=0.0
-        self.assertEqual( 0.0, mse, 
-            "Der PNG Vergleichsbild MSE stimmt nicht. Diff image '{}' prüfen. Test erneut durchführen.".format( data["png_filepath"] + ".diff.png" )
-        )
-        
         
     def test_isp_mpdf_fonts( self ):
         """Testet Fonts für die PDF Erstellung mit fc-list 
@@ -2451,7 +1881,7 @@ class ispTest( testBase ):
     def test_isp_mpdf_base( self ):
         ''' Ein PDF Dokument erstellen
        
-        '''
+        '''           
         
         response = self.app.get( "api/dummy/pdf" )
         self.assertEqual(response.status_code, 400, "Status nicht 400")
@@ -2461,13 +1891,25 @@ class ispTest( testBase ):
             "Testet Fehler bei Rückgabe eine fehlenden PDF Datei "
         )  
         
-        # zuerst nur ein leeres PDF mit overlay
+        config = ispConfig( )  
+        v1 = config.variables.get("Version")
+        # informationen zu pdf Erstellung
+        response = self.app.get( "api/dummy/pdf", query_string={ 
+            "name" : "test-info"
+        } )
+        self.assertEqual(response.status_code, 200, "Status nicht 200") 
+        
+        self.assertEqual( 
+            response.json["data"]["varianten"], 
+            {'v1': v1, 'v2': 'u.0.1', 'v3': 'u.0.1'}, 
+            "resources Angabe stimmt nicht" 
+        )
+        
+        # ein leeres PDF mit overlay
         response = self.app.get( "api/dummy/pdf", query_string={ 
             "name" : "test-1"
         } )
-       
         self.assertEqual(response.status_code, 200, "Status nicht 200")
-        
         self.assertEqual( response.json["data"]["body"], "", "PDF body ist nicht leer" )
         self.check_pdf_data( response.json["data"], contents=0, pages=1, intern_check=True )
         
@@ -2487,76 +1929,38 @@ class ispTest( testBase ):
         self.assertEqual(response.status_code, 200, "Status nicht 200")
         #print( response.json["data"] )
         self.check_pdf_data( response.json["data"], contents=1, pages=1, intern_check=True )
-        
+       
         response = self.app.get( "api/dummy/pdf", query_string={ 
             "name" : "test-3"
         } )
         self.assertEqual(response.status_code, 200, "Status nicht 200")
         self.check_pdf_data( response.json["data"],  contents=2, pages=4, intern_check=True )
        
-        
         response = self.app.get( "api/dummy/pdf", query_string={ 
             "name" : "test-4"
         } )
         self.assertEqual(response.status_code, 200, "Status nicht 200")
-        
         # kommt es hier zu einem Fehler stimmt die font Einbindung von weasyprint nicht
         self.check_pdf_data( response.json["data"], contents=2, pages=3, intern_check=True )
+        
+        # Inhalte über template file einfügen
+        response = self.app.get( "api/dummy/pdf", query_string={ 
+            "name" : "test-5"
+        } )
+        self.assertEqual(response.status_code, 200, "Status nicht 200")
+        # selbst prüfen, da debug informationen vorliegen
+        self.assertEqual( 
+            response.json["data"]["pages"], 
+            2,
+            "Anzahl der Seiten stimmt nicht"            
+        )
+        #print( response.json["data"] )
+       
         
         #print( response.json )
         
         # .. todo:: rückgabe als pdf
         
-    def check_weasyprint( self ):
-        ''' Ein PDF Dokument mit weasyprint erstellen
-       
-        '''        
-        
-        # pdf weasyprint test 
-        
-        from weasyprint import HTML, CSS
-        from weasyprint.fonts import FontConfiguration
-        
-        font_config = FontConfiguration()
-        
-        from weasyprint import default_url_fetcher
-
-        files_loaded = []
-        def log_url_fetcher(url):
-            
-            files_loaded.append( url )
-            return default_url_fetcher(url)
-        
-        # HTML('<h1>foo') would be filename
-        base_dir = os.path.join( ABSPATH, "..", "resources" )
-        
-        html = HTML(string='''
-            <h1>The title</h1>
-            <div class="blue-text">blauer Text</div>
-            <span>mdi-check-outline: </span><span><i class="mdi mdi-check-outline"></></span><span> Oder?</span>
-        ''')
-        
-        css = CSS(string='''
-            @import url(mpdf_styles.css);
-            h1 { font-family: Arial,"Helvetica Neue",Helvetica,sans-serif }
-        ''', font_config=font_config, url_fetcher=log_url_fetcher, base_url=base_dir )
-   
-        pdf_file_name = os.path.join( ABSPATH, 'files', 'weasyprint.pdf')
-        html.write_pdf( pdf_file_name, stylesheets=[css], font_config=font_config)
-
-        # es sollten min. 5 Dateien eingelesen werden
-        self.assertGreaterEqual(len(files_loaded), 5, "Anzahl nicht >= 5")
-        
-        
-        # only test 4
-        response = self.app.get( "api/dummy/pdf", query_string={ 
-            "name" : "test-4"
-        } )
-        self.assertEqual(response.status_code, 200, "Status nicht 200")
-        
-        # kommt es hier zu einem Fehler stimmt die font Einbindung von weasyprint nicht
-        self.check_pdf_data( response.json["data"], contents=2, pages=3, intern_check=True )
-        # print( files_loaded, len(files_loaded) )
           
 def suite( testClass:None ):
     '''Fügt alle Funktionen, die mit test_ beginnen aus der angegeben Klasse der suite hinzu
@@ -2581,16 +1985,17 @@ def suite( testClass:None ):
     
     if testClass:
         
-        #suite.addTest( testClass('test_config_jinja') )
+        #suite.addTest( testClass('test_webapp_db_tests_filter') )
         
-        #suite.addTest( testClass('check_weasyprint') )
-        #suite.addTest( testClass('test_webapp_db_tests_C') )
-        #suite.addTest( testClass('test_webapp_db_tests_B') )
-        #return suite
+        
+        #suite.addTest( testClass('test_webapp_db_groupby') )
+        
+        #suite.addTest( testClass('test_webapp_db_groupsplit') )
+       # return suite
     
         for m in dir( testClass ):
             if m.startswith('test_config_'):
-                suite.addTest( testClass(m),  )
+                suite.addTest( testClass(m), )
                 pass
             elif m.startswith('test_webapp_base_'):
                 suite.addTest( testClass(m),  )

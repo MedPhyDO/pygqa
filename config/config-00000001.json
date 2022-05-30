@@ -26,126 +26,205 @@
         "MT-4_1_2": {
             "tag" : "MT_4.1.2",
             "info": {
-                "tip": "Linearität MU MT_4.1.2",
+                "tip": "IMRT - Stabilität der Proportionalität des Dosismonitorsystems bei kleinen Dosismonitorwerten",
                 "anleitung" : "qa/Field-MT-4_1_2.md",
                 "TODO": [],
                 "tolerance": {
                     "6x" : {
                         "default": {  
-                            "warning" : { "f":"abs({value}) > 1.0", "unit": "%" }, 
-                            "error" : { "f":"abs({value}) > 2.0", "unit": "%" },
+                            "warning" : { "f":"abs({diff}) > 1.0", "unit": "%" }, 
+                            "error" : { "f":"abs({diff}) > 2.0", "unit": "%" },
                             "check" : { "field": "diff", "query":"ME == 100" }
                         },
                         "MU_20": {
-                            "warning" : { "f":"abs({value}) > 1.0", "unit": "%" }, 
-                            "error" : { "f":"abs({value}) > 2.5", "unit": "%" },
+                            "warning" : { "f":"abs({diff}) > 1.0", "unit": "%" }, 
+                            "error" : { "f":"abs({diff}) > 2.5", "unit": "%" },
                             "check" : { "field": "diff", "query":"ME == 20" }
                         }, 
                         "MU_10": {
-                            "warning" : { "f":"abs({value}) > 1.0", "unit": "%" }, 
-                            "error" : { "f":"abs({value}) > 5.0", "unit": "%" },
+                            "warning" : { "f":"abs({diff}) > 1.0", "unit": "%" }, 
+                            "error" : { "f":"abs({diff}) > 5.0", "unit": "%" },
                             "check" : { "field": "diff",  "query":"ME == 10" }
                         }, 
                         "MU_5": {
-                            "warning" : { "f":"abs({value}) > 5.0", "unit": "%" }, 
-                            "error" : { "f":"abs({value}) > 10.0", "unit": "%" },
+                            "warning" : { "f":"abs({diff}) > 5.0", "unit": "%" }, 
+                            "error" : { "f":"abs({diff}) > 10.0", "unit": "%" },
                             "check" : { "field": "diff", "query":"ME == 5" }
                         },
                         "MU_1": {
-                            "warning" : { "f":"abs({value}) > 10", "unit": "%" }, 
-                            "error" : { "f":"abs({value}) > 50.0", "unit": "%" },
+                            "warning" : { "f":"abs({diff}) > 10", "unit": "%" }, 
+                            "error" : { "f":"abs({diff}) > 50.0", "unit": "%" },
                             "check" : { "field": "diff", "query":"ME == 1" }
                         } 
                     },
                     "6xFFF" : {
                         "default": {  
-                            "warning" : { "f":"abs({value}) > 1.0", "unit": "%" }, 
-                            "error" : { "f":"abs({value}) > 2.0", "unit": "%" },
+                            "warning" : { "f":"abs({diff}) > 1.0", "unit": "%" }, 
+                            "error" : { "f":"abs({diff}) > 2.0", "unit": "%" },
                             "check" : { "field": "diff", "query":"ME == 100" }
                         },
                         "MU_20": {
-                            "warning" : { "f":"abs({value}) > 1.0", "unit": "%" }, 
-                            "error" : { "f":"abs({value}) > 2.5", "unit": "%" },
+                            "warning" : { "f":"abs({diff}) > 1.0", "unit": "%" }, 
+                            "error" : { "f":"abs({diff}) > 2.5", "unit": "%" },
                             "check" : { "field": "diff", "query":"ME == 20" }
                         }, 
                         "MU_10": {
-                            "warning" : { "f":"abs({value}) > 1.0", "unit": "%" }, 
-                            "error" : { "f":"abs({value}) > 5.0", "unit": "%" },
+                            "warning" : { "f":"abs({diff}) > 1.0", "unit": "%" }, 
+                            "error" : { "f":"abs({diff}) > 5.0", "unit": "%" },
                             "check" : { "field": "diff",  "query":"ME == 10" }
                         }, 
                         "MU_5": {
-                            "warning" : { "f":"abs({value}) > 5.0", "unit": "%" }, 
-                            "error" : { "f":"abs({value}) > 10.0", "unit": "%" },
+                            "warning" : { "f":"abs({diff}) > 5.0", "unit": "%" }, 
+                            "error" : { "f":"abs({diff}) > 10.0", "unit": "%" },
                             "check" : { "field": "diff", "query":"ME == 5" }
                         },
                         "MU_1": {
-                            "warning" : { "f":"abs({value}) > 10", "unit": "%" }, 
-                            "error" : { "f":"abs({value}) > 50.0", "unit": "%" },
+                            "warning" : { "f":"abs({diff}) > 10", "unit": "%" }, 
+                            "error" : { "f":"abs({diff}) > 50.0", "unit": "%" },
                             "check" : { "field": "diff", "query":"ME == 1" }
                         } 
                     },
                     "10xFFF" : {
                         "default": {  
-                            "warning" : { "f":"abs({value}) > 1.0", "unit": "%" }, 
-                            "error" : { "f":"abs({value}) > 2.0", "unit": "%" },
+                            "warning" : { "f":"abs({diff}) > 1.0", "unit": "%" }, 
+                            "error" : { "f":"abs({diff}) > 2.0", "unit": "%" },
                             "check" : { "field": "diff", "query":"ME == 100" }
                         },
                         "MU_20": {
-                            "warning" : { "f":"abs({value}) > 1.0", "unit": "%" }, 
-                            "error" : { "f":"abs({value}) > 2.5", "unit": "%" },
+                            "warning" : { "f":"abs({diff}) > 1.0", "unit": "%" }, 
+                            "error" : { "f":"abs({diff}) > 2.5", "unit": "%" },
                             "check" : { "field": "diff", "query":"ME == 20" }
                         }, 
                         "MU_10": {
-                            "warning" : { "f":"abs({value}) > 2.5", "unit": "%" }, 
-                            "error" : { "f":"abs({value}) > 5.0", "unit": "%" },
+                            "warning" : { "f":"abs({diff}) > 2.5", "unit": "%" }, 
+                            "error" : { "f":"abs({diff}) > 5.0", "unit": "%" },
                             "check" : { "field": "diff",  "query":"ME == 10" }
                         }, 
                         "MU_5": {
-                            "warning" : { "f":"abs({value}) > 5.0", "unit": "%" }, 
-                            "error" : { "f":"abs({value}) > 10.0", "unit": "%" },
+                            "warning" : { "f":"abs({diff}) > 5.0", "unit": "%" }, 
+                            "error" : { "f":"abs({diff}) > 10.0", "unit": "%" },
                             "check" : { "field": "diff", "query":"ME == 5" }
                         },
                         "MU_1": {
-                            "warning" : { "f":"abs({value}) > 10", "unit": "%" }, 
-                            "error" : { "f":"abs({value}) > 50.0", "unit": "%" },
+                            "warning" : { "f":"abs({diff}) > 10", "unit": "%" }, 
+                            "error" : { "f":"abs({diff}) > 50.0", "unit": "%" },
                             "check" : { "field": "diff", "query":"ME == 1" }
                         } 
                     },
                     "15x" : {
                         "default": {  
-                            "warning" : { "f":"abs({value}) > 1.0", "unit": "%" }, 
-                            "error" : { "f":"abs({value}) > 2.0", "unit": "%" },
+                            "warning" : { "f":"abs({diff}) > 1.0", "unit": "%" }, 
+                            "error" : { "f":"abs({diff}) > 2.0", "unit": "%" },
                             "check" : { "field": "diff", "query":"ME == 100" }
                         },
                         "MU_20": {
-                            "warning" : { "f":"abs({value}) > 1.0", "unit": "%" }, 
-                            "error" : { "f":"abs({value}) > 2.5", "unit": "%" },
+                            "warning" : { "f":"abs({diff}) > 1.0", "unit": "%" }, 
+                            "error" : { "f":"abs({diff}) > 2.5", "unit": "%" },
                             "check" : { "field": "diff", "query":"ME == 20" }
                         }, 
                         "MU_10": {
-                            "warning" : { "f":"abs({value}) > 1.0", "unit": "%" }, 
-                            "error" : { "f":"abs({value}) > 5.0", "unit": "%" },
+                            "warning" : { "f":"abs({diff}) > 1.0", "unit": "%" }, 
+                            "error" : { "f":"abs({diff}) > 5.0", "unit": "%" },
                             "check" : { "field": "diff",  "query":"ME == 10" }
                         }, 
                         "MU_5": {
-                            "warning" : { "f":"abs({value}) > 5.0", "unit": "%" }, 
-                            "error" : { "f":"abs({value}) > 10.0", "unit": "%" },
+                            "warning" : { "f":"abs({diff}) > 5.0", "unit": "%" }, 
+                            "error" : { "f":"abs({diff}) > 10.0", "unit": "%" },
                             "check" : { "field": "diff", "query":"ME == 5" }
                         },
                         "MU_1": {
-                            "warning" : { "f":"abs({value}) > 10", "unit": "%" }, 
-                            "error" : { "f":"abs({value}) > 50.0", "unit": "%" },
+                            "warning" : { "f":"abs({diff}) > 10", "unit": "%" }, 
+                            "error" : { "f":"abs({diff}) > 50.0", "unit": "%" },
                             "check" : { "field": "diff", "query":"ME == 1" }
                         } 
                     }
                 }
             },
+            "doseArea": {
+                "X1": -1,
+                "X2": 1,
+                "Y1": -1,
+                "Y2": 1
+            },
+            "evaluation_replaces": {
+                "diff": "Abweichung"
+            },
+            "evaluation_table_pdf": {
+                "attrs": {
+                    "class": "layout-fill-width",
+                    "margin-top": "5mm"
+                },
+                "fields": [
+                    {
+                        "field": "Kennung",
+                        "format": "{0}",
+                        "label": "Kennung",
+                        "style": [
+                            [
+                                "text-align",
+                                "left"
+                            ]
+                        ]
+                    },
+                    {
+                        "field": "doserate",
+                        "format": "{0:1.1f}",
+                        "label": "Doserate"
+                    },
+                    {
+                        "field": "ME",
+                        "format": "{0:1.1f}",
+                        "label": "MU"
+                    },
+                    {
+                        "field": "fieldMeanDose",
+                        "format": "{0:.5f}",
+                        "label": "Messwert (KE)"
+                    },
+                    {
+                        "field": "diff",
+                        "format": "{0:.2f}",
+                        "label": "Abweichung [%]"
+                    },
+                    {
+                        "field": "diff_passed",
+                        "label": "Passed"
+                    }
+                ]
+            },
+            "manual": {
+                "attrs": {
+                    "class": "layout-fill-width",
+                    "margin-bottom": "5mm"
+                },
+                "filename": "qa/Field-MT-4_1_2.md"
+            },
+            "plotImage": {},
+            "plotImage_pdf": {},
+            "series_groupby": [
+                "day",
+                "SeriesNumber"
+            ],
+            "series_sort_values": [
+                "doserate",
+                "ME"
+            ],
+            "table_sort_values_ascending": [
+                true,
+                false
+            ],
+            "table_sort_values_by": [
+                "doserate",
+                "ME"
+            ],
+            "tag": "MT_4.1.2",
+            "tolerance_pdf": {},
             "Linac-1": {
                 "energyFields" : { "6x":10, "6xFFF":10, "10xFFF":10 }
             },
             "Linac-2": {
                 "energyFields" : { "6x":10, "6xFFF":10 }
             }
-        }        
+        }      
     }
 }

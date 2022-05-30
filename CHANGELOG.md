@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.1.8 / 2022-05-30
+- remove unused app/dicom.py
+- change config files - add units_TestsApp
+- change install-resources.py - add copy files to tests
+- many changes in isp/ files
+- many changes in tests/
+
 ## 0.1.7 / 2022-03-28
 - many changes in isp/ files
 - many changes in tests/

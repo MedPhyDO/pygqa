@@ -67,6 +67,13 @@ Beispiel::
         "_QA Linac2" : "Linac-2"
     }
 
+Für einen Aufruf von tests/test_app.py werden zusätzich die zu Testenden unit keys in `units_TestsApp:` angegeben.
+
+Beispiel::
+
+    "units_TestsApp": ["_QA Linac1","_QA Linac2"]
+
+
 ## Optionen `templates`
 
 Zusätzliche Templates für die PDF Erstellung. Default::

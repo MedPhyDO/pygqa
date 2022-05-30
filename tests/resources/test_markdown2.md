@@ -28,3 +28,5 @@ A truncated code block...
 
 1. Sororum munere lumina laevaque Aeoliis fer dumque
 2. Lanugine aera
+
+![Ubuntu]({{resources}}/ubuntu.svg)

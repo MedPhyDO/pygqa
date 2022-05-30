@@ -8,12 +8,14 @@
 
 import os
 from os import path as osp
+import shutil
 import requests
 from pygments.formatters import get_formatter_by_name
 
 ABSPATH = os.path.dirname( os.path.abspath( __file__) )
 resources_path =  osp.join( ABSPATH , "resources")
 vendor_path = osp.join( resources_path, "vendor")
+tests_vendor_path = osp.join( ABSPATH, "tests", "resources" ,"vendor")
 
 vendors = [
 	"bootstrap",
@@ -23,12 +25,6 @@ vendors = [
 	"material",
 	"paho-mqtt",
 	"pygment",
-	"ace",
-    "moment",
-    "w2ui",
-    "jquery.fancytree",
-    "jquery.fancytree/skin-lion",
-    "jquery.fancytree/skin-themeroller",
 ]
 
 resources = [
@@ -49,41 +45,6 @@ resources = [
     { "from":"https://cdnjs.cloudflare.com/ajax/libs/MaterialDesign-Webfont/5.8.55/fonts/materialdesignicons-webfont.ttf", "to":"fonts/materialdesignicons-webfont.ttf", "typ":"bin" },
     { "from":"https://cdnjs.cloudflare.com/ajax/libs/MaterialDesign-Webfont/5.8.55/fonts/materialdesignicons-webfont.woff", "to":"fonts/materialdesignicons-webfont.woff", "typ":"bin" },
     { "from":"https://cdnjs.cloudflare.com/ajax/libs/MaterialDesign-Webfont/5.8.55/fonts/materialdesignicons-webfont.woff2", "to":"fonts/materialdesignicons-webfont.woff2", "typ":"bin" },
-
-	# ace
-	{ "from":"https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.min.js", "to":"ace/ace-1.4.12.min.js", "typ":"text" },
-	{ "from":"https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/mode-text.min.js", "to":"ace/mode-text.js", "typ":"text" },
-	{ "from":"https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/mode-json.min.js", "to":"ace/mode-json.js", "typ":"text" },
-	{ "from":"https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/worker-json.min.js", "to":"ace/worker-json.js", "typ":"text" },
-	{ "from":"https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/mode-markdown.min.js", "to":"ace/mode-markdown.js", "typ":"text" },
-	{ "from":"https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/theme-twilight.min.js", "to":"ace/theme-twilight.js", "typ":"text" },
-	{ "from":"https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ext-beautify.min.js", "to":"ace/ext-beautify.min.js", "typ":"text" },
-	   
-    # moment
-    { "from":"https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment-with-locales.min.js", "to":"moment/moment-2.29.1.min.js", "typ":"text" },
-
-    # w2ui - 777ac78c6a49593ac93c37ca72336b19bfad70f2
-    
-    { "from":"https://raw.githubusercontent.com/vitmalina/w2ui/777ac78c6a49593ac93c37ca72336b19bfad70f2/dist/w2ui.min.js", "to":"w2ui/w2ui-777ac78.min.js", "typ":"text" },
-    { "from":"https://raw.githubusercontent.com/vitmalina/w2ui/777ac78c6a49593ac93c37ca72336b19bfad70f2/dist/w2ui.min.css", "to":"w2ui/w2ui-777ac78.min.css", "typ":"text" },
-
-    # w2ui 2.0
-    { "from":"https://raw.githubusercontent.com/vitmalina/w2ui/master/dist/w2ui.js", "to":"w2ui/w2ui-2.0.js", "typ":"text" },
-    { "from":"https://raw.githubusercontent.com/vitmalina/w2ui/master/dist/w2ui.css", "to":"w2ui/w2ui-2.0.css", "typ":"text" },    
-    
-    
-    # fancytree
-    { "from":"https://cdnjs.cloudflare.com/ajax/libs/jquery.fancytree/2.38.0/jquery.fancytree-all-deps.min.js", "to":"jquery.fancytree/fancytree-all-deps-2.38.0.min.js", "typ":"text" },  
-    # fancytree - themeroller
-    { "from":"https://cdnjs.cloudflare.com/ajax/libs/jquery.fancytree/2.38.0/skin-themeroller/ui.fancytree.min.css", "to":"jquery.fancytree/skin-themeroller/ui.fancytree-2.38.0.min.css", "typ":"text" },   
-    { "from":"https://cdnjs.cloudflare.com/ajax/libs/jquery.fancytree/2.38.0/skin-themeroller/icons.gif", "to":"jquery.fancytree/skin-themeroller/icons.gif", "typ":"bin" }, 
-    { "from":"https://cdnjs.cloudflare.com/ajax/libs/jquery.fancytree/2.38.0/skin-themeroller/vline.gif", "to":"jquery.fancytree/skin-themeroller/vline.gif", "typ":"bin" }, 
-    { "from":"https://cdnjs.cloudflare.com/ajax/libs/jquery.fancytree/2.38.0/skin-themeroller/loading.gif", "to":"jquery.fancytree/skin-themeroller/loading.gif", "typ":"bin" }, 
-    # fancytree - skin-lion
-    { "from":"https://cdnjs.cloudflare.com/ajax/libs/jquery.fancytree/2.38.0/skin-lion/ui.fancytree.min.css", "to":"jquery.fancytree/skin-lion/ui.fancytree-2.38.0.min.css", "typ":"text" }, 
-    { "from":"https://cdnjs.cloudflare.com/ajax/libs/jquery.fancytree/2.38.0/skin-lion/icons.gif", "to":"jquery.fancytree/skin-lion/icons.gif", "typ":"bin" }, 
-    { "from":"https://cdnjs.cloudflare.com/ajax/libs/jquery.fancytree/2.38.0/skin-lion/vline.gif", "to":"jquery.fancytree/skin-lion/vline.gif", "typ":"bin" }, 
-    { "from":"https://cdnjs.cloudflare.com/ajax/libs/jquery.fancytree/2.38.0/skin-lion/loading.gif", "to":"jquery.fancytree/skin-lion/loading.gif", "typ":"bin" }, 
 
 ]
 
@@ -129,12 +90,12 @@ for resource in resources:
         except IOError as e:
             print("Unable to create file.", e)
 
-#    
+#
 # get colors from materialize
 #
 print("get named-colors from materialize:", materialize["from"])
 response = requests.get( materialize["from"] )
-# 
+#
 pos = response.text.find( materialize["before"] )
 # print( response.text[ : pos ] )
 try:
@@ -144,34 +105,69 @@ try:
 except IOError as e:
     print("Unable to create file.", e)
 
-''' 
+'''
 ..TODO:: material-color to vendor/material/
- 
+
     https://github.com/mrmlnc/material-color
 '''
- 
-#    
-# create pygments css rules for codehilite    
+
+#
+# create pygments css rules for codehilite
 #
 print("create pygments/codehilite.css with pygments")
 fmter = get_formatter_by_name("html", style="default")
 css_content = fmter.get_style_defs( ".{}".format(pygments["class"]) )
 try:
-    with open( osp.join(vendor_path, pygments["to"]), "w") as f:   
+    with open( osp.join(vendor_path, pygments["to"]), "w") as f:
         f.write(css_content)
 except IOError as e:
     print("Unable to create file.", e)
 
+
 #
-# print result 
+# create vendor in tests/recources
+# 
+print("create tests/resources/vendor and copy needed dirs")
+if not os.path.exists( tests_vendor_path ):
+    try:
+        os.makedirs( tests_vendor_path )
+    except IOError as e:
+        errors += 1
+        print("Unable to create dir.", e)
+
+#
+# copy needed vendor dirs to tests/recources/vendor
+#
+
+sub_dirs = [
+    "fonts",
+    "material",
+    "pygment"
+]
+
+for sub_dir in sub_dirs:
+    src = osp.join(vendor_path, sub_dir)
+    dst = osp.join(tests_vendor_path, sub_dir)
+   
+    if os.path.exists( dst ):
+        shutil.rmtree( dst )
+        
+    try:
+        shutil.copytree(src, dst)
+    except IOError as e:
+        errors += 1
+        print("Unable to copy dir {}.".format( dst ), e)
+
+#
+# print result
 #
 if errors > 0:
     print( "Installation error." )
-    
+
 else:
     print('''
     Run as sudo to copy materialdesignicons_webfont to your system fonts:
-    
+
 > sudo cp ./resources/vendor/fonts/materialdesignicons-webfont.ttf /usr/share/fonts/truetype/materialdesignicons_webfont.ttf
 > sudo chmod 644 /usr/share/fonts/truetype/materialdesignicons_webfont.ttf
 ''')

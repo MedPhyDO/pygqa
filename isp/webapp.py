@@ -10,6 +10,18 @@ webapp
 CHANGELOG
 =========
 
+0.1.6 / 2022-05-16
+------------------
+- add scheme parameter to server.webserver 
+
+0.1.5 / 2022-04-04
+------------------
+- add file route for query with parameter vuejs and change jinja start / end to {! !} for this and vuejs files
+
+0.1.4 / 2022-04-04
+------------------
+- add file route for doc/ query with parameter raw or raw.vue
+
 0.1.3 / 2022-03-28
 ------------------
 - add route for tests
@@ -34,7 +46,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R. Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 __status__ = "Prototype"
 
 import uuid
@@ -50,6 +62,7 @@ from flask import render_template, request
 from flask_cors import CORS
 from flask_swagger_ui import get_swaggerui_blueprint
 from flask.json import JSONEncoder
+import connexion
 
 import logging
 logger = logging.getLogger( "MQTT" )
@@ -319,7 +332,8 @@ class ispBaseWebApp():
             if self._config.get("server.webserver.TESTING"):
                 mode = "TESTING"
 
-            self.apiurl = "http://{}:{}{}".format(
+            self.apiurl = "{}://{}:{}{}".format(
+                self._config.get("server.webserver.scheme", "http"),
                 self._config.get("server.webserver.host"),
                 self._config.get("server.webserver.port"),
                 self._config.get("server.api.prefix", "")
@@ -632,6 +646,10 @@ class ispBaseWebApp():
 
         # alles normalerweise aus ui verwenden
         root = self._config.get("server.webserver.ui", "", replaceVariables = True)
+  
+        # connexion verwendet FirstValueURIParser collectionFormat: csv
+        # ?letters=a,b,c&letters=d,e,f wird letters = ['a', 'b', 'c']
+        params = self.parseRequestParams( connexion.request.args.copy() ) 
 
         if filepath[:10] == "resources/":
             root = self._config.get("server.webserver.resources", "", replaceVariables = True)
@@ -645,15 +663,17 @@ class ispBaseWebApp():
         elif filepath[:12] == "dbadminframe":
             return self.routeIFrame( "/dbadmin" )
         elif filepath[:4] == "docs":
-            return self.routeDocs( filepath )
+            if "raw" in params or "raw.vue" in params:
+                return self.routeFile( filepath, osp.join( self._config.get( "BASE_DIR", "docs")  ) )
+            else:
+                return self.routeDocs( filepath )
         elif filepath[:8] == "coverage":
             return self.routeCoverage( filepath )
         elif filepath[:7] == "render/":
             return self.routeRender( filepath[7:] )
-        elif filepath[-4:] == ".vue" or filepath[:6] == "views/":
+        elif "vuejs" in params or filepath[-4:] == ".vue" or filepath[:6] == "views/" :
             self.default_header = {'Content-Type': 'application/javascript; charset=utf-8'}
-            root = self._config.get("server.webserver.ui", "", replaceVariables = True)
-            #return self.routeFile( filepath, root )
+            return self.routeRender( filepath, True )
         elif filepath[:9] == "unittest_":
             # Spezielle render aufruf für unittest
             return self.routeRender( filepath )
@@ -665,7 +685,7 @@ class ispBaseWebApp():
             # alles andere - ohne Angaben index aufrufen
             if filepath == "" or filepath == "index.html" or filepath == "index.phtml":
                 filepath = "index"
-                return self.routeRender( filepath )
+                return self.routeRender( filepath  )
 
         return self.routeFile( filepath, root )
 
@@ -686,43 +706,43 @@ class ispBaseWebApp():
             Inhalt der geladenen Datei
 
         """
-        # sonst nur die Datei laden
-                 
-    
+   
         try:
             _filepath = osp.join( root, filepath ) # .format( **{"BASE_DIR": self._config.BASE_DIR} )
             output = send_file( _filepath )
         except:
-            output = "<h1>Datei {} wurde nicht gefunden</h1>".format( filepath )
-            #print("routeFile: filepath error", _filepath)
+            output = "<h1>Datei '{}' wurde nicht gefunden</h1>".format( filepath )
             self.status_code = 404
             pass
         return output
 
-    def routeRender( self, filepath:str="" ):
+    def routeRender( self, filepath:str="", is_vue:bool=False ):
         """Ein Template in ui oder template_folder rendern.
 
+        if is_vue 
+        
         Parameters
         ----------
         filepath : str, optional
             file und path einer datei aus ui. The default is "".
-
+        is_vue: bool,optional
+            Render with jinja start / end {! / !} The default is false.
         Returns
         -------
         output : str
             Das gerenderte Template.
 
+
         """
 
         # .vue as default in views
-        if filepath[-4:] == ".vue" or filepath[:6] == "views/":
+        if is_vue or filepath[-4:] == ".vue" or filepath[:6] == "views/":
             if filepath.find(".vue") == -1 and filepath.find(".js") == -1:
                 filepath = "{}.vue".format( filepath )
         else:
             # otherwise default is .phtml
             if filepath.find(".phtml") == -1:
                 filepath = "{}.phtml".format( filepath )
-
 
         uuidstr = str( uuid.uuid1() )
         params = {
@@ -731,22 +751,42 @@ class ispBaseWebApp():
         }
 
         # defaults mit requestParams überschreiben
-        import connexion
+  
         # connexion verwendet FirstValueURIParser collectionFormat: csv
         # ?letters=a,b,c&letters=d,e,f wird letters = ['a', 'b', 'c']
         params.update( self.parseRequestParams( connexion.request.args.copy() ) )
 
         # value bestimmen
         value = params.get("value", None )
-
+        variables = self._config.get("variables", {}, replaceVariables=True ).toDict()
+        
+        v = {
+            "params": params,
+            "value": value,
+            "id": params["id"],
+            "uuid": uuidstr,
+            "variables": variables
+        }
+        
+        if is_vue:
+            
+            # change variable_start_string and variable_end_string for vue files
+            variable_start_string = self.app.jinja_env.variable_start_string
+            variable_end_string = self.app.jinja_env.variable_end_string
+            
+            self.app.jinja_env.variable_start_string = "{!"
+            self.app.jinja_env.variable_end_string = "!}"
+        
         try:
             output = render_template(
                 filepath,
+                v = v,
                 params = json.dumps( params ),
                 value = value,
                 id = params["id"],
                 uuid = uuidstr,
-                **self._config.get("variables", {} ).toDict()
+                **self._config.get("variables", {}, replaceVariables=True ).toDict()
+                
             )
         except Exception as err:
 
@@ -755,7 +795,9 @@ class ispBaseWebApp():
             output = "<h1>Das Template {} wurde nicht gefunden oder ein parser error [ {} ] liegt vor.</h1>".format( filepath, err )
             self.status_code = 404
             pass
-
+        if is_vue:
+            self.app.jinja_env.variable_start_string = variable_start_string 
+            self.app.jinja_env.variable_end_string = variable_end_string 
         return output
 
     def routeIFrame( self, src:str="" ):
@@ -789,10 +831,11 @@ class ispBaseWebApp():
             /docs/rebuild - Dokumentation komplett erneuern (ui-docs)
 
         """
+        
         # wenn nur docs angegeben wurde iframe erstellen
         if len(filepath) == 4:
             return '<div class="iframe-container overflow-hidden flex-1"><iframe src="/docs/index.html" ></iframe></div>'
-
+        
         # Ausführungspfad für docs festlegen
         docs_root = osp.join( self._config.get( "BASE_DIR", "") , '.docs' )
         docs_path = docs_root

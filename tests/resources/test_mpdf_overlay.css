@@ -1,0 +1,79 @@
+/*
+Overlay (header, footer) styles für mpdf 
+In mpdf wird height noch eingefügt
+*/
+header {
+    position: fixed;
+    top: 0;
+    left: 0;
+   
+    width: 100%;
+    background-color: white;
+}
+footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background-color: white;
+}
+.isp-header {
+    width:100%;
+    border :0;
+    border-bottom: 0.1px solid black;
+    padding:0;
+    margin: 0;
+}
+.isp-header td {
+	padding: 0;
+    border: 0;
+    margin: 0;
+}
+.isp-header .header_1 {
+	width: 24%
+}
+.isp-header .header_2 {
+	text-align: right;
+    font-size: 8pt; 
+    font-weight: bold;
+}
+.isp-header .logo{
+    border: 0;
+    padding:0;
+    margin: 0;
+    height:100%
+}
+.isp-footer {
+    width:100%;
+    border: 0;
+    border-top: 0.1px solid black;        
+    padding:0;
+    margin: 0;
+}
+.isp-footer td {
+	padding: 1px 3px 0px 3px;
+    border:0;
+    margin:0;
+}
+.isp-footer .footer_1 {
+	
+}
+.isp-footer .footer_2 {
+	width: 24%
+}
+.isp-footer .footer_3 {
+	width: 20%;
+}
+.isp-footer .footer_4 {
+	width: 10%;
+	text-align: right;
+}
+.isp-footer .name {
+    font-size: 8pt; 
+}
+.isp-footer .text {
+	font-size: 6pt; 
+}
+.isp-footer .label {
+	width: 50mm; 
+}

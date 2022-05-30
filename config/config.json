@@ -37,7 +37,7 @@
         "main": ["gqa"],
         "gqa" : {
             "name" : "gqa.json",
-            "connection": "sqlite:///{{BASE_DIR}}/gqa.db"
+            "connection": "sqlite:///{{BASE_DIR}}/files/pygqa.db"
         }
     },
     "dicom": {
@@ -52,6 +52,7 @@
         }
     },
     "resultsPath" : "files/results",
+    "units_TestsApp": ["_QA Linac1", "_QA Linac2"],
     "units": {
         "_QA Linac1" : "Linac-1",
         "_QA Linac2" : "Linac-2"
@@ -68,9 +69,9 @@
         "PDF-MT-Titel": "GQA Monatstest - {{testTag}} - {{unit}} - {{energy}}",
         "PDF-MT-Betreff": "für: {{'%04d' % AcquisitionYear}}/{{ '%02d' % AcquisitionMonth}}"
     },
-    "version": "0.1.0",
+    "version": "0.1.8",
     "variables" : {
-        "Version" : "0.1.0",
+        "Version" : "0.1.8",
         "Klinik" : "",
         "Abteilung" : "",
         "logo": "Logo.png"

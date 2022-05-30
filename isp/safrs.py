@@ -48,6 +48,14 @@ examples ::
 CHANGELOG
 =========
 
+0.1.6 / 2022-05-27
+- change wrapped_fn() modify error Message for jsonify()
+
+0.1.5 / 2022-05-13
+- modify RQLQuery._rql_cmp() add Check if value is also a database field
+- modify groupsplit to avoid problems with diffrent sql dialects
+- filter() function revised and expanded
+
 0.1.4 / 2022-03-28
 - remove error check in wrapped_fn() use original abort()
 - add check for empty String in iso2date()
@@ -93,10 +101,13 @@ from flask_sqlalchemy import SQLAlchemy
 from flask import Response, request, current_app
 
 import sqlalchemy
-from sqlalchemy import func, text # , case, or_, inspect
-from sqlalchemy.orm import sessionmaker, scoped_session
+from sqlalchemy import func, text, or_ # , case, or_, inspect
+#from sqlalchemy.orm import InstrumentedAttribute
+from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.orm import Query as BaseQuery
 import sqlalchemy.types as types
+
+
 
 from safrs import SAFRSBase  # db Mixin
 from safrs.config import get_request_param
@@ -181,11 +192,12 @@ def iso2date( value:str=None, toDate:bool=False ):
                     pass
         
     else:
-        result = value
+        if not value == "":
+            result = value
         
     if result and toDate:
         result = result.date()
-            
+        
     return result
 
 
@@ -199,6 +211,7 @@ class isoDateType( types.TypeDecorator ):
     """
 
     impl = types.Date
+    cache_ok = False
     
     @property
     def python_type(self):
@@ -220,6 +233,7 @@ class isoDateTimeType( types.TypeDecorator ):
     """
 
     impl = types.DateTime
+    cache_ok = False
     
     @property
     def python_type(self):
@@ -284,7 +298,25 @@ class RQLQuery(BaseQuery, RQLQueryMixIn):
         self._rql_walk(self.rql_parsed)
 
         return self._rql_where_clause
+    
+    def _rql_cmp(self, args, op):
+        attr, value = args
+        
+        attr = self._rql_attr(attr)
+        # check if value is also a database field
+        get_rql_value = True
+        try:
+            _value = self._rql_attr(value)
+            if isinstance(_value, InstrumentedAttribute ):
+                value = _value
+                get_rql_value = False
+        except:
+            pass
 
+        if get_rql_value:
+            value = self._rql_value(value, attr)
+            
+        return op(attr, value)
 
 def ispSAFRS_decorator( fn ):
     """Prepare and execute API calls.
@@ -565,7 +597,7 @@ def ispSAFRS_decorator( fn ):
                 result = jsonify( result )
             except Exception as exc:  # pragma: no cover
                 status_code = getattr(exc, "status_code", 500)
-                message = getattr(exc, "message", "unknown error")
+                message = getattr(exc, "message", "unknown error in wrapped_fn - jsonify : {}".format( str(exc) ))
                
                 safrs_obj.appError(
                         "{} - {}".format( func_name, message ),
@@ -1088,64 +1120,127 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         return response
 
     @classmethod
-    def filter(cls, filter ):
+    def filter(cls, qs, query=None):
         """Filterangabe im rql format ausgewerten.
 
-        immer wenn filter= angegeben wurde wird diese Funktion aufgerufen
-        es wird eine komplexe Filterangabe im rql format ausgewertet
-
+        whenever filter is specified, this function is called
+        
+        - if first letter is [ use original _s_filter 
+        - if first letter is * use like filtering over all fields 
+        - otherwise use rql filtering
+        
+        - filter=[{"name":"string","op":"eq","val":"one"}]
+        - filter[name]=one
+        - filter=eq(string,one)       
+        
+        use multiple and queries seperated by |. A query array [] must always be first
+        
         Parameters
         ----------
-        filter : str
+        qs : str
             RQL Querystring
 
         Returns
         -------
         query
-            die query mit zusätzlichem Filter
+            cls._s_query object with added filter
 
         """
-        # interne Filterfunktion aufrufen
-        return cls._int_filter( cls.query, filter )
+        
+        if not query:
+            query = cls._s_query
+            
+        cls.appInfo("filter", qs, area="filter" )
+        filters = qs.split("|")
+        
+        query = cls._s_query
 
-
+        for qf in filters:
+            if qf[0] == "[":
+                #cls._s_query = query
+                query = cls._s_filter( qf )
+            elif qf[0] == "*":            
+                query = cls._int_search( qf[1:], query )
+            else:
+                query = cls._int_rqlfilter( qf, query)
+            
+        full_query = query.statement.compile( compile_kwargs={"literal_binds": True} ) 
+            
+        cls.appInfo( "filter", {
+            "query" : str(full_query)
+        }, area="filter" )
+        
+        return query
+    
     @classmethod
-    def _int_filter(cls, query, qs:str="" ):
-        """Die in qs angegebene RQL Filterbedingung auswerten und an query anhängen.
+    def _int_search(cls, search:str="", query=None ):
+        """Use search value as like filter for all columns.
 
         Parameters
         ----------
-        query : obj
-            Das bisherige query Object
+        search : str, optional
+            Value to search. The default is "".
+
+        Returns
+        -------
+        query
+            cls._s_query object with added filter
+
+        """
+        
+        if not query:
+            query = cls._s_query
+        
+        column_names = cls._s_column_names
+        f  = []
+        
+        for name in column_names:
+            column = getattr(cls, name, None )
+            f.append( getattr(cls, name).ilike(f'%{search}%') )
+                            
+        condition = or_(*f)
+        query = query.filter( condition )
+        cls._log_query( query )
+        return query
+        
+    
+    @classmethod
+    def _int_rqlfilter(cls, qs:str="", query=None ):
+        """Evaluate the RQL filter condition given in qs and append it to query.
+
+        Parameters
+        ----------
         qs : str, optional
             RQL Querystring. The default is "".
 
         Returns
         -------
         query
-            die query mit zusätzlichem Filter
+            cls._s_query object with added filter
 
         """
         
         cls.appInfo("filter", qs, area="rql" )
         
-        # RQLQuery bereitstellen die eigene Klasse muss mit _set_entities angegeben werden
+        if not query:
+            query = cls._s_query
+
+        # Provide RQLQuery. Your own class must be specified with _set_entities
         rql = RQLQuery( cls )
         rql._set_entities( cls )
        
-        # rql_filter auswerten
         try:
             rql.rql_parse( qs )
         except NotImplementedError as exc:
-            cls.appError("_int_filter", "NotImplementedError: {}".format( exc ) )
+            cls.appError("_int_rqlfilter", "NotImplementedError: {}".format( exc ) )
             query = query.filter( text("1=2") )
             return query
         except Exception as exc:
-            cls.appError("_int_filter", "rql-error: {}".format( exc ) )
+            cls.appError("_int_rqlfilter", "rql-error: {}".format( exc ) )
             query = query.filter( text("1=2") )
             return query
 
-        # die Bedingung an die query anfügen
+        # append condition to query
         if rql._rql_where_clause is not None:
             query = query.filter( rql._rql_where_clause )
             cls.appInfo("_rql_where_clause", {
@@ -1154,17 +1249,16 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
             }, area="rql" )
 
         return query
+    
 
     @classmethod
-    def _int_groupby(cls, query, params:dict={} ):
+    def _int_groupby(cls, params:dict={}, query=None ):
         """Internes durchführen einer group query
 
         Bei einer Angabe von fields werden nur diese für den select bereich verwendet
 
         Parameters
         ----------
-        query : obj
-            Das bisherige query Object
         params : dict, optional
             The default is::
 
@@ -1173,7 +1267,9 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
                 "fields": { "<tablename>": ["field1","FieldX"] },
                 "labels": { "<tablename>.<fieldname1>": [ "<label1>","<label2>" ], ... }
             }
-
+        query : obj
+            the query object. The default is: None (use _s_query)
+            
         Returns
         -------
         query : query
@@ -1201,6 +1297,9 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
 
         _params.update( params )
 
+        if not query:
+            query = cls._s_query
+            
         #
         cls.appInfo("_int_groupby", _params, area="query" )
 
@@ -1274,14 +1373,13 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         return query, group_entities, ok
     
     @classmethod
-    def _int_groupby_query(cls, query, params:dict={} ):
+    def _int_groupby_query(cls, params:dict={}, query=None ):
         """Führt eine group query aus und gibt das Abfrage Ergebnis zurück.
 
        
         Parameters
         ----------
-        query : obj
-            Das bisherige query Object
+    
         params : dict, optional
             The default is::
 
@@ -1292,6 +1390,9 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
                     "filter": ""
                 }
 
+        query : obj
+            the query object. The default is: None (use _s_query)
+            
         Returns
         -------
         result : dict
@@ -1305,22 +1406,25 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         }
         _params.update( params )
 
-        query, group_entities, ok = cls._int_groupby( query, _params )
+        if not query:
+            query = cls._s_query
+ 
+        # filter berücksichtigen
+        if 'filter' in params and params["filter"] and params["filter"] != "":
+            query = cls.filter( str(_params["filter"]), query )
+            
+        query, group_entities, ok = cls._int_groupby( _params, query )
 
         if ok == False: # pragma: no cover
             _result = {
                 'errors' : [ "Fehler in _int_group" ]
             }
             return _result
+        
         # zusätzlich noch die Anzahl mitgeben
         query = query.add_columns( func.count( cls.id ).label('hasChildren')  )
 
-        # filter berücksichtigen
-        if not _params["filter"] == "":
-            query = cls._int_filter( query, _params["filter"] )
-        
-        # full_query = query.statement.compile( compile_kwargs={"literal_binds": True} ) 
-        cls.appInfo( "groupsplit", {
+        cls.appInfo( "groupby", {
             "query": str(query)
         })
         # die query durchführen
@@ -1444,7 +1548,7 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
             "filter" : kwargs.get('filter', "")
         }
 
-        _result = cls._int_groupby_query( cls._s_query, args )
+        _result = cls._int_groupby_query( args, cls._s_query )
         return cls._int_json_response( _result )
 
     @classmethod
@@ -1480,11 +1584,6 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         """
         _result = []
          
-        con = cls._get_connection()
-        engine = sqlalchemy.create_engine(con)
-        Session = scoped_session(sessionmaker(bind=engine))
-        db_session = Session()
-        
         cls.appInfo( "kwargs", kwargs )
         
         field = kwargs["group"] 
@@ -1494,64 +1593,47 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         column = getattr(cls, field, None )
         delimiter = kwargs[ 'delimiter' ] or " "
        
-        # TODO: sub_query erstellung besser lösen 
+        query = cls._s_query
         if kwargs[ 'filter' ]:
-            sub_query = text("""
-                '',{field}||'{delimiter}'
-            """.format( **{"field":str(column), "delimiter":delimiter, "table": cls.__table__  } ) ) 
-        else:
-             # withot filter set table in query
-           sub_query = text("""
-                '',{field}||'{delimiter}' FROM {table}
-            """.format( **{"field": str(column), "delimiter":delimiter, "table": cls.__table__  } ) ) 
+            query = cls.filter( str(kwargs[ 'filter' ]) )
         
-        if sqlalchemy.__version__ == '1.3.23':
-             query = cls.query.with_entities( str(sub_query ) ) # py37
-        else:
-            query = cls.query.with_entities( text(str(sub_query )) ) # py38
+        # add empty field filter
+        # REMARK: Changed in version 1.4: 
+        # The is_not() operator is renamed from isnot() in previous releases. 
+        # The previous name remains available for backwards compatibility.
+        query = query.filter( 
+            column.isnot(None),
+            column != ''
+        )
+        query = query.with_entities( column.label('tag') )
+
+        full_query = query.statement.compile( compile_kwargs={"literal_binds": True} ) 
+                
+        # use pandas instead of 'WITH RECURSIVE' to avoid problems with diffrent sql dialects
+        import pandas as pd
+        con = cls._get_connection()
+        df = pd.read_sql_query(sql=full_query, con=con )
+
+        # series tag, count sort by tag
+        df = df["tag"].apply(lambda x: pd.value_counts(x.split(delimiter))).sum(axis = 0).sort_index()
+ 
+        cls.appInfo( "groupsplit", {
+            "query" : str(full_query)
+        } )
         
-        if kwargs[ 'filter' ]:
-            query = cls._int_filter(query, kwargs[ 'filter' ] )
-        
-        full_sub_query = query.statement.compile( compile_kwargs={"literal_binds": True} ) 
-        
-        
-        # https://stackoverflow.com/questions/31620469/sqlalchemy-select-with-clause-statement-pgsql
-        statement = text("""
-            WITH split(word, str) AS (
-            	{qs}
-                UNION ALL SELECT
-                    substr(str, 0, instr(str, '{delimiter}')),
-                    substr(str, instr(str, '{delimiter}')+1)
-                FROM split WHERE str!=''
-            ) 
-            SELECT word as {field}, count(*) AS hasChildren FROM split WHERE word!='' GROUP BY word                          
-        """.format( **{ "qs":str(full_sub_query), "field": field, "delimiter":delimiter } ) )
-            
-        #print( "statement", str(statement) )
-        
-        info = {
-            "sub_query" : str(full_sub_query),
-            "query" : str(statement)
-        }
-        query_result = []
-        try:
-            query_result = db_session.execute( statement )
-            cls.appInfo( "groupsplit", info )
-        except Exception as exc:       
-            info[ {"Exception": exc } ]
-            cls.appError( "groupsplit", info )
-        
-        
-        for row in query_result:
-            #print( dict(row) )
+        for f, c in df.items():
+            r = {
+                "id": f,
+                "hasChildren": int(c)
+            }
+            r[field] = f
             _result.append( {
-                "attributes":  dict(row), #row._asdict(),
-                "id": None,
+                "attributes": r,
+                "id": f,
                 "type": cls.__tablename__
             })
-        
-        return cls._int_json_response( { "data" : _result } )
+
+        return cls._int_json_response( { "data" : _result  } )
         
     @classmethod
     @jsonapi_rpc( http_methods=['GET'] )

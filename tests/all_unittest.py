@@ -18,12 +18,12 @@ Bei Fehlern in den Überprüfungen steht am Ende::
 
 from os import path as osp
 
-# Module auch von der Konsole erreichbar machen 
-ABSPATH = osp.dirname( osp.abspath( __file__) )
-path =  osp.join( ABSPATH , "..")
+import site
 
-import sys
-sys.path.insert(0, path)
+# alle Module auch von der Konsole erreichbar machen 
+ABSPATH = osp.dirname( osp.abspath( __file__) )
+base_path =  osp.join( ABSPATH , "..")
+site.addsitedir(base_path)
 
 # Coverage am Anfang initialisieren damit alles berücksichtigt wird
 all_cov = None
@@ -52,8 +52,7 @@ if runCoverage:
        "if __name__ == .__main__.:"
     ]
     all_cov.config.set_option("report:exclude_lines", options)
-    
-    all_cov.config.set_option("html:directory", osp.join( path, ".htmlcov" ) )
+    all_cov.config.set_option("html:directory", osp.join( base_path, ".htmlcov" ) )
     all_cov.config.set_option("html:extra_css", osp.join( ABSPATH, "resources", "coverage.css" ) )
 
     all_cov.start()

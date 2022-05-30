@@ -31,6 +31,11 @@ logging level:
 CHANGELOG
 =========
 
+0.1.2 / 2022-05-16
+------------------
+- add scheme parameter to server.webserver 
+- remove webserver from use_as_variables
+
 0.1.1 / 2022-03-28
 ------------------
 - add jinja Filter: fromisoformat, datetimeformat and jsondumps
@@ -70,6 +75,7 @@ from isp.mqtt import MQTTclass
 default_config = {
     "server" : {
         "webserver" : {
+            "scheme": "http",
             "host": "127.0.0.1",
             "port": 8085,
             "name": "webapp",
@@ -92,7 +98,7 @@ default_config = {
         }
     },
     "use_as_variables":{
-        "webserver" : "server.webserver",
+     #   "webserver" : "server.webserver",
         "api" : "server.api",
         "mqtt" : "server.mqtt",
         "title" : "server.webserver.title",
@@ -344,7 +350,8 @@ class ispConfig( object ):
 
         variables["BASE_DIR"] = self._basedir
         variables["version"] = self.get( "version", __version__)
-        variables["serverHost"] = "{}:{}".format(
+        variables["serverHost"] = "{}://{}:{}".format(
+            self.get("server.webserver.scheme", ""),
             self.get("server.webserver.host", ""),
             self.get("server.webserver.port", "")
         )

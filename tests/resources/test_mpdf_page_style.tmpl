@@ -1,0 +1,26 @@
+@page {
+    size: {{ page.size }}; 
+    margin: {{(page.top+page.header+page["header-margin"])|int}}mm {{page.right}}mm {{(page.bottom+page.footer+page["footer-margin"])|int}}mm {{page.left}}mm;
+}
+
+@media screen {
+    header: {
+        height: {{(page.header+page["header-margin"])|int}}mm;
+    }
+    .pageContent{
+        top: {{(page.header+page["header-margin"])|int}}mm;
+        position: relative;
+        display: flex;
+        flex-wrap: wrap;
+    }
+    
+    .page_break{
+        border: 1px solid silver !important;
+        top: {{(page.header+page["header-margin"])|int}}mm;
+        position: relative;
+    }
+    .row, .column, .flex {
+      display: flex;
+      flex-wrap: wrap;
+    }
+}

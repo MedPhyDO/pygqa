@@ -1,0 +1,42 @@
+[
+    {
+        "dbtests_id": 1,
+        "id": 1,
+        "rdata": null,
+        "rdate": null,
+        "rinteger": 11,
+        "rstring": "r_eins"
+    },
+    {
+        "dbtests_id": 2,
+        "id": 2,
+        "rdata": null,
+        "rdate": null,
+        "rinteger": 12,
+        "rstring": "r_zwei"
+    },
+    {
+        "dbtests_id": 3,
+        "id": 3,
+        "rdata": null,
+        "rdate": null,
+        "rinteger": 13,
+        "rstring": "r_drei"
+    },
+    {
+        "dbtests_id": 4,
+        "id": 4,
+        "rdata": null,
+        "rdate": null,
+        "rinteger": 14,
+        "rstring": "r_vier"
+    },
+    {
+        "dbtests_id": 5,
+        "id": 5,
+        "rdata": null,
+        "rdate": null,
+        "rinteger": 15,
+        "rstring": "r_fünf"
+    }
+]
