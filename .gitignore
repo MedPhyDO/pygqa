@@ -141,5 +141,13 @@ cython_debug/
 .docs/
 .htmlcov/
 tests/files/
+tests/resources/check/
+tests/resources/vendor/
 resources/vendor/
+Klinikum_Dortmund_Logo.svg
+files/DICOM/
+files/results/
+pygqa.db
+
+config-09999999.json
 
