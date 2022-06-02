@@ -119,6 +119,19 @@ class testCaseBase(unittest.TestCase):
             except IOError as e:
                  print("Unable to create dir.", e)
 
+        test_writable = True
+        if not os.access(test_dir, os.W_OK):
+            test_writable = False
+            msg = 'testbase.check_pdf_data: keine Schreibrechte auf: {}'.format( test_dir )
+            print(  msg )
+            
+        check_writable = True
+        if not os.access(check_dir, os.W_OK):
+            check_writable = False
+            msg = 'testbase.check_pdf_data: keine Schreibrechte auf: {}'.format( check_dir )
+            print(  msg )
+            
+        
         # Dateiname für den Inhalt festlegen
         json_test_name = osp.join( test_dir, data["pdf_filename"] ) + ".json"
         json_check_name = osp.join( check_dir, data["pdf_filename"] ) + ".json"
@@ -129,7 +142,8 @@ class testCaseBase(unittest.TestCase):
         png_new_name = osp.splitext(data["pdf_filepath"] )[0] + '.png'
         
         # create preview image from pdf
-        self.convert_to_png( data["pdf_filepath"] )
+        if test_writable:
+            self.convert_to_png( data["pdf_filepath"] )
                
         # changeback resources path in content
         if "_variables" in data:
@@ -139,30 +153,33 @@ class testCaseBase(unittest.TestCase):
             json_data = json_data.replace( data["_variables"]["templates"], "{{templates}}")
             data["content"] = json.loads(json_data)
         
+        
         # immer den content in unittest ablegen
-        with open(json_test_name, "w" ) as json_file:
-            json.dump( data["content"] , json_file, indent=2 )
+        if test_writable:
+            with open(json_test_name, "w" ) as json_file:
+                json.dump( data["content"] , json_file, indent=2 )
+        
+        if check_writable:
+            # beim erstenmal content nach check kopieren
+            if not os.path.exists( json_check_name ):
+                try:
+                    copyfile(json_test_name, json_check_name)
+                except IOError as e:
+                    print("Unable to copy file.", e)
 
-        # beim erstenmal content nach check kopieren
-        if not os.path.exists( json_check_name ):
-            try:
-                copyfile(json_test_name, json_check_name)
-            except IOError as e:
-                print("Unable to copy file.", e)
-
-        # beim erstenmal pdf nach check kopieren
-        if not os.path.exists( pdf_check_name ):
-            try:
-                copyfile(data["pdf_filepath"], pdf_check_name)
-            except IOError as e:
-                print("Unable to copy file.", e)
-
-        # beim erstenmal png nach check kopieren
-        if not os.path.exists( png_check_name ):
-            try:
-                copyfile(png_new_name, png_check_name)
-            except IOError as e:
-                print("Unable to copy file.", e)
+            # beim erstenmal pdf nach check kopieren
+            if not os.path.exists( pdf_check_name ):
+                try:
+                    copyfile(data["pdf_filepath"], pdf_check_name)
+                except IOError as e:
+                    print("Unable to copy file.", e)
+    
+            # beim erstenmal png nach check kopieren
+            if not os.path.exists( png_check_name ):
+                try:
+                    copyfile(png_new_name, png_check_name)
+                except IOError as e:
+                    print("Unable to copy file.", e)
                 
         #
         # Überprüfungen

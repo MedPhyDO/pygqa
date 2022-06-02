@@ -10,6 +10,10 @@ There are two types of AEs:
 CHANGELOG
 =========
 
+0.1.4 / 2002-06-01
+------------------
+- change __init__() remove app.Error() call
+
 0.1.2 / 2022-03-28
 ------------------
 - change debug messages
@@ -211,16 +215,14 @@ class ispDicom(  ):
             try:
                 os.makedirs( self.dicomPath )
             except (OSError, IOError) as e: # pragma: no cover
-                msg = 'dicomClass.initAE: Fehler beim erzeugen von: {}'.format( self.dicomPath )
+                msg = 'dicomClass.initAE: Fehler beim erzeugen von: {} - {}'.format( self.dicomPath, str(e) )
                 logger.error(  msg )
-                self.appError( msg, e )
 
         if os.access(self.dicomPath, os.W_OK) is True:
             self.initialized = True
         else: # pragma: no cover
             msg = 'dicomClass.initAE: keine Schreibrechte auf: {}'.format( self.dicomPath )
             logger.error(  msg )
-            self.appError( msg )
 
     def __del__(self):
         """Deleting Class (Calling destructor)

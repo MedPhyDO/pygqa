@@ -65,6 +65,10 @@ Configuration in config.json
 CHANGELOG
 =========
 
+0.1.3 / 2002-06-01
+------------------
+- change render_pdf() add check write access
+
 0.1.3 / 2002-05-23
 ------------------
 - remove render_png() and render_pdf_and_png() only used in unittests
@@ -427,6 +431,7 @@ class PdfGenerator:
             logger.info('ispPdfClass.__init__: erzeuge path={}'.format(self._variables["path"]) )
             os.makedirs( self._variables["path"] )
 
+
         filename = osp.splitext(self._variables["filename"])[0] + '.' + ext
         filepath = osp.join( self._variables["path"], filename )
         return filepath, filename
@@ -496,8 +501,12 @@ class PdfGenerator:
         pdf_filepath, pdf_filename = self._getFilePath( "pdf" )
         main_doc, overlay_html, body_html = self.render( )
 
-        main_doc.write_pdf( pdf_filepath )
-
+        if os.access(self._variables["path"], os.W_OK) is True:
+            main_doc.write_pdf( pdf_filepath )
+        else:
+            msg = 'mpdf.render_pdf: keine Schreibrechte auf: {}'.format( self._variables["path"] )
+            logger.error(  msg )
+            
         # Seiteninhalt zurückgeben
         return {
             "body": body_html,
