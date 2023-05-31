@@ -43,7 +43,8 @@ class testCaseBase(unittest.TestCase):
 
         output_type =  "png"
         
-        # -background white -quality 90
+        # -background white -quality 90  
+        # -density 72
         flags = '-background white -alpha remove -colorspace RGB  +append -density 72 -quality 50'
        # test_flags = '-alpha deactivate'      
         cmd = "convert {} -geometry {} {}:- '{}' '{}'".format( flags, geometry, output_type, pdf_filepath, png_name )
@@ -184,7 +185,7 @@ class testCaseBase(unittest.TestCase):
         #
         # Überprüfungen
         #
-
+        
         # passende check daten (json_check_name) laden
         with open( json_check_name ) as json_file:
             check = json.load( json_file )
@@ -225,10 +226,11 @@ class testCaseBase(unittest.TestCase):
             self.assertEqual(
                 data_text_list,
                 check_text_list,
-                "PDF content .text in '{}' ist fehlerhaft".format( data["pdf_filepath"] )
+                "PDF content .text zwischen '{}' und '{}' ist fehlerhaft".format( json_check_name, json_test_name )
             )
 
         #return
+        #png_check_name = "/home/bauer/development/python/py37/pygqa/tests/files/2019/2019 - VitalBeamSN2674 - 15x - JT-4_2_2_1-A.png"
         # erzeugte png vergleichen und diff speichern
         png_check = img_io.imread( png_check_name )
         png_new = img_io.imread( png_new_name )
@@ -250,10 +252,31 @@ class testCaseBase(unittest.TestCase):
             )
         )
 
-        # Bild verleich erstellen und speichern
+        # Bild vergleich erstellen und speichern
         compare = compare_images(png_check, png_new, method='diff')
+ 
+        cmp_sum = np.sum( ( compare.astype("int") ) )
+                         
+        #print( "sum png_check", np.sum( (png_check.astype("int") ) ), png_check_name )
+        #print( "sum png_new", np.sum( (png_new.astype("int") ) ), png_new_name )
+         
+        #print( "sum", cmp_sum, png_check_name + ".diff.png")
+       
+       
         img_io.imsave( png_check_name + ".diff.png",  compare )
-
+        max_sum = 1
+        
+        self.assertLessEqual( cmp_sum, max_sum, 
+            "Die PNG Vergleichsbild summe ( {} ) ist größer als {}. Diff image '{}' prüfen. PDF files:\n{}\n{}".format( 
+                cmp_sum,
+                max_sum,
+                png_new_name + ".diff.png",
+                data["pdf_filepath"],
+                pdf_check_name
+            )
+        )
+        
+        '''
         # gesamt check der Bilder
         def check_mse(imageA, imageB):
         	# the 'Mean Squared Error' between the two images is the
@@ -262,8 +285,7 @@ class testCaseBase(unittest.TestCase):
         	err = np.sum((imageA.astype("float") - imageB.astype("float")) ** 2)
         	err /= float(imageA.shape[0] * imageA.shape[1])
 
-        	# return the MSE, the lower the error, the more "similar"
-        	# the two images are
+        	# return the MSE, the lower the error, the more "similar" the two images are
         	return err
 
         # MeanCheck durchführen
@@ -274,7 +296,7 @@ class testCaseBase(unittest.TestCase):
 
         # small changes depends on diffrent font rendering
         le = 350.0
-        le = 100
+       # le = 100
         self.assertLessEqual( mse, le,
             "Der PNG Vergleichsbild MSE stimmt nicht. Diff image '{}' prüfen. PDF files:\n{}\n{}".format( 
                 png_new_name + ".diff.png",
@@ -282,3 +304,4 @@ class testCaseBase(unittest.TestCase):
                 pdf_check_name
             )
         )
+        '''

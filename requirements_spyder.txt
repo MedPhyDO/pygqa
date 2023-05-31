@@ -1,0 +1,3 @@
+
+spyder == 5.2.1
+spyder_kernels == 2.2.0 

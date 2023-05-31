@@ -388,12 +388,13 @@ class WebAppTest( testBase ):
         '''
        
         for unit in self.webapp._config.units_TestsApp:
-          self.run_test( {
-              "testid": "MT-4_1_2",
-              "unit": self.webapp._config.units[ unit ],
-              "year": 2020,
-              "month": 1
-          } )
+          if self.webapp._config.units[ unit ]:
+            self.run_test( {
+                "testid": "MT-4_1_2",
+                "unit": self.webapp._config.units[ unit ],
+                "year": 2020,
+                "month": 1
+            } )
 
 
     def test_mlc_MT_LeafSpeed_2020(self):
@@ -401,12 +402,13 @@ class WebAppTest( testBase ):
         '''
         
         for unit in self.webapp._config.units_TestsApp:
-          self.run_test( {
-              "testid": "MT-LeafSpeed",
-              "unit": self.webapp._config.units[ unit ],
-              "year": 2020,
-              "month": 1
-          } )
+          if self.webapp._config.units[ unit ]:
+            self.run_test( {
+                "testid": "MT-LeafSpeed",
+                "unit": self.webapp._config.units[ unit ],
+                "year": 2020,
+                "month": 1
+            } )
 
 def suite( testClass:None ):
     '''Fügt alle Funktionen, die mit test_ beginnen aus der angegeben Klasse der suite hinzu

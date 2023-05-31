@@ -10,7 +10,7 @@ There are two types of AEs:
 CHANGELOG
 =========
 
-0.1.4 / 2002-06-01
+0.1.3 / 2023-04-17
 ------------------
 - change __init__() remove app.Error() call
 
@@ -33,7 +33,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 __status__ = "Prototype"
 
 import os

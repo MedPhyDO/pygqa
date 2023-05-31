@@ -380,13 +380,21 @@ class ispTest( testBase ):
         b = {"B":2}
         c = dict_merge(a, b)
         self.assertEqual(
-            c, {'A': 1, 'B': 2}, "dict_merge auch neue keys") 
+            c, {'A': 1, 'B': 2}, "dict_merge with new key") 
 
-        c = dict_merge(a, b, False)
+        a = {"A":1}
+        b = {"A":11, "C":3}
+        c = dict_merge(a, b)
         self.assertEqual(
-            c, {'A': 1}, "dict_merge nur vorhandene keys")
- 
-
+            c, {'A': 11, 'C': 3}, "dict_merge with override") 
+        
+        a = {"A":1, "B": { "C":3, "D":4 } }
+        b = {"B": { "D":14, "E":5 } }
+        c = dict_merge(a, b)
+        self.assertEqual(
+            c, {'A': 1, "B": { "C":3, "D":14, "E":5 }}, "dict_merge deep") 
+        
+        
         # test in config setzen update prüfen
         #
         localtime = time.strftime("%Y%m%d %H:%M:%S.%f", time.localtime(time.time()) )
@@ -654,10 +662,10 @@ class ispTest( testBase ):
             f.write( "#Falscher Inhalt" )
             
         config = ispConfig()
-        
+        os.remove( error_json_file )
         self.assertEqual(
             config._loadErrors, [ error_json_file ], "load error wurde nicht ausgelöst")
-        os.remove( error_json_file )
+        
 
     def test_config_jinja(self):    
         '''jinja Template Funktionen der config testen.

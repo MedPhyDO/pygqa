@@ -62,6 +62,7 @@ Open Terminal and change the current working directory to the repository in your
 Install modules used with the required versions
 
     <your miniconda binpath>/pip install -r requirements.txt
+    <your miniconda binpath>/pip install -r requirements_spyder.txt
 
 With installation script download Javascript / CSS and Fonts to resources/vendor for weasyprint and offline using.
 

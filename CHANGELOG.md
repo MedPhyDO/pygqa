@@ -1,5 +1,12 @@
 # CHANGELOG
 
+
+## 0.1.9 / 2023-05-31
+- change app/api.php - init() better handling for unit names set to null 
+- change ui/gqa.phtml - GQA_view() better handling for unit names set to null 
+- change app/base.phtml - checkFields() better handling of missing Fields
+- move spyder to seperate requirements file
+
 ## 0.1.8 / 2022-05-30
 - remove unused app/dicom.py
 - change config files - add units_TestsApp

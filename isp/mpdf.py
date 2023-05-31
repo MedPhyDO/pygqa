@@ -65,11 +65,11 @@ Configuration in config.json
 CHANGELOG
 =========
 
-0.1.3 / 2002-06-01
+0.1.4 / 2022-06-01
 ------------------
 - change render_pdf() add check write access
 
-0.1.3 / 2002-05-23
+0.1.3 / 2022-05-23
 ------------------
 - remove render_png() and render_pdf_and_png() only used in unittests
 - change finish() remove unittest switch
@@ -97,7 +97,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R. Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.2"
+__version__ = "0.1.4"
 __status__ = "Prototype"
 
 from weasyprint import HTML, CSS

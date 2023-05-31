@@ -6,9 +6,12 @@ webapp
 ======
 
 
-
 CHANGELOG
 =========
+
+0.1.7 / 2023-01-11
+------------------
+- change api swagger info object version to use config server.api.version 
 
 0.1.6 / 2022-05-16
 ------------------
@@ -46,7 +49,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R. Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.4"
+__version__ = "0.1.7"
 __status__ = "Prototype"
 
 import uuid
@@ -55,6 +58,8 @@ import os.path as osp
 import json
 
 from isp.config import ispConfig
+from isp.safrs import __version__ as safrsVersion
+
 from safrs import log  # , paginate, SAFRSResponse
 from flask import Flask, send_file
 from safrs import SAFRSAPI  # , SAFRSRestAPI  # api factory
@@ -358,7 +363,7 @@ class ispBaseWebApp():
                 # add CORS support
                 # Content-Range wird von dstore ausgewertet um die max Anzahl zu bestimmen
                 CORS( self.app,
-                     expose_headers='Content-Range, Content-Newitem,  X-Query, X-Rquery, X_Error, X_Info'
+                     expose_headers='Content-Range, Content-Newitem, X-Query, X-Rquery, X_Error, X_Info'
                 )
 
                 # dieser abschnitt wird bei coverage nicht berücksichtigt, da er im testmode nicht ausgeführt wird
@@ -443,7 +448,7 @@ class ispBaseWebApp():
         @self.app.route('/<path:filepath>')
         def home( filepath:str='' ):
             self.status_code = 200
-            self.default_header = None # auto default
+            self.default_header = None # auto default based on extension
             return self.routeIndex( filepath ), self.status_code, self.default_header
 
         return self.app
@@ -463,7 +468,7 @@ class ispBaseWebApp():
             "info" : {
                 "title" : self._config.get("server.webserver.name", "webapp"),
                 "description" : self._config.get("server.webserver.title", "webapp"),
-                "version" : self._config.get("server.webserver.title", __version__)
+                "version" : self._config.get("server.api.version", safrsVersion )
             },
             "parameters" : {
                 "validatorUrl" : False
@@ -706,6 +711,7 @@ class ispBaseWebApp():
             Inhalt der geladenen Datei
 
         """
+        
    
         try:
             _filepath = osp.join( root, filepath ) # .format( **{"BASE_DIR": self._config.BASE_DIR} )
