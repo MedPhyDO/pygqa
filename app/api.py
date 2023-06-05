@@ -22,7 +22,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.4"
+__version__ = "0.1.9"
 __status__ = "Prototype"
 
 import json
@@ -80,19 +80,19 @@ class gqa( ispSAFRSDummy ):
             month = 99
             day = 99
             if "year" in kwargs:
-                if kwargs["year"] == None:
+                if kwargs["year"] == None or kwargs["year"] == 0:
                     kwargs["year"] = 0
                 else:
                     kwargs["year"] = int(kwargs["year"])
                     year = kwargs["year"]
             if "month" in kwargs:
-                if kwargs["month"] == None:
+                if kwargs["month"] == None or kwargs["month"] == 0:
                     kwargs["month"] = 0
                 else:
                     kwargs["month"] = int(kwargs["month"])
                     month = kwargs["month"]
             if "day" in kwargs:
-                if kwargs["day"] == None:
+                if kwargs["day"] == None or kwargs["day"] == 0:
                     kwargs["day"] = 0
                 else:
                     kwargs["day"] = int(kwargs["day"])
@@ -127,15 +127,21 @@ class gqa( ispSAFRSDummy ):
             config = self.config
         )
 
+        self.appInfo( "gqa.resultfile", self.ariaDicom.pd_results.filename )
+        self.appInfo( "gqa.result.error", self.ariaDicom.pd_results.errors )
+
         # unit pid über config Angaben holen
         if not "pid" in kwargs or kwargs["pid"] == None:
-            kwargs["pid"] = list( self.config.units.keys() )
+            kwargs["pid"] = []
+            for pid, unit in self.config.units.items():
+                if unit != None:
+                    kwargs["pid"].append( pid )
 
         if type( kwargs["pid"] ) == str:
             kwargs["pid"] = kwargs["pid"].split(",")
 
         # passende pid ( PatientenID ) zu einer unit über config bestimmen
-        if "unit" in kwargs:
+        if "unit" in kwargs and  kwargs["unit"] != None:
             for pid, unit in self.config.units.items():
                 if unit == kwargs["unit"]:
                     kwargs["pid"] = [ pid ]
@@ -159,8 +165,15 @@ class gqa( ispSAFRSDummy ):
 
         ----
 
+        Aufruf: api/gqa
+        
         """
-        result = []
+        _kwargs = cls.init( kwargs )
+        
+        result = {
+         "firstYear" : cls.config.get("firstYear", 2017)
+        }
+        
         return  cls._int_json_response( { "data": result } )
 
     @jsonapi_rpc( http_methods=['GET'] )
@@ -218,6 +231,42 @@ class gqa( ispSAFRSDummy ):
 
         return cls._int_json_response( { "data": result } )
 
+    @classmethod
+    @jsonapi_rpc( http_methods=['GET'] )
+    def export( cls, **kwargs ):
+        """
+        .. restdoc::
+
+        description: Resultdaten jahresbasiert exportieren
+        summary : 
+        parameters:
+            - name : year
+              in : query
+              required : false
+              description : Das zu exportierende Jahr
+
+        ----
+        
+        Parameters
+        ----------
+        cls : TYPE
+            DESCRIPTION.
+        **kwargs : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        # letzte config laden
+        _kwargs = cls.init( )
+        # Aufruf Paramter in App-Info ablegen
+        cls.appInfo( "do_get", _kwargs )     
+        result = cls.ariaDicom.pd_results.exportYear( _kwargs.get("year") )
+        return cls._int_json_response( { "data": result } )
+    
     @classmethod
     @jsonapi_rpc( http_methods=['GET'] )
     def tagging( cls, **kwargs ):

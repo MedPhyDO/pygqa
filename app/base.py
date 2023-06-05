@@ -8,7 +8,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.2"
+__version__ = "0.1.9"
 __status__ = "Prototype"
 
 import sys
@@ -201,9 +201,7 @@ class ispBase(  ):
 
         # string zusammenstellen
         meta_str = "{testTag} {unit}-{energy} {year}/{month}".format( **current )
-
         return meta_str
-
 
     def checkFields(self, meta:dict={}, baseField=None, fields=None, fieldLen:int=-1, warn:bool=True ):
         """prüft ob in den Pandas.dataFrames ein baseField und die fieldLen von fields stimmen
@@ -228,8 +226,6 @@ class ispBase(  ):
         result: empty dict or dict with
             - msg: Message string for PDF output
             - data: list of fields
-
-
         """
         err_columns = ["CourseId", "PlanSetupId", "RadiationId", "ImageId", "acquisition", "gantry", "SliceUID"]
 
@@ -263,7 +259,7 @@ class ispBase(  ):
 
             #errors.append( err_fields )
 
-        if len(err_fields) > 0:
+        if len(errors) > 0:
             meta_str = self.getMetaErrorString( meta )
             # self.appError( meta_str, errors )
             if warn:

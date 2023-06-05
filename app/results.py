@@ -11,7 +11,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.0"
+__version__ = "0.1.10"
 __status__ = "Prototype"
 
 import pandas as pd
@@ -182,3 +182,33 @@ class ispResults(  ):
 
         return True
 
+    def getYears( self ):
+        years =self.gqa.year.unique()
+        return years
+
+    def exportYear( self, year=None ):
+        #if self.gqa == None:
+        #    return
+
+        result = {
+            "use" : self.filename
+        }
+        def byYear( gqaYear ):
+            y =  gqaYear.year.unique()[0] 
+            filename = osp.join( self.config.get("resultsPath", ".."), str(y), "{}_{}".format( y, self.config.get("database.gqa.name", "gqa.json") ) )
+            
+           # print( filename )
+            if not osp.isfile( filename ) or os.access(filename, os.W_OK) is True:
+                try:
+                    gqaYear.to_json( filename, orient="table", double_precision=10, indent=2 ) # , indent=2 erst später
+                    result[filename] = True
+                except:
+                    msg = "results.exportYear fehlgeschlagen ({})".format(filename)
+                    self.errors.append( msg )
+                    result[filename] = False
+            else:
+                msg = "results.exportYear keine Schreibrechte ({})".format(filename)
+                self.errors.append( msg )
+            
+        self.gqa.groupby( [ 'year'] ).apply( byYear )
+        return result
