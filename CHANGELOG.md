@@ -1,10 +1,101 @@
 # CHANGELOG
 
+## 0.2.0 / 2023-09-05
+- changes for python 3.11
+  - change isp/mpdf.py 
+    - ```mathtext()``` and ```pandas()``` changes
+  - change isp/safrs.py 
+    - ```_get_connection``` to set/get db_bind in config
+    - RQLQuery for compatibility with sqlalchemy >=1.4 since newer rqlalchemy (0.4.5) depends on sqlalchemy <2.0 and >=1.2
+    - suppress double call appInfo/appError depends on ```_s_get()``` and ```_s_count()```
+  - isp/webapp.py 
+    - change ```__init__``` and ```_create_app``` to set/get db_bind in config
+    - use javascript openapi-explorer instead python based flask_swagger_ui
+    - change building of sphinx documentation
+  - app/api.py 
+    - ```pandas()``` changes
+  - app/ariadicom.py 
+    - ```pandas()``` changes
+  - app/base.py 
+    - use ```pd.concat``` instead ```append()```
+    - ```fullCheck.values()``` instead ```fullCheck```
+- changes for pylinac 3.14.x
+  - app/ispCheckClass.py 
+    - use instance of ```DicomImage``` instead ```BaseImage```
+    - remove inheritance ```plotClass```
+    - remove function ```show()```
+  - app/image.py 
+    - ```mm2dots_X()```, ```mm2dots_Y()``` 
+      - position always greater than or equal to 0 
+    - class ```DicomImage```
+      - infos default is now dict
+      - ```plotImage()```
+        - use ```plotClass``` instead function ```initPlot()``` and close plot after use
+      - ```cropField()```
+        - use ```getFieldDots()``` instead ```mm2dots_X()``` / ```mm2dots_Y()``` for each value
+        - now returns DicomImage class instead croped image array 
+  - app/qa/field.py 
+    - class ```FSImage```
+      - use inheritance ```FieldAnalysis``` instead ```FlatSym```
+      - ```getProfileData()```
+        - change flatness_calculation in ```getProfileData()```
+      - ```plotProfile()```
+        - use ```plotClass``` instead function ```initPlot()```
+        - use new center index calculation
+      - ```plot4Qprofile()```
+        - use ```plotClass``` instead function ```initPlot()```
+  - app/qa/mlc.py 
+    - class ```qa_mlc```
+      - use new mlc arrangement
+      - new property ```abs_mean_error```
+      - ```findTransmissions()```
+        - use changed ```find_peaks()``` function
+      - ```FWHM_findLeafs()```
+        - use data from new ```fwxm_data()``` function
+      - ```FWHM_plot_error()```
+        - use ```plotClass``` instead function ```initPlot()```
+      - ```FWHM_plot_errorBox()```
+        - use ```plotClass``` instead function ```initPlot()```
+        - changes for matplotlib 3.4.0
+      - ```plotTransmission()```
+        - use ```plotClass``` instead function ```initPlot()```
+      - ```picketfence_results()```
+        - use new ```results_data()``` function
+      - ```picketfence_plotImage()```
+        - use ```plotClass``` instead function ```initPlot()```
+      - ```_add_leaf_error_subplot()```
+        - overrides function and with some modifications
+          - use double width on UP_DOWN Chart 
+          - draw Leafnumbers 
+          - change action_tolerance color to y-
+          - set gridlines only on position Axis
+    - class ```checkMlc```
+      - ```_doMLC_VMAT()```
+        - new parameters for analysis
+      - ```doJT_10_3_1()```
+        - use new fwxm_data for profile
+  - app/qa/vmat.py 
+    - class ```qa_vmat```
+      - use new roi_config for ```analyze()```
+      - ```plotChart()```
+        - use ```plotClass``` instead function ```initPlot()```
+  - app/qa/wl.py 
+    - class ```qa_vmat```
+      - ```findColliCenter()```
+        - use ```getRoi()``` instead ```cropField()```
+      - ```_findIsoCalCenter()```
+        - use ```getRoi()``` instead ```cropField()```
+      - ```findCenterBall()```
+        - use ```getRoi()``` instead ```cropField()```
+      - ```plotChart()```
+        - use ```plotClass``` instead function ```initPlot()```
+      - ```plotMergeImage```
+        - use ```plotClass``` instead function ```initPlot()```
 
 ## 0.1.9 / 2023-05-31
-- change app/api.php - init() better handling for unit names set to null 
-- change ui/gqa.phtml - GQA_view() better handling for unit names set to null 
-- change app/base.phtml - checkFields() better handling of missing Fields
+- change app/api.php - ```init()``` better handling for unit names set to null 
+- change ui/gqa.phtml - ```GQA_view()``` better handling for unit names set to null 
+- change app/base.phtml - ```checkFields()``` better handling of missing Fields
 - move spyder to seperate requirements file
 
 ## 0.1.8 / 2022-05-30
@@ -36,7 +127,7 @@
 - change isp/dicom.py - change debug messages
 - change isp/safrs.py - changes in additional api results, add _extendedSystemCheck
 - change isp/webapp.py - change cors header
-- change app/__init__.py - add _extendedSystemCheck
+- change ```app/__init__.py``` - add _extendedSystemCheck
 - Some ui changes for _extendedSystemCheck
 
 ## 0.1.2 / 2021-04-30

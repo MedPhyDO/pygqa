@@ -25,27 +25,31 @@ vendors = [
 	"material",
 	"paho-mqtt",
 	"pygment",
+    "openapi-explorer",
 ]
 
 resources = [
+    # bootstrap
 	{ "from":"https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css", "to":"bootstrap/bootstrap-4.3.1.min.css", "typ":"text" },
 	{ "from":"https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.bundle.min.js", "to":"bootstrap/bootstrap-4.3.1.bundle.min.js", "typ":"text" },
 	{ "from":"https://cdnjs.cloudflare.com/ajax/libs/bootstrap3-dialog/1.33.4/css/bootstrap-dialog.min.css", "to":"bootstrap/bootstrap-dialog-1.33.4.min.css", "typ":"text" },
 	{ "from":"https://cdnjs.cloudflare.com/ajax/libs/bootstrap3-dialog/1.33.4/js/bootstrap-dialog.min.js", "to":"bootstrap/bootstrap-dialog-1.33.4.min.js", "typ":"text" },
-    
+    # d3
     { "from":"https://cdnjs.cloudflare.com/ajax/libs/d3/5.7.0/d3.min.js", "to":"d3/d3-5.7.0.min.js", "typ":"text" },
-
 	{ "from":"https://code.jquery.com/jquery-3.5.1.min.js", "to":"jquery/jquery-3.5.1.min.js", "typ":"text" },
-    
+    # mqtt 
 	{ "from":"https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/paho-mqtt.min.js", "to":"paho-mqtt/paho-mqtt-1.1.0.min.js", "typ":"text" },
 
+    # css + fonts
     { "from":"https://cdnjs.cloudflare.com/ajax/libs/MaterialDesign-Webfont/5.8.55/css/materialdesignicons.min.css", "to":"material/materialdesignicons.min.css", "typ":"text" },
-     
+    
     { "from":"https://cdnjs.cloudflare.com/ajax/libs/MaterialDesign-Webfont/5.8.55/fonts/materialdesignicons-webfont.eot", "to":"fonts/materialdesignicons-webfont.eot", "typ":"bin" },
     { "from":"https://cdnjs.cloudflare.com/ajax/libs/MaterialDesign-Webfont/5.8.55/fonts/materialdesignicons-webfont.ttf", "to":"fonts/materialdesignicons-webfont.ttf", "typ":"bin" },
     { "from":"https://cdnjs.cloudflare.com/ajax/libs/MaterialDesign-Webfont/5.8.55/fonts/materialdesignicons-webfont.woff", "to":"fonts/materialdesignicons-webfont.woff", "typ":"bin" },
     { "from":"https://cdnjs.cloudflare.com/ajax/libs/MaterialDesign-Webfont/5.8.55/fonts/materialdesignicons-webfont.woff2", "to":"fonts/materialdesignicons-webfont.woff2", "typ":"bin" },
 
+    # openapi-explorer
+    { "from":" https://unpkg.com/openapi-explorer@0/dist/browser/openapi-explorer.min.js", "to":"openapi-explorer/openapi-explorer.min.js", "typ":"text" },
 ]
 
 pygments = {"class": "codehilite", "to":"pygment/codehilite.css"}

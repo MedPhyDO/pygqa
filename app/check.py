@@ -4,24 +4,26 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __status__ = "Prototype"
 
 import matplotlib.pyplot as plt
+
+from app.image import DicomImage
 
 from isp.plot import plotClass
 
 import logging
 logger = logging.getLogger( "MQTT" )
 
-class ispCheckClass( plotClass ):
+class ispCheckClass(  ):
     """ Hilfsfunktionen für alle check Module
     
     Attributes
     ----------
-    image : instance of BaseImage
+    image : instance of DicomImage
         
-    baseImage : instance of BaseImage
+    baseImage : instance of DicomImage
         das zum normalisieren zu verwendende Bild    
     
     infos : dict
@@ -35,7 +37,7 @@ class ispCheckClass( plotClass ):
                 
     """
 
-    def __init__( self, image=None, baseImage=None, normalize="none" ):
+    def __init__( self, image:DicomImage=None, baseImage:DicomImage=None, normalize="none" ):
         """Check Klasse initialisieren
         """
         #self.checkField = None
@@ -46,7 +48,7 @@ class ispCheckClass( plotClass ):
     
         #self.baseField = None
     
-        self.infos = None
+        self.infos = {}
         
         # ist auch das baseImage da dann ggf normalisieren
         if not self.baseImage == None:
@@ -55,21 +57,7 @@ class ispCheckClass( plotClass ):
         # infos auch über die eigene Klasse erreichbar machen
         if not self.image == None:
             self.infos = self.image.infos
-        #print("ispCheckClass.__init__",self.baseImage, normalize)
-
-    
             
-    def show(self):
-        '''
-        Ruft plt.show auf um die erzeugten Grafiken auszugeben
-
-        Returns
-        -------
-        None.
-
-        '''
-        plt.show()
-
 
     def normalize( self, normalize: str="diff" ):
         '''Normalisiert checkField mit baseField

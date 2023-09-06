@@ -4,6 +4,14 @@
         <span class="gqa-help md-chip green lighten-4">Test ausgewertet und PDF erstellt</span>
         <span class="gqa-help md-chip yellow lighten-3">Test gemacht. Auswertung starten durch anklicken</span>
         <span class="gqa-help md-chip grey lighten-1">Test noch nicht vollständig</span>
+				<span class="gqa-help "> <i class="mdi mdi-file-pdf-box green-text pdfIcon"></i>PDF vorhanden</span>
+        <span class="gqa-help "> <i class="mdi mdi-check-outline green-text white resultIcon"></i>Test OK</span>
+        <span class="gqa-help "> <i class="mdi mdi-alert-circle-outline amber-text white resultIcon"></i>Test überschreitet Warnschwelle</span>
+        <span class="gqa-help "> <i class="mdi mdi-close-outline red-text white resultIcon"></i>Test außerhalb der Toleranz</span>
+        <span
+					class="gqa_btn"
+					onClick="allTests(false)"
+				>alle offenen Tests durchführen</span>
     </div>
 </div>
 <style>
@@ -85,6 +93,22 @@
     	pointer-events: none;
     	opacity: 0.5;
     }
+	.gqa_btn {
+      display: inline-block;
+      background: linear-gradient(-225deg,#d5dbe4,#f8f8f8);
+      border-radius: 3px !important;
+      box-shadow: inset 0 -2px 0 0 #cdcde6,inset 0 0 1px 1px #fff,0 1px 2px 1px rgba(30,35,90,0.4) !important;
+      color: black;
+      min-height: 18px;
+      padding: 0 2px;
+      position: relative;
+      top: -1px;
+      min-width: 20px;
+      font-size: small;
+      text-align: center;
+      cursor: pointer;
+      font-weight: 500;    
+    }
 
 </style>
 
@@ -127,6 +151,37 @@ app.clientMqtt.subscribe( gqaMQTT["basetopic"] + "/stat/progress/#", function( m
 	}
 } );
 
+app.gqa = {}
+
+async function allTests( all) {
+    // param["action"] = "gqa/run";
+	// GQA_loaddata( param, self );
+	
+	tests = []
+	for (const [key, value] of Object.entries( app.gqa )) {
+    	
+    	if ( value?.isReady && !value?.hasResults ) {
+        	param = {
+                "year": value?.year,
+                "month": value?.month,
+                "unit": value?.unit,
+                "testid": value?.testId
+            }
+        	test = Object.values( param).join("-") //  value?.year + "-" + value?.month + "-" + value?.unit + "-" value?.testId
+        	if ( !tests.includes( test ) ){
+							tests.push( test )
+            	// todo ohne energy aufrufen und nur einmal pro year, month, unit, testId
+							param.action = "gqa/run"
+            	const elm = $(`[data-key="${key}"]`)
+            	console.info(key, param, elm)
+            	// http://127.0.0.1:8091/api/gqa/run?year=2023&month=1&unit=VitalBeamSN2674&testid=MT-8_02-1-2&energy=6x&uid=lh8szms1
+            	// http://127.0.0.1:8091/api/gqa/run?unit=TrueBeamSN2898&testId=MT-4_1_2&energy=6x&year=2023&month=2
+            	await GQA_loaddata( param, elm );
+            }
+    	}
+	}
+    
+}
 
 var resultIcons = {
 	999: "mdi-block-helper",
@@ -265,6 +320,8 @@ function getCell( year, month, unit, type, key, data, fullData, flatResults ){
 			}
 		}
 		html += '</span>';
+		_data.hasResults = results.length > 0 ? true : false
+		app.gqa[dataKey] = _data
 	});
 	cell.html = '<div title="' + title + '" >' + html + '</div>';
 	return cell;
@@ -347,8 +404,9 @@ function GQA_view( data, param ){
 
 	units.map( function( unit ){
 		var unitName = data["units"][unit];
-
-		div.append( 'H3' ).html( unitName ).attr('class', 'm-0 text-white bg-secondary');
+        if (!unitName) return 
+         
+		div.append( 'H3' ).html( unitName + "- (" +  unit + ")").attr('class', 'm-0 text-white bg-secondary');
 
 	    var table = div.append('table')
 			.attr("class", "gqa_table");
@@ -594,6 +652,7 @@ function GQA_loaddata( param, self ){
         url += "?" + $.param( param ); // isp.objectToQuery( param ) ;
     }
 
+    app.gqa = {}
     // console.info("GQA_loaddata");
 
 	// app.splashLoading( true );
@@ -630,7 +689,10 @@ function GQA_loaddata( param, self ){
     	}
 		// app.splashLoading( false );
 
-	} );
+	} ).catch(function(error) {
+    	console.info("GQA_loaddata - error ", url, error)
+        // Do some error handling.
+	});
 }
 
 // start with current year

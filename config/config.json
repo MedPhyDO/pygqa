@@ -4,7 +4,8 @@
             "host": "127.0.0.1",
             "port": 5000,
             "name": "gqa",
-            "title" : "GQA - Geräte-QA"
+            "title" : "GQA - Geräte-QA",
+            "reloader": false
         },
         "api":{
             "resources" : "{{BASE_DIR}}/resources/",
@@ -36,8 +37,8 @@
         },
         "main": ["gqa"],
         "gqa" : {
-            "name" : "gqa.json",
-            "connection": "sqlite:///{{BASE_DIR}}/files/pygqa.db"
+            "name" : "pygqa.json",
+            "connection": "sqlite:///{{BASE_DIR}}/data/pygqa.db"
         }
     },
     "dicom": {
@@ -48,15 +49,15 @@
             "server_port": 105,
             "aet": "GQA",
             "listen_port": 50300,
-            "local_dir": "files/DICOM"
+            "local_dir": "data/DICOM"
         }
     },
-    "resultsPath" : "files/results",
+    "resultsPath" : "data/results",
     "units": {
         "_QA Linac1" : "Linac-1",
         "_QA Linac2" : "Linac-2"
     },
-    "units_TestsApp": {
+    "testunits": {
         "_QA Linac1" : "Linac-1",
         "_QA Linac2" : "Linac-2"
     },

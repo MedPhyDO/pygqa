@@ -116,6 +116,9 @@ venv.bak/
 # Spyder project settings
 .spyderproject
 .spyproject
+st
+# vscode project settings
+.vscode
 
 # Rope project settings
 .ropeproject
@@ -140,14 +143,17 @@ cython_debug/
 # additionals 
 .docs/
 .htmlcov/
+.intern/
+data/
 tests/files/
 tests/resources/check/
 tests/resources/vendor/
 resources/vendor/
-Klinikum_Dortmund_Logo.svg
 files/DICOM/
 files/results/
+Klinikum_Dortmund_Logo.svg
 pygqa.db
-
-config-09999999.json
-
+odbc.ini
+config-099*.json
+config-20*.json
+TODO.md

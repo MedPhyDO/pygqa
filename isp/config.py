@@ -31,6 +31,11 @@ logging level:
 CHANGELOG
 =========
 
+0.1.3 / 2023-04-17
+------------------
+- use merge.mergedeep instead function with colletions
+- change _configLoad() for better error handling 
+
 0.1.2 / 2022-05-16
 ------------------
 - add scheme parameter to server.webserver 
@@ -51,13 +56,14 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R. Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.1"
+__version__ = "0.1.3"
 __status__ = "Prototype"
 
 import sys
 import json
 import os.path as osp
 from dotmap import DotMap
+from mergedeep import merge
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -293,21 +299,48 @@ class ispConfig( object ):
             Default is 99999999
 
         """
+        
         def readConfig( filename:str ):
+            """
+            Read config from filename
+
+            Parameters
+            ----------
+            filename : str
+                Config filename to read.
+
+            Returns
+            -------
+            loadOK : bool
+                true if config loaded
+
+            """
+            loadOK = True
             if osp.isfile( filename ):
                 # zuerst die normale config Datei einlesen
                 with open( filename, 'r') as f:
                     try:
                         config = json.load( f )
-                        self._config = dict_merge(self._config, DotMap( config ) )
-                        self._configs.append( osp.basename( filename ) )
                     except:
                         # Fehler auch hier anzeigen, da noch kein logger bereitsteht
                         self._loadErrors.append( filename )
                         self._configs.append( osp.basename( filename ) + " - ERROR" )
                         print( "CONFIG: Fehler bei json.load", filename )
+                        loadOK = False
                         pass
-
+                    if loadOK:
+                        try:
+                            self._config = dict_merge(self._config, DotMap( config ) )
+                            self._configs.append( osp.basename( filename ) )
+                        except:
+                            # Fehler auch hier anzeigen, da noch kein logger bereitsteht
+                            self._loadErrors.append( filename )
+                            self._configs.append( osp.basename( filename ) + " - ERROR" )
+                            print( "CONFIG: Fehler bei DotMap( config )", self._config )
+                            loadOK = False
+                            pass
+            return loadOK
+        
         # den pfad zur konfiguration festlegen
         configPath = osp.join( self._basedir, "config")
 
@@ -806,43 +839,22 @@ class ispConfig( object ):
             self._mqtthdlr = None
 
 # ----  
-import collections
-def dict_merge(dct, merge_dct, add_keys=True):
+
+def dict_merge(dct, merge_dct):
     """Recursive dict merge.
 
-    Inspired by ``dict.update()``, instead of
-    updating only top-level keys, dict_merge recurses down into dicts nested
-    to an arbitrary depth, updating keys. The ``merge_dct`` is merged into
-    ``dct``.
-
-    This version will return a copy of the dictionary and leave the original
-    arguments untouched.
-
-    The optional argument ``add_keys``, determines whether keys which are
-    present in ``merge_dict`` but not ``dct`` should be included in the
-    new dict.
-
-    https://gist.github.com/angstwad/bf22d1822c38a92ec0a9
+    The ``merge_dct`` is merged into ``dct``.
+    Return a copy of the dct and leave the original untouched.
 
     Args:
         dct (dict): onto which the merge is executed
-        merge_dct (dict): dct merged into dct
-        add_keys (bool): whether to add new keys
+        merge_dct (dict): dct merged into dcts
 
     Returns:
         dict: updated dict
     """
+    
     dct = dct.copy()
-    if not add_keys:
-        merge_dct = {
-            k: merge_dct[k]
-            for k in set(dct).intersection(set(merge_dct))
-        }
-
-    for k, v in merge_dct.items():
-        if isinstance(dct.get(k), dict) and isinstance(v, collections.Mapping):
-            dct[k] = dict_merge(dct[k], v, add_keys=add_keys)
-        else:
-            dct[k] = v
+    merge( dct, merge_dct )
     return dct
-
+    

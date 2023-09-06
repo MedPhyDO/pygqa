@@ -65,11 +65,15 @@ Configuration in config.json
 CHANGELOG
 =========
 
-0.1.3 / 2002-06-01
+0.1.5 / 2023-08-02
+------------------
+- mathtext() and pandas() changes for Python 3.11
+
+0.1.4 / 2022-06-01
 ------------------
 - change render_pdf() add check write access
 
-0.1.3 / 2002-05-23
+0.1.3 / 2022-05-23
 ------------------
 - remove render_png() and render_pdf_and_png() only used in unittests
 - change finish() remove unittest switch
@@ -97,7 +101,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R. Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.2"
+__version__ = "0.1.5"
 __status__ = "Prototype"
 
 from weasyprint import HTML, CSS
@@ -1151,7 +1155,7 @@ class PdfGenerator:
 
         output = io.BytesIO()
         fig.savefig(output, dpi=dpi, transparent=True, format='svg',
-                    bbox_inches='tight', pad_inches=0.0, frameon=False)
+                    bbox_inches='tight', pad_inches=0.0)
         plt.close(fig)
 
         return self.image( output, area, attrs, render, 'svg+xml' )
@@ -1348,10 +1352,9 @@ class PdfGenerator:
                 .set_table_attributes('class="layout-fill-width"')
                 .format( pf["field_format"] )
                 .set_table_styles( pf["table_styles"] )
-                .hide_index()
                 .set_uuid( uuid )
-                .render().replace('nan','')
-
+                .to_html( sparse_index=False )
+                .replace('nan','')
             , area=area
             , attrs=attrs
             , render=render
@@ -1359,9 +1362,9 @@ class PdfGenerator:
         else:
             html = self.html( df.style
                 .set_table_attributes('class="layout-fill-width"')
-                .hide_index()
                 .set_uuid( uuid )
-                .render().replace('nan','')
+                .to_html( sparse_index=False )
+                .replace('nan','')
             , area=area
             , attrs=attrs,
             render=render

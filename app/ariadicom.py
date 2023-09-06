@@ -4,7 +4,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.2"
+__version__ = "0.2.0"
 __status__ = "Prototype"
 
 from dotmap import DotMap
@@ -510,7 +510,7 @@ class ariaDicomClass( ariaClass, ispDicom ):
             .applymap( highlight_fifty )
             .set_table_attributes('class="gqa-tagging-table"')
             #.float_format()
-            .render()
+            .to_html( sparse_index=False )
         )
 
         html += '</div>'

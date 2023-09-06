@@ -48,6 +48,9 @@ examples ::
 CHANGELOG
 =========
 
+0.1.7 / 2023-08-31
+- change RQLQuery for compatibility with sqlalchemy >=1.4 since newer rqlalchemy (0.4.5) depends on sqlalchemy <2.0 and >=1.2
+
 0.1.6 / 2022-05-27
 - change wrapped_fn() modify error Message for jsonify()
 
@@ -89,7 +92,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R. Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.4"
+__version__ = "0.1.7"
 __status__ = "Prototype"
 
 import json
@@ -106,13 +109,13 @@ from sqlalchemy import func, text, or_ # , case, or_, inspect
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.orm import Query as BaseQuery
 import sqlalchemy.types as types
-
-
+SQLALCHEMY_VERSION = tuple(int(v) for v in sqlalchemy.__version__.split("."))
+from sqlalchemy.inspection import inspect
 
 from safrs import SAFRSBase  # db Mixin
 from safrs.config import get_request_param
 
-from safrs import SAFRSFormattedResponse, jsonapi_format_response, log #, paginate, SAFRSResponse
+from safrs import SAFRSFormattedResponse, jsonapi_format_response, log
 from safrs import jsonapi_rpc # rpc decorator
 
 from flask_restful_swagger_2.swagger import get_parser
@@ -243,11 +246,20 @@ class isoDateTimeType( types.TypeDecorator ):
         return iso2date( value, False)
 
 
+
 # Filter abfrage für rql
 class RQLQuery(BaseQuery, RQLQueryMixIn):
     _rql_default_limit = 10
     _rql_max_limit = 100
-
+    
+    # properties added for compatibility with sqlalchemy < 1.4
+    @property
+    def _rql_compat_entities(self):
+        if SQLALCHEMY_VERSION < (1, 4, 0):
+            return [e.type for e in self._entities]
+        else:
+            return [t._annotations["parententity"].entity for t in self._raw_columns]
+        
     def rql_parse(self, rql, limit=None):
         """Like rql, but it is only evaluated and the query is not changed .
 
@@ -267,6 +279,8 @@ class RQLQuery(BaseQuery, RQLQueryMixIn):
         _rql_where_clause
 
         """
+        if len(self._rql_compat_entities) > 1:
+            raise NotImplementedError("Query must have a single entity")
         
         expr = rql
 
@@ -300,6 +314,15 @@ class RQLQuery(BaseQuery, RQLQueryMixIn):
         return self._rql_where_clause
     
     def _rql_cmp(self, args, op):
+        """Allows compare beetween to database fields
+
+        Args:
+            args (_type_): _description_
+            op (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """        
         attr, value = args
         
         attr = self._rql_attr(attr)
@@ -317,7 +340,30 @@ class RQLQuery(BaseQuery, RQLQueryMixIn):
             value = self._rql_value(value, attr)
             
         return op(attr, value)
+    
+    def _rql_attr(self, attr):
+        model = self._rql_compat_entities[0]
+        if isinstance(attr, str):
+            try:
+                return getattr(model, attr)
+            except AttributeError:
+                raise self._rql_error_cls("Invalid query attribute: %s" % attr)
 
+        elif isinstance(attr, tuple):
+            # Every entry in attr but the last should be a relationship name.
+            for name in attr[:-1]:
+                if name in inspect(model).relationships:
+                    rel = getattr(model, name)
+                    self._rql_joins.append(rel)
+                    model = rel.mapper.class_
+                else:
+                    raise AttributeError(f'{model} has no relationship "{name}"')
+            # Get the column from the last entry in attr.
+            column = getattr(model, attr[-1])
+            return column
+
+        raise NotImplementedError
+    
 def ispSAFRS_decorator( fn ):
     """Prepare and execute API calls.
 
@@ -670,8 +716,9 @@ def ispSAFRS_decorator( fn ):
     return wrapped_fn
 
 
+
 # ----------- ispSAFRS without db.Model
-class ispSAFRS(SAFRSBase, RQLQueryMixIn):
+class ispSAFRS(SAFRSBase):
 
     __abstract__ = True
 
@@ -684,9 +731,11 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
     exclude_attrs = []  # list of attribute names that should not be serialized
     exclude_rels = []  # list of relationship names that should not be serialized
 
-    _config: None
-    _configOverlay: {}
+    _config = None
+    _configOverlay = {}
 
+    _out_query = None  # True if query log to result on filter()
+    
     @classmethod
     def access_cls(cls, key:str=""):
         """try to determine the model specified by key
@@ -720,18 +769,18 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
    
     @classmethod
     def _get_connection(cls):
-        """Get connetion string from session bind or config binds.
+        """Get connetion string from session bind or config db_binds.
         Returns
         -------
         connection: str
             connetion string
         """
-        query = cls.query
+        
         if hasattr(cls, "__bind_key__"):
-            binds = query.session.app.config.get("SQLALCHEMY_BINDS")
+            binds = cls._config.get("database.db_binds", []) 
             connection = binds[cls.__bind_key__]
         else:
-            connection = query.session.bind
+            connection = cls.query.session.bind
         return connection
 
     @classmethod
@@ -1107,6 +1156,7 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
             Der response mit json formatiertem Result
 
         """
+        
         response = SAFRSFormattedResponse()
         try:
             # data=None, meta=None, links=None, errors=None, count=None, include=None
@@ -1121,17 +1171,18 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
 
     @classmethod
     def filter(cls, qs, query=None):
-        """Filterangabe im rql format ausgewerten.
-
-        whenever filter is specified, this function is called
+        """ whenever filter is specified, this function is called
+        wird da vorhanden von jsonapi_filter aufgerufen, welches von _s_get() und  paginate() -> _s_count() von aufgerufen wird
         
+        Filterangabe im rql format ausgewerten.
+
         - if first letter is [ use original _s_filter 
         - if first letter is * use like filtering over all fields 
         - otherwise use rql filtering
         
         - filter=[{"name":"string","op":"eq","val":"one"}]
         - filter[name]=one
-        - filter=eq(string,one)       
+        - filter=eq(string,one)
         
         use multiple and queries seperated by |. A query array [] must always be first
         
@@ -1149,27 +1200,33 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
         
         if not query:
             query = cls._s_query
-            
-        cls.appInfo("filter", qs, area="filter" )
+
+        
+        #if cls._out_query:
+        #    cls._out_query = None 
+        #    return query
+        
+        # cls._out_query = True 
         filters = qs.split("|")
         
-        query = cls._s_query
-
         for qf in filters:
             if qf[0] == "[":
-                #cls._s_query = query
                 query = cls._s_filter( qf )
             elif qf[0] == "*":            
                 query = cls._int_search( qf[1:], query )
             else:
                 query = cls._int_rqlfilter( qf, query)
-            
-        full_query = query.statement.compile( compile_kwargs={"literal_binds": True} ) 
-            
-        cls.appInfo( "filter", {
-            "query" : str(full_query)
-        }, area="filter" )
-        
+
+        # suppress double call depends on _s_get() and _s_count()
+        if not cls._out_query:
+            cls._out_query = True 
+            cls.appInfo( "filter", {
+                "qs": qs,
+                "where" : str( query.statement.whereclause ),
+                "params" : query.statement.compile().params
+            }, area="filter" )
+        else:
+            cls._out_query = None 
         return query
     
     @classmethod
@@ -1187,7 +1244,6 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
             cls._s_query object with added filter
 
         """
-        
         if not query:
             query = cls._s_query
         
@@ -1220,37 +1276,34 @@ class ispSAFRS(SAFRSBase, RQLQueryMixIn):
 
         """
         
-        cls.appInfo("filter", qs, area="rql" )
-        
         if not query:
             query = cls._s_query
 
         # Provide RQLQuery. Your own class must be specified with _set_entities
         rql = RQLQuery( cls )
         rql._set_entities( cls )
-       
+
         try:
             rql.rql_parse( qs )
         except NotImplementedError as exc:
-            cls.appError("_int_rqlfilter", "NotImplementedError: {}".format( exc ) )
+            # suppress double call depends on _s_get() and _s_count()
+            if not cls._out_query:
+                cls.appError("_int_rqlfilter", "NotImplementedError: {}".format( exc ) )
             query = query.filter( text("1=2") )
             return query
         except Exception as exc:
-            cls.appError("_int_rqlfilter", "rql-error: {}".format( exc ) )
-            query = query.filter( text("1=2") )
+            # suppress double call depends on _s_get() and _s_count()
+            if not cls._out_query:
+                cls.appError("_int_rqlfilter", "rql-error: {}".format( exc ) )
+            query = query.filter( text("1=3") )
             return query
 
         # append condition to query
         if rql._rql_where_clause is not None:
             query = query.filter( rql._rql_where_clause )
-            cls.appInfo("_rql_where_clause", {
-               "where": str(rql._rql_where_clause),
-               "params" :  query.statement.compile().params
-            }, area="rql" )
 
         return query
     
-
     @classmethod
     def _int_groupby(cls, params:dict={}, query=None ):
         """Internes durchführen einer group query
@@ -2112,7 +2165,7 @@ class system( ispSAFRSDummy ):
             json.dumps( sysinfo["process"], indent=4),
             json.dumps( sysinfo["logger.level"], indent=4),
             sysinfo["fonts_msg"],
-            df.style.render()
+            df.style.to_html()
         )
 
         return Response( html , mimetype='text/html')

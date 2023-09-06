@@ -4,10 +4,10 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.2"
+__version__ = "0.2.0"
 __status__ = "Prototype"
 
-from pylinac.picketfence import PFDicomImage, PicketFence, Settings, Overlay, UP_DOWN
+from pylinac.picketfence import PFDicomImage, PicketFence, Orientation, MLC, MLCArrangement
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from app.base import ispBase
@@ -59,7 +59,16 @@ class qa_mlc( PicketFence, ispCheckClass ):
 
     _kennung = "{Kennung}"
 
-    def __init__( self, checkField=None, baseField=None, normalize: str="diff", kennung:str="{Kennung}" ):
+    setting = dict()
+
+    def __init__( 
+        self, 
+        checkField=None, 
+        baseField=None, 
+        normalize: str="diff", 
+        kennung:str="{Kennung}",
+        mlc: MLC | MLCArrangement | str = MLC.MILLENNIUM
+    ):
         """
         Attributes
         ----------
@@ -100,13 +109,58 @@ class qa_mlc( PicketFence, ispCheckClass ):
 
         # default Settings einstellen
         self._orientation = None
+
         tolerance = 0.5
         action_tolerance = None
         hdmlc = False
 
+        self.mlc = self._get_mlc_arrangement(mlc)
+        
+        self.settings = {
+            "orientation": self._orientation,
+            "tolerance": tolerance,
+            "action_tolerance": action_tolerance,
+            "_log_fits": self._log_fits
+        }
+
         # image muss da sein
+        '''
         if self.image:
             self.settings = Settings(self.orientation, tolerance, action_tolerance, hdmlc, self.image, self._log_fits )
+        '''   
+
+    def _leaves_in_view(self, analysis_width) -> list[tuple[int, int, int]]:
+        """Crop the leaves if not all leaves are in view.
+
+        Modifications: 
+            a) add 1 to leaf_num because enumerate(self.mlc.centers) is 0 based
+        """
+        range = (
+            self.image.shape[0] / 2
+            if self.orientation == Orientation.UP_DOWN
+            else self.image.shape[1] / 2
+        )
+        # cut off the edge so that we're not halfway through a leaf.
+        range -= (
+            max(
+                self.mlc.widths[0] * analysis_width,
+                self.mlc.widths[-1] * analysis_width,
+            )
+            * self.image.dpmm
+        )
+        leaves = [
+            i
+            for i, c in enumerate(self.mlc.centers)
+            if abs(c) < (range / self.image.dpmm)
+        ]
+        return [
+            (leaf_num + 1, center, width) # a) 
+            for leaf_num, center, width in zip(
+                leaves,
+                self.mlc.centers[leaves[0] : leaves[-1] + 1],
+                self.mlc.widths[leaves[0] : leaves[-1] + 1],
+            )
+        ]
 
     def getLeafCenterPositions( self ):
         """Gibt die Positionen der Leaf Mitte aller Leafs
@@ -176,7 +230,8 @@ class qa_mlc( PicketFence, ispCheckClass ):
         # max peaks für innere leafs bei 10 für äußere bei 20
         maxPeaks = []
         # FIXED: manchmal werden als peak_idx floats mit .0 von find_peaks ermittelt deshalb nach int wandeln
-        peak_idxs = profile.find_peaks( min_distance=10, threshold=0.1 )
+        peak_idxs, peak_heights = profile.find_peaks( min_distance=10, threshold=0.1 )
+ 
         for peak_idx in peak_idxs:
             maxPeaks.append( int( peak_idx ) )
 
@@ -187,7 +242,7 @@ class qa_mlc( PicketFence, ispCheckClass ):
         minPeaks = []
         profile.invert()
         # FIXED: manchmal werden als peak_idx floats mit .0 von find_peaks ermittelt deshalb nach int wandeln
-        peak_idxs = profile.find_peaks( min_distance=10, threshold=0.1 )
+        peak_idxs, peak_heights = profile.find_peaks( min_distance=10, threshold=0.1 )
         for peak_idx in peak_idxs:
             minPeaks.append( int( peak_idx ) )
         profile.invert()
@@ -298,11 +353,13 @@ class qa_mlc( PicketFence, ispCheckClass ):
                 else:
                     profile = SingleProfile( self.image.array[ self.image.mm2dots_Y( p ) ] )
 
+                fwxm_data = profile.fwxm_data()
                 # Abstand der Lamellen bei 50%
-                leafData["fwxm"][p] = profile.fwxm( ) / self.image.dpmm
-
+                fwxm = fwxm_data["width (exact)"]
+                leafData["fwxm"][p] = fwxm / self.image.dpmm
                 # Zentrumsversatz bei 50% bestimmen
-                leafData["shift"][p] = ( (len(profile.values) / 2) - profile.fwxm_center( ) ) / self.image.dpmm
+                center = fwxm_data["center index (exact)"]
+                leafData["shift"][p] = ( (len(profile.values) / 2) - center ) / self.image.dpmm
 
         # die eigentlichen Werte in ein array übernehmen
         fwxm_array = np.array( list( leafData["fwxm"].values() ) )
@@ -361,9 +418,10 @@ class qa_mlc( PicketFence, ispCheckClass ):
         if plotTitle == "":
             plotTitle = "lfd:{lfd:d} G:{gantry:01.1f} K:{collimator:01.1f}"
 
-        fig, ax = self.initPlot( size, False, nrows=1, ncols=1 )
+        plot = plotClass( )
+        fig, ax = plot.initPlot( size, False, nrows=1, ncols=1 )
         ax.set_title( plotTitle.format( **data, position=(0.5, 1.05) ) )
-        plot = {
+        plot_data = {
             "num" : [],
             "x1": [],
             "x2": [],
@@ -373,20 +431,20 @@ class qa_mlc( PicketFence, ispCheckClass ):
         leaf = leaf_from
         for k, v in data['fwxm.data'].items():
             shift = data['shift.data'][ k ]
-            plot["num"].append( leaf )
+            plot_data["num"].append( leaf )
 
             # position und shift
             positions.append(k)
             v = ( (v - 50) / 2 ) + virtLeafSize
 
-            plot["x1"].append( v + shift  )
-            plot["x2"].append( -1 * v + shift  )
+            plot_data["x1"].append( v + shift  )
+            plot_data["x2"].append( -1 * v + shift  )
             # nächster leaf
             leaf += 1
 
         # x1 und x2 plotten beide in blue
-        ax.bar(plot["num"], plot["x1"], color="#0343dfCC", linewidth=1)
-        ax.bar(plot["num"], plot["x2"], color="#0343dfCC", linewidth=1)
+        ax.bar(plot_data["num"], plot_data["x1"], color="#0343dfCC", linewidth=1)
+        ax.bar(plot_data["num"], plot_data["x2"], color="#0343dfCC", linewidth=1)
 
         ax.set_ylim( -1 * limit, limit )
         ax.axhline(0, color='k', linewidth = 0.5)
@@ -403,7 +461,7 @@ class qa_mlc( PicketFence, ispCheckClass ):
 
         plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
 
-        return self.getPlot()
+        return plot.getPlot()
 
 
     def FWHM_plot_errorBox( self, data, size={} ):
@@ -419,14 +477,16 @@ class qa_mlc( PicketFence, ispCheckClass ):
 
         """
         # plotbereiche festlegen
-        fig, ax = self.initPlot( size, nrows=2, ncols=1)
+        plot = plotClass( )
+        fig, ax = plot.initPlot( size, nrows=2, ncols=1 )
 
         #
         # chart Leafpaarabstand
         #
         if "fwxm.data" in data:
             df_fwxm = pd.DataFrame( data["fwxm.data"] )#.transpose()
-            df_fwxm.boxplot(ax = ax[0], whis="range")
+            # matplotlib 3.4.0 - Passing "range" to the whis parameter to mean "the whole data range" is no longer supported. set it to 0, 100 instead.
+            df_fwxm.boxplot(ax = ax[0], whis=[0,100])
 
             ax[0].set_title('Leafpaarabstand (fwxm)')
             ax[0].get_yaxis().set_ticklabels([48.5, 49, 49.5, 50, 50.5, 51, 51.5])
@@ -438,7 +498,8 @@ class qa_mlc( PicketFence, ispCheckClass ):
         #
         if "shift.data" in data:
             df_shift = pd.DataFrame( data["shift.data"] )#.transpose()
-            df_shift.boxplot(ax = ax[1], whis="range")
+            # matplotlib 3.4.0 - Passing "range" to the whis parameter to mean "the whole data range" is no longer supported. set it to 0, 100 instead.
+            df_shift.boxplot(ax = ax[1], whis=[0,100])
 
             ax[1].set_title('Zentrumsabweichung (shift)')
             ax[1].get_yaxis().set_ticklabels([1.5, 1, 0.5, 0, -0.5, -1, -1.5])
@@ -447,7 +508,7 @@ class qa_mlc( PicketFence, ispCheckClass ):
 
         plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
 
-        return self.getPlot()
+        return plot.getPlot()
 
 
     def plotTransmission( self, transmission, chartSize={}, showInterleafMean=False, showLeafMean=False, showInterleafPeaks=False, showLeafPeaks=False ):
@@ -456,7 +517,8 @@ class qa_mlc( PicketFence, ispCheckClass ):
         """
 
         # plotbereiche festlegen
-        fig, ax = self.initPlot( chartSize )
+        plot = plotClass( )
+        fig, ax = plot.initPlot( chartSize )
 
         #ax.set_ylabel('%')
         ax.set_xlabel('Position [mm]')
@@ -505,11 +567,114 @@ class qa_mlc( PicketFence, ispCheckClass ):
         # layout opimieren
         plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
         # data der Grafik zurückgeben
-        return self.getPlot()
+        return plot.getPlot()
 
+    def picketfence_results(self):
+        """Gibt die Ergebnisse der Picketfence Auswertung als dict
+        Verwendet dabei zusätzlich eine Auswertung über error_hist ( daten für subplot )
+        - pickets
+        - mlc_meas
+        
+        use results_data()
+        """
 
-    def picketfence_plotImage(self, metadata={}, guard_rails: bool=True, mlc_peaks: bool=True, overlay: bool=True,
-                            leaf_error_subplot: bool=True, show: bool=False):
+        result = {
+            'filename': self.infos["filename"],
+            'Kennung': self._kennung.format( **self.infos ),    # FIXME: identify, sign, label
+            'unit':  self.infos['unit'],
+            'energy': self.infos['energy'],
+            'gantry' : self.infos['gantry'],
+            'collimator': self.infos['collimator'],
+            'checkPositions': -1,
+            "offsets" : -1,
+            "pass_pct" : False,
+            "abs_median_error": -1,
+            "abs_mean_error": -1,
+            
+            "max_error": -1,
+            "max_error_picket" : -1,
+            "max_error_leaf" : -1,
+            "passed": False,
+        
+            "passed_action" : False,
+            "mean_spacing" : -1,
+            "max_from_mean" : -1,
+            "max_from_mean_leaf": -1
+
+        }
+        if not hasattr(self, "pickets"):
+            return result
+      
+        # print("picketfence_results", self.pickets )
+
+        rd = self.results_data()
+
+        #print( len( self._flattened_errors()) )
+       
+        offsets = " ".join(f"{pk.dist2cax:.1f}" for pk in self.pickets)
+        
+      
+        '''
+
+        # max von mean bestimmen
+        error_plot_positions, error_means, error_stds, mlc_leaves = self.pickets.error_hist()
+
+        # pandas serie max und position bestimmen
+        pd_error_means = pd.Series( error_means )
+        max_from_mean_error = pd_error_means.max()
+        # FIXME: image muss up/down getauscht werden, deshalb auch die MLC Nummern ändern
+        max_from_mean_leaf = mlc_leaves[ pd_error_means.idxmax() ][1] - 60
+        '''
+        # calculate the mean error and stdev values per MLC pair
+        error_vals = []
+        leaf_nums = [] # b)
+
+        for leaf_num in {m.leaf_num for m in self.mlc_meas}:
+            leaf_nums.append( leaf_num ) # b)
+            mean = np.mean(
+                [np.abs(m.error) for m in self.mlc_meas if m.leaf_num == leaf_num]
+            )
+            error_vals.append( mean )
+
+        pd_error_means = pd.Series( error_vals )
+        max_from_mean_error = pd_error_means.max()
+        max_from_mean_leaf = leaf_nums[ pd_error_means.idxmax() ] # - 60
+
+        result = {
+            'filename': self.infos["filename"],
+            'Kennung': self._kennung.format( **self.infos ),    # FIXME: identify, sign, label
+            'unit':  self.infos['unit'],
+            'energy': self.infos['energy'],
+            'gantry' : self.infos['gantry'],
+            'collimator': self.infos['collimator'],
+            'checkPositions': self.pickets,
+            "offsets" : offsets,
+            "pass_pct" : self.percent_passing,
+            "abs_median_error": self.abs_median_error,
+            
+            "max_error": self.max_error,
+            "max_error_picket" : self.max_error_picket,
+            "max_error_leaf" :self.max_error_leaf,
+            "passed": self.passed,
+        
+            "passed_action" : False,
+            "abs_mean_error": self.abs_mean_error,
+            "mean_spacing" : rd.mean_picket_spacing_mm,
+            "max_from_mean" : max_from_mean_error,
+            "max_from_mean_leaf" : max_from_mean_leaf,
+        }
+        #print( "picketfence - result", result )
+        return result
+        """
+        string = f"Picket Fence Results: \n{pass_pct:2.1f}% " \
+                 f"Passed\nMedian Error: {self.abs_median_error:2.3f}mm \n" \
+                 f"Mean picket spacing: {self.pickets.mean_spacing:2.1f}mm \n" \
+                 f"Picket offsets from CAX (mm): {offsets}\n" \
+                 f"Max Error: {self.max_error:2.3f}mm on Picket: {self.max_error_picket}, Leaf: {self.max_error_leaf}"
+        """
+
+    def picketfence_plotImage(self, guard_rails: bool=True, mlc_peaks: bool=True, overlay: bool=True,
+                            leaf_error_subplot: bool=True, show: bool=False, metadata={} ):
         """Plot the analyzed image.
 
         Parameters
@@ -532,22 +697,28 @@ class qa_mlc( PicketFence, ispCheckClass ):
         figsize = (24,14)
 
         # plot the image
+        plot = plotClass( )
+        fig, ax = plot.initPlot(  )
 
-        # self.axTicks( ax, fieldTicks )
-        #field = { "X1":-100, "X2": 100, "Y1": -100, "Y2":100, "xStep":50, "yStep":50, "border": 10 }
-
-        img, fig, ax = self.image.plotImage( original=False, getPlot=False
-                        , metadata=metadata
-                        , plotTitle="{Kennung} - G:{gantry:01.1f} K:{collimator:01.1f}"
-                        , plotCax=False, plotField=True, figsize=figsize )
+        img, fig, ax = self.image.plotImage( 
+            original=False, 
+            getPlot=False,
+            metadata=metadata,
+            plotTitle="{Kennung} - G:{gantry:01.1f} K:{collimator:01.1f}",
+            plotCax=False,
+            plotField=True,
+            figsize=figsize,
+            field=metadata.field # { "X1":-100, "X2": 100, "Y1": -100, "Y2":100, "xStep":50, "yStep":50, "border": 10 }
+        )
 
         # generate a leaf error subplot if desired
-        if leaf_error_subplot:
+  
+        if hasattr(self, "pickets") and leaf_error_subplot:
             self._add_leaf_error_subplot( ax )
             pass
 
-
         # plot guard rails and mlc peaks as desired
+        
         for p_num, picket in enumerate(self.pickets):
             if guard_rails:
                 picket.add_guards_to_axes(ax.axes)
@@ -558,8 +729,8 @@ class qa_mlc( PicketFence, ispCheckClass ):
 
         # plot the overlay if desired.
         if overlay:
-            o = Overlay(self.image, self.settings, self.pickets)
-            o.add_to_axes(ax)
+            for mlc_meas in self.mlc_meas:
+                mlc_meas.plot_overlay2axes(ax.axes)
 
         # plot CAX
         ax.plot(self.image.center.x, self.image.center.y, 'r+', ms=12, markeredgewidth=3)
@@ -571,123 +742,102 @@ class qa_mlc( PicketFence, ispCheckClass ):
         if show:
             plt.show()
 
-        return self.getPlot()
+        return plot.getPlot()
 
-    def _add_leaf_error_subplot(self, ax: plt.Axes):
-        """Überschreibt die ursprüngliche PicketFenceFunktion
-        Es werden jetzt beide (tolerance und action_tolerance) Linien gezeichnet
-        und das Chart hat jetzt bei UP_DOWN eine doppelte breite
-        """
+    def _add_leaf_error_subplot(self, ax: plt.Axes) -> None:
+        """Add a bar subplot showing the leaf error.
 
-        """Add a bar subplot showing the leaf error."""
-        tol_line_height = [self.settings.tolerance, self.settings.tolerance]
-        tol_line_width = [0, max(self.image.shape)]
+        Args:
+            ax (plt.Axes): _description_
 
-        atol_line_height = [self.settings.action_tolerance, self.settings.action_tolerance]
-
+        Modifications
+           - a) use double width on UP_DOWN Chart 
+           - b) draw Leafnumbers 
+           - c) change action_tolerance color to y-
+           - d) set gridlines only on position Axis
+        """        
+        
         # make the new axis
         divider = make_axes_locatable(ax)
-        if self.settings.orientation == UP_DOWN:
-            axtop = divider.append_axes('right', size=8, pad=1, sharey=ax)
+        if self.orientation == Orientation.UP_DOWN:
+            axtop = divider.append_axes("right", 8, pad=1, sharey=ax) # a)
         else:
-            axtop = divider.append_axes('bottom', size=2, pad=1, sharex=ax)
+            axtop = divider.append_axes("bottom", 2, pad=1, sharex=ax)
 
         # get leaf positions, errors, standard deviation, and leaf numbers
-        # error_plot_positions, error_means, error_stds, mlc_leaves
-        pos, mean, stds, leaf_nums = self.pickets.error_hist()
-        #print( "leaf_nums", pos, vals, err, leaf_nums)
-        leafs = []
-        for l in leaf_nums:
-            # image muss up/down getauscht werden, deshalb auch die MLC Nummern ändern
-            leafs.append( l[1]-60 )
-
-        #ax2 = axtop.twiny()  # instantiate a second axes that shares the same x-axis
-
-        #print(leaf_nums)
-        # plot the leaf errors as a bar plot
-        if self.settings.orientation == UP_DOWN:
-            # ohne xerr
-            axtop.barh(pos, mean, height=self.pickets[0].sample_width * 2, alpha=0.4, align='center', tick_label=leafs)
-            #axtop.barh(pos, mean, xerr=stds, height=self.pickets[0].sample_width * 2, alpha=0.4, align='center')
-            # plot the tolerance line(s)
-            # TODO: replace .plot() calls with .axhline when mpld3 fixes funtionality
-            axtop.plot(tol_line_height, tol_line_width, 'r-', linewidth=3)
-
-            if self.settings.action_tolerance is not None:
-                axtop.plot(atol_line_height, tol_line_width, 'y-', linewidth=3)
-
-            # reset xlims to comfortably include the max error or tolerance value
-            axtop.set_xlim([0, max(max(mean), self.settings.tolerance) + 0.1])
-
-            #axtop.tick_params( 'y', colors='r' )
-
+        if self.orientation == Orientation.UP_DOWN:
+            pos = [
+                position.marker_lines[0].center.y
+                for position in self.pickets[0].mlc_meas
+            ]
         else:
-            # ohne yerr
-            axtop.barh(pos, mean, height=self.pickets[0].sample_width * 2, alpha=0.4, align='center', tick_label=leafs)
+            pos = [
+                position.marker_lines[0].center.x
+                for position in self.pickets[0].mlc_meas
+            ]
 
-            #axtop.bar(pos, mean, yerr=stds, width=self.pickets[0].sample_width * 2, alpha=0.4, align='center')
-            axtop.plot(tol_line_width, tol_line_height,
-                       'r-', linewidth=3)
-            if self.settings.action_tolerance is not None:
-                axtop.plot(tol_line_width, tol_line_height, 'y-', linewidth=3)
-            axtop.set_ylim([0, max(max(mean), self.settings.tolerance) + 0.1])
+        # calculate the error and stdev values per MLC pair
+        error_stdev = []
+        error_vals = []
+        leaf_nums = [] # b)
+        for leaf_num in {m.leaf_num for m in self.mlc_meas}:
+            leaf_nums.append( leaf_num ) # b)
+            error_vals.append(
+                np.mean(
+                    [np.abs(m.error) for m in self.mlc_meas if m.leaf_num == leaf_num]
+                )
+            )
+            error_stdev.append(
+                np.std([m.error for m in self.mlc_meas if m.leaf_num == leaf_num])
+            )
+        #print("leafs", leaf_nums, error_vals)
+        # plot the leaf errors as a bar plot
+        if self.orientation == Orientation.UP_DOWN:
+            axtop.barh(
+                pos,
+                error_vals,
+                xerr=error_stdev,
+                height=self.leaf_analysis_width * 10, # FIXME breite des Leafs
+                alpha=0.4,
+                align="center",
+                tick_label=leaf_nums, # b)
+            #    color="#0343dfCC"
+            )
+            # plot the tolerance line(s)
+            axtop.axvline(self.tolerance, color="r", linewidth=3)
+            if self.action_tolerance is not None:
+                axtop.axvline(self.action_tolerance, color="y", linewidth=3) # c)
+            # reset xlims to comfortably include the max error or tolerance value
+            axtop.set_xlim(
+                [0, max([max(error_vals) + max(error_stdev), self.tolerance]) + 0.1]
+            )
+            axtop.grid(True, axis="x") # d)
+        else:
+            axtop.bar(
+                pos,
+                error_vals,
+                yerr=error_stdev,
+                width=self.leaf_analysis_width * 2,
+                alpha=0.4,
+                align="center",
+                tick_label=leaf_nums # b)
+            )
+            # plot the tolerance line(s)
+            axtop.axhline(self.tolerance, color="r", linewidth=3)
+            if self.action_tolerance is not None:
+                axtop.axhline(self.action_tolerance, color="y", linewidth=3) # c)
+            axtop.set_ylim(
+                [0, max([max(error_vals) + max(error_stdev), self.tolerance]) + 0.1]
+            )
+            axtop.grid(True, axis="y") # d)
 
-        # add formatting to axis
-        #axtop.grid(True)
         axtop.set_title("Average Error (mm)")
 
     @property
-    def passed_action(self) -> bool:
-        """Whether all the pickets passed_action tolerance."""
-        return all(picket.mlc_passed_action for picket in self.pickets )
+    def abs_mean_error(self) -> float:
+        """Return the maximum error found."""
+        return float(np.mean(np.abs(self._flattened_errors())))
 
-
-    def picketfence_results(self):
-        """Gibt die Ergebnisse der Picketfence Auswertung als dict
-        Verwendet dabei zusätzlich eine Auswertung über error_hist ( daten für subplot )
-        """
-        pass_pct = self.percent_passing
-        offsets = ' '.join('{:.1f}'.format(pk.dist2cax) for pk in self.pickets)
-
-        # mean statt  np.median(np.abs(self.error_array))
-        self.abs_mean_error = np.mean(np.hstack([picket.error_array for picket in self.pickets]))
-
-        # max von mean bestimmen
-        error_plot_positions, error_means, error_stds, mlc_leaves = self.pickets.error_hist()
-        # pandas serie max und position bestimmen
-        pd_error_means = pd.Series( error_means)
-        max_from_mean_error = pd_error_means.max()
-        # FIXME: image muss up/down getauscht werden, deshalb auch die MLC Nummern ändern
-        max_from_mean_leaf = mlc_leaves[ pd_error_means.idxmax() ][1] - 60
-
-        return {
-            'filename': self.infos["filename"],
-            'Kennung': self._kennung.format( **self.infos ),
-            'unit':  self.infos['unit'],
-            'energy': self.infos['energy'],
-            'gantry' : self.infos['gantry'],
-            'collimator': self.infos['collimator'],
-            'checkPositions': self.pickets,
-            "offsets" : offsets,
-            "pass_pct" : pass_pct,
-            "abs_median_error": self.abs_median_error,
-            "abs_mean_error": self.abs_mean_error,
-            "mean_spacing" : self.pickets.mean_spacing,
-            "max_error": self.max_error,
-            "max_error_picket" : self.max_error_picket,
-            "max_error_leaf" :self.max_error_leaf,
-            "passed": self.passed,
-            "passed_action" : self.passed_action,
-            "max_from_mean" : max_from_mean_error,
-            "max_from_mean_leaf" : max_from_mean_leaf,
-        }
-        """
-        string = f"Picket Fence Results: \n{pass_pct:2.1f}% " \
-                 f"Passed\nMedian Error: {self.abs_median_error:2.3f}mm \n" \
-                 f"Mean picket spacing: {self.pickets.mean_spacing:2.1f}mm \n" \
-                 f"Picket offsets from CAX (mm): {offsets}\n" \
-                 f"Max Error: {self.max_error:2.3f}mm on Picket: {self.max_error_picket}, Leaf: {self.max_error_leaf}"
-        """
 #
 # -----------------------------------------------------------------------------
 #
@@ -2328,7 +2478,14 @@ class checkMlc( ispBase ):
                 {'field': 'max_from_mean_passed', 'label':'Max von Mean Error Passed' },
                 {'field': 'max_from_mean_leaf', 'label':'Max von Mean Error<br>bei Leaf', 'format':'{0:d}' },
 
-            ]
+            ],
+            "field": { "X1":-100, "X2": 100, "Y1": -100, "Y2":100, "xStep":50, "yStep":50, "border": 10 },
+            "mlc_type": "Millennium",
+            "crop_field":  { "X1":-105, "X2": 105, "Y1": -105, "Y2":105 },
+            "analyze": {
+                "required_prominence" : 0.01
+            }
+            
         } ), self.metadata )
         md.update( overrideMD )
 
@@ -2379,20 +2536,47 @@ class checkMlc( ispBase ):
             data=[]
             # für jeden Datensatz (sollte eigentlich nur einer pro Tag sein)
             for info in df_group.itertuples():
-
                 # mlc Prüfung aktivieren
-                check = qa_mlc( self.getFullData( info._asdict() ) )
+                check = qa_mlc( self.getFullData( info._asdict() ), mlc=md.mlc_type )
                 # image Flip oben unten durchführen da sonst die Darstellung falsch ist
                 check.image.flipud()
                 # Feld vorher beschneiden
-                check.image.cropField(  { "X1":-110, "X2": 110, "Y1": -110, "Y2":110 } )
+                check.image.cropField( md.crop_field )
+                
+                '''
+                default Parameter:
+                sag_adjustment: float | int = 0,
+                orientation: Orientation | str | None = None,
+                invert: bool = False,
+                leaf_analysis_width_ratio: float = 0.4
+                picket_spacing: float | None = None
+                height_threshold: float = 0.5
+                edge_threshold: float = 1.5
+                peak_sort: str = "peak_heights"
+                required_prominence: float = 0.2
+                '''
                 # und picketfence analyse durchführen
-                check.analyze( tolerance=error, action_tolerance=warning )
+                try:
+                    check.analyze( 
+                        tolerance=error, 
+                        action_tolerance=warning, 
+                    #    orientation=Orientation.LEFT_RIGHT, 
+                        required_prominence=md.analyze.required_prominence, # 0.02, # 0.05
+                    #    height_threshold=0.5, 
+                        edge_threshold=1.5, 
+                        invert=False 
+                    )
+                except ValueError as value_error:
+                    print( "_doMLC_VMAT analyze ValueError: {}.\n{}{:02d} - {} - {} - {}".format( value_error, md.current.year, md.current.month, md.current.unit, md.current.energy,  md.current.testTag) )
+                    result.append( self.pdf_error_result(
+                        md, date=checkDate, group_len=len( result ),
+                        msg= '<b>Analyze Error</b>: keine Pickets gefunden. "{}"'.format(value_error)
+                    ) )
 
                 results = check.picketfence_results()
                 results["Kennung"] = results["Kennung"]
-                # nur Kolli 0° felder
-                if results["collimator"] == 0:
+                # Grafiken nur für Felder mit Kolli 0° anzeigen
+                if hasattr(check, "pickets") and results["collimator"] == 0:
                     # Bild mit analyse anzeigen
                     img = check.picketfence_plotImage( metadata=md )
                     self.pdf.image(img, md["_chartSize"] )
@@ -2637,11 +2821,13 @@ class checkMlc( ispBase ):
                 for p in checkPositions:
                     i += 1
                     profile = SingleProfile( check.image.array[ check.image.mm2dots_Y( p ) ] )
+                    fwxm_data = profile.fwxm_data()
+                    fwxm= fwxm_data["width (exact)"]  
                     # daten zusammenstellen
                     data[ i ] = {
                         "leaf" : i,
                         "position" :  p,
-                        "value" : (profile.fwxm() / check.image.dpmm / 2)
+                        "value" : (fwxm / check.image.dpmm / 2)
                     }
 
 

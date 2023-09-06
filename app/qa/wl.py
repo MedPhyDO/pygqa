@@ -4,7 +4,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.2"
+__version__ = "0.2.0"
 __status__ = "Prototype"
 
 from sortedcontainers import SortedDict
@@ -40,7 +40,7 @@ from app.base import ispBase
 from app.qa.field import qa_field
 
 from isp.config import dict_merge
- 
+from isp.plot import plotClass
 
 # logging
 import logging
@@ -165,7 +165,7 @@ class qa_wl( ispCheckClass ):
         for key, f in self.colFields.items(): 
             # isoCal Kugelpositionen bestimmen
             wlField = qa_field( f )
-            imageArray = wlField.image.cropField( self.roi ) 
+            imageArray = wlField.image.getRoi( self.roi )
             isoCal, isoCalDot = self._findIsoCalCenter( wlField, True )
             
             # summenfeld erstellen um dies evt. zu verwenden
@@ -278,12 +278,14 @@ class qa_wl( ispCheckClass ):
             gefundenes Zentrum in pixel
         """
         # imageArray invertieren
-        img_inv = -imageArray + imageArray.max() + imageArray.min()
-                
+        img_inv = -imageArray + imageArray.max() + imageArray.min()        # eine Bildmaske des großen kreises erstellen
+
         # eine Bildmaske des großen kreises erstellen
         labeled_foreground = (img_inv > filters.threshold_otsu( img_inv ) ).astype(int)
+        
         # eine Auswertung der Bildmaske vornehmen
-        properties = measure.regionprops( labeled_foreground )
+        properties = measure.regionprops( labeled_foreground)
+        
         # es könnten mehrere objekte vorhanden sein
         # in unseren Bildern ist aber nur eins deshalb das erste verwenden
         
@@ -329,8 +331,8 @@ class qa_wl( ispCheckClass ):
         """
 
         # das image auf den wichtigen Bereich beschneiden
-        imageArray = field.image.cropField( self.roi ) 
-        
+        imageArray = field.image.getRoi( self.roi )
+
         # das gefundene Zentrum des ISO Cal Phantomstiftes in dots
         isoCalDot = self._findArrayIsoCalCenter( imageArray, debug )
         # das gefundene Zentrum des ISO Cal Phantomstiftes in mm
@@ -371,7 +373,7 @@ class qa_wl( ispCheckClass ):
         
         field = qa_field( info )
         # das image auf den wichtigen Bereich beschneiden
-        imageArray = field.image.cropField( self.roi ) 
+        imageArray = field.image.getRoi( self.roi )
         
         # imageArray invertieren
         img_inv = -imageArray + imageArray.max() + imageArray.min()
@@ -514,9 +516,9 @@ class qa_wl( ispCheckClass ):
     def plotChart(self, chartSize={}, text=""):
         """Alle Achsen charts ausgeben
         """
-        
-        fig, ax = self.initPlot( chartSize, True, nrows=2, ncols=2 )
-          
+        plot = plotClass( )
+        fig, ax = plot.initPlot( chartSize, True, nrows=2, ncols=2 )
+         
         #print( self.centers )
         rms = {}
         for mpl_axis, wl_axis, title, color in zip_longest(
@@ -607,7 +609,7 @@ class qa_wl( ispCheckClass ):
             
         plt.tight_layout(pad=0.4, w_pad=0.1, h_pad=1.0)
         plt.subplots_adjust( hspace=0.4, wspace=0.2)
-        return self.getPlot()
+        return plot.getPlot()
     
     def _axisImage(self, ax=None, axisId="", title="" ):
         """Ein Achsen Bild mit markern ausgeben
@@ -648,7 +650,8 @@ class qa_wl( ispCheckClass ):
         
         """
         # plotbereiche festlegen
-        fig, ax = self.initPlot( imageSize, nrows=1, ncols=3)
+        plot = plotClass( )
+        fig, ax = plot.initPlot( imageSize, nrows=1, ncols=3 )
         
         for mpl_axis, wl_axis, title in zip_longest(
                 ax.flatten(), ["G", "C", "T"], ["Gantry", "Kollimator", "Tisch"]
@@ -660,7 +663,7 @@ class qa_wl( ispCheckClass ):
                 pass
             
         plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
-        return self.getPlot()
+        return plot.getPlot()
         
     
 class checkWL( ispBase ):

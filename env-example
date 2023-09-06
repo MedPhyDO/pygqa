@@ -1,0 +1,19 @@
+ 
+#
+# Set your user id and group id
+#
+# This should be changed to the value of your local
+# users uid and gid
+#
+# Type `id` on the terminal to find out your values
+#
+USE_UID=0
+USE_GID=0
+
+
+
+#
+# DOCKER_PORT (not used with network_mode: "host")
+#
+LOCAL_PORT=5010
+DOCKER_PORT=5011

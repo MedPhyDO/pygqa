@@ -217,7 +217,6 @@
                 "doserate",
                 "ME"
             ],
-            "tag": "MT_4.1.2",
             "tolerance_pdf": {},
             "Linac-1": {
                 "energyFields" : { "6x":10, "6xFFF":10, "10xFFF":10 }

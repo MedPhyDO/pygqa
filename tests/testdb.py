@@ -130,9 +130,11 @@ class dbtests( ispSAFRSModel ):
             .set_uuid( "test_pandas_" )
             .set_table_attributes('class="dbtests sysinfo layout-fill-width"') \
             #.format( { 'Gantry':'{0:.1f}', 'Kollimator':'{0:.1f}', 'delta':'{0:.3f}'} )
-            .hide_index()
+            #.hide_index()
             #.highlight_max(subset=["delta"], color='yellow', axis=0)
-            .render()
+            #.render()
+            .to_html( sparse_index=False )
+           
         )
 
         style = '''
@@ -226,10 +228,10 @@ class dbtests( ispSAFRSModel ):
 
             _result = {
                 "data" : [
-                    {"attributes": {"Geraet": "AL", "hasChildren": 1, "label": "AL"}, "type": "Ersatz"},
-                    {"attributes": {"Geraet": "la", "hasChildren": 1, "label": "LA20"}, "type": "Ersatz"},
-                    {"attributes": {"Geraet": "vb", "hasChildren": 1, "label": "VitalBeam"}, "type": "Ersatz"},
-                    {"attributes": {"Geraet": "tb", "hasChildren": 1, "label": "TrueBeam"}, "type": "Ersatz"}
+                    {"attributes": {"Geraet": "AL", "hasChildren": 1, "label": "AL"}, "type": "spare"},
+                    {"attributes": {"Geraet": "la", "hasChildren": 1, "label": "LA"}, "type": "spare"},
+                    {"attributes": {"Geraet": "vb", "hasChildren": 1, "label": "VB"}, "type": "spare"},
+                    {"attributes": {"Geraet": "tb", "hasChildren": 1, "label": "TB"}, "type": "spare"}
                 ]
             }
         return cls._int_json_response( _result )

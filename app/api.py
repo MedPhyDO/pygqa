@@ -22,7 +22,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.9"
+__version__ = "0.2.0"
 __status__ = "Prototype"
 
 import json
@@ -472,7 +472,7 @@ class gqa( ispSAFRSDummy ):
         html += (gqa_df.replace({np.nan:''}).style
             .set_table_attributes('class="gqa-config"')
             .format("<pre><code>{}</code></pre>")
-            .render()
+            .to_html( sparse_index=False )
         )
         html += '</div>'
         return Response(style + html, mimetype='text/html')

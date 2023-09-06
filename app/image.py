@@ -7,7 +7,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.6"
+__version__ = "0.2.0"
 __status__ = "Prototype"
 
 from pylinac.core.image import DicomImage as pyDicomImage
@@ -53,10 +53,13 @@ class plotImage( pyDicomImage, plotClass ):
         Returns
         -------
         int
-            Umgewandelte Position
+            Umgewandelte Position immer größer gleich 0
 
         """
-        return int(round( self.dpmm * position + self.cax.x ))
+        x = int(round( self.dpmm * position + self.cax.x ))
+        if x < 0:
+            x = 0
+        return x
     
     def mm2dots_Y( self, position ):
         """Wandelt eine Y mm Angabe in die Pixel Positionen des image um.
@@ -69,10 +72,13 @@ class plotImage( pyDicomImage, plotClass ):
         Returns
         -------
         int
-            Umgewandelte Position
+            Umgewandelte Position immer größer gleich 0
 
         """
-        return int(round( self.dpmm * position + self.cax.y ))
+        y = int(round( self.dpmm * position + self.cax.y ))
+        if y < 0:
+            y = 0
+        return y
 
         
     def dots2mm_X( self, dots ):
@@ -282,7 +288,7 @@ class DicomImage( plotImage ):
          
         """
         
-        self.infos = None
+        self.infos = {}
         
         # siehe: isp.config.infoFields
         self.infoFields = infoFields
@@ -309,7 +315,7 @@ class DicomImage( plotImage ):
             self.doRescaleSlope()       
         
     
-    def initMemoryDicom(self, data):
+    def initMemoryDicom(self, data:dict={}):
         """ Lädt Dicom daten die schon im Speicher sind
         
         Parameters
@@ -335,9 +341,9 @@ class DicomImage( plotImage ):
         # auf Dataset oder FileDataset <class 'pydicom.dataset.FileDataset'> abfragen
         if not data["dicom"].__class__.__name__ in [ "Dataset",  "FileDataset"]:
             return False
-        
+                       
         self.metadata = data["dicom"] # pydicom.FileDataset <class 'pydicom.dataset.FileDataset'>
-        
+       
         # dtype=uint16; SOPClassUID=RT Image Storage
         self._original_dtype = self.metadata.pixel_array.dtype
         if dtype is not None:
@@ -533,8 +539,10 @@ class DicomImage( plotImage ):
             metadata["imgSize"] = {"width": 90, "height": 90 }
             
             
-        fig, ax = self.initPlot( metadata["imgSize"], getPlot=getPlot, **args )
-        
+        # plot anlegen
+        plot = plotClass( )
+        fig, ax = plot.initPlot( metadata["imgSize"], getPlot=getPlot, **args )
+         
         # wurde in original eine instance von BaseImage angegeben dann diese verwenden
         imageArray = None
         
@@ -619,14 +627,16 @@ class DicomImage( plotImage ):
         
         # layout optimieren
         plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
-        
+         
         if getPlot==True:
             # data der Grafik zurückgeben
-            return self.getPlot()
+            data = self.getPlot()
+            plt.close("all")
+            return data
         else:
             return self, fig, ax
             
-    def getRoi( self, field=None ):
+    def getRoi( self, field:dict=None ):
         """ holt region of interest des angegebenen Bereichs aus image.array
         
         """
@@ -638,8 +648,7 @@ class DicomImage( plotImage ):
         
         """
         da = self.getFieldDots( )
-        return self.array[ da["Y1"]:da["Y2"], da["X1"]:da["X2"] ]
-        
+        return self.array[ da["Y1"]:da["Y2"], da["X1"]:da["X2"] ]     
     
     def getLine( self, field=None ):
         """ holt eine pixel Reihe 
@@ -651,17 +660,17 @@ class DicomImage( plotImage ):
             line = self.array[ self.mm2dots_Y(field["y"]) ]
         return line
         
-    def cropField( self, field ):
+    def cropField( self, field:dict=None ):
         """ Das image auf die angegebene Größe beschneiden
             Dabei wird image.cax auf das neue Zentrum gesetzt
             { "X1":-200, "X2": 200, "Y1": -200, "Y2":200 }
         """
+        da = self.getFieldDots( field )
         self.array = self.array[ 
-                self.mm2dots_Y( field["Y1"] ) : self.mm2dots_Y(field["Y2"]), 
-                self.mm2dots_X( field["X1"] ) : self.mm2dots_X(field["X2"]) 
-            ]
+            da["Y1"]:da["Y2"], da["X1"]:da["X2"]
+       ]
         #print( self.image.array.shape,  self.image.array )
         self.center.x = self.array.shape[0] / 2
         self.center.y = self.array.shape[1] / 2
         
-        return self.array
+        return self

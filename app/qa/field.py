@@ -4,18 +4,22 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.2"
+__version__ = "0.2.0"
 __status__ = "Prototype"
 
-from pylinac import FlatSym
+from typing import BinaryIO
+
+from pylinac.field_analysis import FieldAnalysis
 from pylinac.core.profile import MultiProfile
 from pylinac.core.geometry import Point
+from pylinac.core.profile import SingleProfile
 
 from app.base import ispBase
 from app.image import DicomImage
 from app.check import ispCheckClass
 
 from isp.config import dict_merge
+from isp.plot import plotClass
 
 import numpy as np
 import pandas as pd
@@ -50,14 +54,19 @@ def pointRotate(origin, point, angle):
 
     return Point( qx, qy )
 
-class FSImage( FlatSym, DicomImage ):
+class FSImage( FieldAnalysis, DicomImage ):
 
-    def __init__(self, pathOrData=None, **kwargs ):
-        """ Erweitert PFDicomImage um die eigene DicomImage Klasse
+    def __init__(
+        self,
+        path: str | BinaryIO,
+        filter: int | None = None,
+        image_kwargs: dict | None = None,
+    ):
+        """ Erweitert field_analysis um die eigene DicomImage Klasse
 
         """
         # die eigene Erweiterung
-        DicomImage.__init__( self, pathOrData )
+        DicomImage.__init__( self, path )
 
 
 class qa_field( ispCheckClass ):
@@ -93,24 +102,30 @@ class qa_field( ispCheckClass ):
         DONE: flatness selbst berechnen - flatness = (dmax-dmin) / np.mean(m)
 
         """
-        def flatness_calculation(profile):
+        def flatness_calculation(profile:SingleProfile):
             """IEC specification for calculating flatness
-            der CAX wird aus 5 benachbarten Werten gebildet
+            'der CAX wird aus 5 benachbarten Werten gebildet'
             """
-            cax_idx = profile.fwxm_center()
+            # cax_idx = profile.fwxm_center()
 
+            fwxm_data = profile.fwxm_data()
+            cax_idx= fwxm_data["center index (rounded)"]           
+            #print( fwxm_data )
             # cax von 5 benachbarten Werten bilden
-            cax5 = np.mean( profile[cax_idx-2:cax_idx+3] )
+            cax5 = np.mean( profile.values[cax_idx-2:cax_idx+3] )
 
             #print( cax, profile, cax5 )
 
-            dmax = profile.field_calculation(field_width=0.8, calculation='max')
-            dmin = profile.field_calculation(field_width=0.8, calculation='min')
+            dmax = profile.field_calculation(in_field_ratio=0.8, calculation='max')
+            dmin = profile.field_calculation(in_field_ratio=0.8, calculation='min')
             flatness = (dmax - dmin) / cax5 * 100
-            lt_edge, rt_edge = profile.field_edges()
+
+
+            #lt_edge, rt_edge = profile.field_edges()
+            lt_edge = fwxm_data["left index (rounded)"]    
+            rt_edge = fwxm_data["right index (rounded)"]    
             return flatness, dmax, dmin, lt_edge, rt_edge
 
-        from pylinac.core.profile import SingleProfile
         vert_position = 0.5
         horiz_position = 0.5
 
@@ -152,8 +167,9 @@ class qa_field( ispCheckClass ):
                 profileTitle - format Ersetzungen aus self.infos sind möglich
         """
         # plotbereiche festlegen und profileSize als imgSize übergeben
-        fig, ax = self.initPlot( imgSize=metadata["profileSize"], nrows=2 )
-
+        plot = plotClass( )
+        fig, ax = plot.initPlot( imgSize=metadata["profileSize"], nrows=2 )
+    
         # axes coordinates are 0,0 is bottom left and 1,1 is upper right
 
         # Kurven Informationen
@@ -188,7 +204,9 @@ class qa_field( ispCheckClass ):
         ax[0].axvline(data["horizontal"]['profile left'], color='g', linewidth=1, linestyle='-.')
         ax[0].axvline(data["horizontal"]['profile right'], color='g', linewidth=1, linestyle='-.')
 
-        cax_idx = data["horizontal"]['profile'].fwxm_center()
+        fwxm_data = data["horizontal"]['profile'].fwxm_data()
+        cax_idx= fwxm_data["center index (rounded)"]      
+        
         ax[0].axvline(cax_idx, color='g', linewidth=1, linestyle='-.')
 
         # limits nach dem autom. setzen der Kurve
@@ -231,7 +249,9 @@ class qa_field( ispCheckClass ):
         ax[1].axvline(data["vertical"]['profile left'], color='g', linewidth=1, linestyle='-.')
         ax[1].axvline(data["vertical"]['profile right'], color='g', linewidth=1, linestyle='-.')
 
-        cax_idx = data["vertical"]['profile'].fwxm_center()
+        fwxm_data = data["vertical"]['profile'].fwxm_data()
+        cax_idx = fwxm_data["center index (rounded)"]      
+        
         ax[1].axvline(cax_idx, color='g', linewidth=1, linestyle='-.')
         #ax[1].set_title('Vertikal')
 
@@ -252,11 +272,11 @@ class qa_field( ispCheckClass ):
                 alpha=.5
         )
 
-        import matplotlib.pyplot as plt
+        
         # Layout optimieren
         plt.tight_layout(pad=0.4, w_pad=1.0, h_pad=1.0)
         # data der Grafik zurückgeben
-        return self.getPlot()
+        return plot.getPlot()
 
 
     def find4Qdata( self, field=None ):
@@ -355,7 +375,9 @@ class qa_field( ispCheckClass ):
         """
 
         # plotbereiche festlegen
-        fig, ax = self.initPlot( metadata["profileSize"] )
+        plot = plotClass( )
+        fig, ax = plot.initPlot(  metadata["profileSize"] )
+       # fig, ax = self.initPlot( metadata["profileSize"] )
         #print("plot4Qprofile", data)
         ax.set_title(data["name"])
 
@@ -378,7 +400,7 @@ class qa_field( ispCheckClass ):
 
         plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
         # data der Grafik zurückgeben
-        return self.getPlot()
+        return plot.getPlot()
 
 
 class checkField( ispBase ):
@@ -542,7 +564,7 @@ class checkField( ispBase ):
 
             result_doserate = []
 
-            def groupByDoserate( df_doserate ):
+            def groupByDoserate( df_doserate ):                
                 text = ""
                 # in den Toleranzangaben der config steht die default query
                 openFieldQuery = md.current.tolerance.default.check.query
@@ -596,16 +618,13 @@ class checkField( ispBase ):
 
                 # aus den daten ein DataFrame machen
                 evaluation_df = pd.DataFrame( data )
-
                 # check tolerance - printout tolerance, evaluation_df -  md["tolerance_field"],
                 acceptance = self.evaluationResult( evaluation_df, md, result_doserate, printResultIcon=False )
-
                 # acceptance dieser Gruppe zurückgeben
                 return acceptance
 
             #
             # Gruppiert nach doserate abarbeiten und min zurückgeben
-            #
             acceptance = df_group.groupby( [ "doserate" ] ).apply( groupByDoserate ).min()
 
             #
@@ -1371,8 +1390,7 @@ class checkField( ispBase ):
             # base Field und dosis bereitstellen
             baseField = qa_field( self.getFullData( df_base.loc[df_base.index[0]] ) )
 
-            Mof = baseField.image.getRoi( md["doseArea"] ).copy()
-
+            
             data = [{
                     'Kennung': baseField.infos["Kennung"],
                     'gantry': baseField.infos["gantry"],
@@ -1388,10 +1406,21 @@ class checkField( ispBase ):
             # Bild anzeigen
             self.pdf.image( img, md["_imgSize"] )
 
+            Mof = baseField.image.getRoi( md["doseArea"] ).copy()
+
             # alle felder durchgehen
             for info in df_fields.itertuples():
 
                 field = qa_field( self.getFullData( info ) )
+
+                img = field.image.plotImage( original=False
+                            , field = md["_imgField"]
+                            , metadata = md
+                            , plotTitle = "{Kennung}"
+                            , invert=False, plotCax=False, plotField=True )
+                # Bild anzeigen
+                self.pdf.image( img, md["_imgSize"] )
+
                 #Mdmlc = field.getMeanDose( md["doseArea"] )
                 Mdmlc = field.image.getRoi( md["doseArea"] ).copy()
                 Mcorr = (Mdmlc / Mof).mean()
@@ -1403,14 +1432,6 @@ class checkField( ispBase ):
                     'Mdev': np.nan,
                     'Pass' : np.nan
                 } )
-
-                img = field.image.plotImage( original=False
-                            , field = md["_imgField"]
-                            , metadata = md
-                            , plotTitle = "{Kennung}"
-                            , invert=False, plotCax=False, plotField=True )
-                # Bild anzeigen
-                self.pdf.image( img, md["_imgSize"] )
 
                 # progress pro file stimmt nicht immer genau (baseimage)
                 # 40% für die dicom daten 40% für die Auswertung 20 % für das pdf

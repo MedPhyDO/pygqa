@@ -8,7 +8,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.9"
+__version__ = "0.2.0"
 __status__ = "Prototype"
 
 import sys
@@ -242,8 +242,8 @@ class ispBase(  ):
                 errors.append( "- baseField ist nicht 1" )
                 dfb = baseField[ err_columns ]
                 dfb['FeldArt'] = 'base'
-
-                err_fields = err_fields.append(dfb)
+                err_fields = pd.concat( [ err_fields, dfb ] )
+            #    err_fields = err_fields.concat(dfb)
             else:
                 errors.append( "- baseField fehlt" )
 
@@ -253,7 +253,7 @@ class ispBase(  ):
             dff = fields[ err_columns ]
             dff['FeldArt'] = 'field'
 
-            err_fields = err_fields.append(dff)
+            err_fields = pd.concat( [ err_fields, dff ] )
 
             errors.append( "- Feldzahl ist {} statt {}".format( len(fields.index), fieldLen ) )
 
@@ -550,14 +550,12 @@ class ispBase(  ):
             # in der liste der dataframes anfügen
             dfs.append( qdf )
 
-
         # alle teile des dataframes zusammenfassen
         df = pd.concat( dfs )
-
         # print( "check_acceptance_ext df", df)
 
         # minimun des fullcheck ermitteln
-        minAll = df[ fullCheck ].min(axis=None, skipna=True)
+        minAll = df[ fullCheck.values() ].min(axis=None, skipna=True)
         acceptance = minAll.min()
 
         return df, acceptance
@@ -787,7 +785,7 @@ class ispBase(  ):
             else:
                 text += "**Berechnungen:**\n```javascript\n{}\n```\n".format( eval_str )
             try:
-                df.eval( eval_str, inplace=True)
+                df.eval( eval_str, inplace=True )
             except:
                 pass
 

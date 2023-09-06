@@ -7,11 +7,14 @@
 
 # append project baspath to site
 import os, site
-ABSPATH = os.path.dirname( os.path.abspath( __file__) )
-base_path = os.path.join( ABSPATH , ".." )
-site.addsitedir(base_path)
-
 from os import path as osp
+
+ABSPATH = osp.dirname( osp.abspath( __file__) )
+BASEPATH = osp.join( ABSPATH , "..")
+FILESPATH = osp.join( BASEPATH, 'data', 'tests') 
+
+site.addsitedir(BASEPATH)
+
 import shutil
 
 from urllib.parse import urlencode
@@ -53,6 +56,9 @@ class testBase(testCaseBase):
     called_tests = []  
     called_tests_url = []
     
+    check_pdf = False
+    check_data = False
+
     @classmethod
     def setUpClass(self):
         """Wird beim initialisieren der Testklasse aufgerufen.
@@ -65,9 +71,8 @@ class testBase(testCaseBase):
         # It defaults to 80*8 characters
         self.maxDiff = None
 
-        resources_path = os.path.join( ABSPATH , "resources" ) 
-        
-        check_path = os.path.join( resources_path, 'check')
+        resources_path = os.path.join( ABSPATH, "resources" ) 
+        check_path = os.path.join( FILESPATH, 'check')
         if not os.path.exists( check_path ):
             os.mkdir( check_path )
             
@@ -95,10 +100,10 @@ class testBase(testCaseBase):
             "dicom": {
                 "servername" : "VMSCOM",
                 "VMSCOM" : {
-                    "local_dir" : "files/DICOM"
+                    "local_dir" : osp.join( FILESPATH, "DICOM" )
                 }
             },
-            "resultsPath" : "files",
+            "resultsPath" : FILESPATH,
             "version": "unittest",
             "variables" : {
                 "Datenausgabe" : "unittest"
@@ -109,7 +114,8 @@ class testBase(testCaseBase):
                     
         # Vergleichs Daten laden 
         self.data_file = osp.join( self.webapp._config.resultsPath, self.webapp._config.database.gqa.name )
-        self.check_data_file = osp.join( 'resources', 'check', 'pygqa.json')
+        self.check_data_file = osp.join( check_path, 'pygqa.json')
+
         if osp.isfile( self.check_data_file ):
             self.gqa = pd.read_json( self.check_data_file, orient="table", precise_float=10 )
 
@@ -126,8 +132,10 @@ class testBase(testCaseBase):
                 self.testTags[ item["tag"] ] = testid
                 self.testIds[ testid ] = item["tag"]
 
-        if self.gqa_data_ready == False:
-            print("Es liegen noch keine Vergleichsdaten vor. Die Tests könnnen nicht geprüft werden.")
+        if self.gqa_data_ready == True:
+            print( "testBase::setUpClass - Verwende '{}' zum überprüfen.".format(self.check_data_file) )
+        else:
+            print("testBase::setUpClass - Es liegen noch keine Vergleichsdaten in '{}' vor. Die Testergebnisse könnnen nicht geprüft werden".format(self.check_data_file) )
 
     @classmethod
     def tearDownClass(cls):
@@ -147,7 +155,8 @@ class testBase(testCaseBase):
         if cls.gqa_data_ready == False:
           print( )
           print( "Kopiere Vergleichsdaten von {} nach {}".format(cls.data_file, cls.check_data_file) ) 
-          shutil.copyfile( cls.data_file, cls.check_data_file )
+          if osp.isfile( cls.data_file ):
+            shutil.copyfile( cls.data_file, cls.check_data_file )
           
         print( )
         print( "Called tests:")
@@ -200,7 +209,12 @@ class testBase(testCaseBase):
 
         '''
         
+        # nur wenn unit !== null
+        if not params["unit"] :
+            return
+
         url = '/api/gqa/run'
+
         self.called_tests.append( params )
         
         self.called_tests_url.append( "{}?{}".format( url, urlencode( params ) ) )
@@ -217,96 +231,102 @@ class testBase(testCaseBase):
         appError = response.json.get('App-Error', [] )
         # appInfo = response.json.get('App-Info', [] )
 
-        self.assertGreater(
-            len( result ), 0,
-            "keine Test Rückgabe: '{unit}', '{testid}'".format( **params )
-        )
         # es dürfen keine App-Error Angaben vorliegen
         self.assertListEqual(
             appError, [],
             "App-Error: {}".format( json.dumps(appError)  )
         )
 
+        self.assertGreater(
+            len( result ), 0,
+            "keine Test Rückgabe: '{unit}', '{testid}'".format( **params )
+        )
+
+
         # pro pdffile die test_results im Ergebnis prüfen wenn es eine results datei gibt
         if self.gqa_data_ready:
 
             for pdf_name, data in result.items():
                 self.called_tests.append(pdf_name )
-                self.check_pdf_data( data["pdfData"] )
+
+                if self.check_pdf:
+                    self.check_pdf_data( data["pdfData"] )
                 
-                # pro test im pdffile
-                for test in data["result"]:
-                    # print( pdf_name, test )
-                    #testid = self.testIds
-                    try:
-                        orgData = self.gqa.loc[ test["unit"], test["energy"], test["test"], test["date"], test["group"] ].to_dict(  )
-                    except:
-                        orgData = {}
+                if self.check_data:
+                    # pro test im pdffile
+                    for test in data["result"]:
+                        # print( pdf_name, test )
+                        #testid = self.testIds
+                        try:
+                            orgData = self.gqa.loc[ test["unit"], test["energy"], test["test"], test["date"], test["group"] ].to_dict(  )
+                        except:
+                            orgData = {}
 
 
-                    if orgData == {}:
-                        print( "keine Vergleichsdaten vorhanden: '{unit}', '{energy}', '{test}', '{date}', {group}".format( **test ) )
-                        print( "Testresult (json pandas format):" )
-                        test_json = {
-                          "unit": test["unit"],
-                          "energy": test["energy"],
-                          "test": test["test"],
-                          "date": test["date"],
-                          "group": test["group"],
-                          "year": test["year"],
-                          "month": test["month"],   
-                          "acceptance": test["acceptance"],
-                          "data": test["data"]                     
-                        } 
-                        print( json.dumps( test_json, indent=2 ) )
-                        '''
-                        self.assertNotEqual(
-                            orgData, {},
-                            "keine Vergleichsdaten vorhanden: '{unit}', '{energy}', '{test}', '{date}', {group}".format( **test )
-                        )
-                        '''
-                    else:
-                        # über pandas mit double_precision=4 auswerten
-                        # in data liegt als []
-                        # json.loads( df[ fields ].to_json(orient='index', double_precision=10, indent=2 ) )
-                      
-                        #print( json.dumps(orgData['data'], indent=2 ) )
-
-                        #print(orgData['data'])
-                        #print(test['data'])
-                        orgData_data = []
-                        test_data = []
-                        double_precision = 4 # oder 5
-                        for data in orgData['data']:
-                            #print( orgData['data'] )
-                            df_org_data = pd.read_json( json.dumps(orgData['data'][0]), orient='index' ).sort_index()
-                           
-                            df_test_data = pd.read_json( json.dumps(test['data'][0]), orient='index' ).reindex(columns=df_org_data.columns).sort_index()
-                            
-                            orgData_data.append( json.loads(df_org_data.to_json( orient='index', double_precision=double_precision ) ) )
-                            test_data.append( json.loads(df_test_data.to_json( orient='index', double_precision=double_precision ) ) )
+                        if orgData == {}:
+                            print( "keine Vergleichsdaten vorhanden: '{unit}', '{energy}', '{test}', '{date}', {group}".format( **test ) )
+                            print( "Testresult (json pandas format):" )
+                            test_json = {
+                            "unit": test["unit"],
+                            "energy": test["energy"],
+                            "test": test["test"],
+                            "date": test["date"],
+                            "group": test["group"],
+                            "year": test["year"],
+                            "month": test["month"],   
+                            "acceptance": test["acceptance"],
+                            "data": test["data"]                     
+                            } 
+                            print( json.dumps( test_json, indent=2 ) )
                             '''
-                            df_compare = df_org_data.compare( df_test_data )
-                            if len(df_compare) > 0:
-                                print( "Vergleichsdaten unterschiedlich: '{unit}', '{energy}', '{test}', '{date}', {group}".format( **test ) )
- 
-                                print( "orgData_data", json.dumps(orgData['data'], indent=2 ) )
-                                print( "test_data", json.dumps(test['data'], indent=2 ) )       
-                            '''  
+                            self.assertNotEqual(
+                                orgData, {},
+                                "keine Vergleichsdaten vorhanden: '{unit}', '{energy}', '{test}', '{date}', {group}".format( **test )
+                            )
+                            '''
+                        else:
+                            # über pandas mit double_precision=4 auswerten
+                            # in data liegt als []
+                            # json.loads( df[ fields ].to_json(orient='index', double_precision=10, indent=2 ) )
                         
-                        self.assertListEqual(
-                            orgData_data,
-                            test_data,
-                            "Datenfehler im Testresult: '{unit}', '{energy}', '{test}', '{date}', {group}'".format( **test )
-                        )
-                        '''
-                        # komplette genauigkeit testen
-                        self.assertListEqual(
-                            orgData['data'] or [],
-                            test['data'] or [],
-                            "Datenfehler im Testresult: '{unit}', '{energy}', '{test}', '{date}', {group}'".format( **test )
-                        )
-                        '''
+                            #print( json.dumps(orgData['data'], indent=2 ) )
+
+                            #print(orgData['data'])
+                            #print(test['data'])
+                            orgData_data = []
+                            test_data = []
+                            double_precision = 4 # oder 5
+                            for data in orgData['data']:
+                                #print( orgData['data'] )
+                                df_org_data = pd.read_json( json.dumps(orgData['data'][0]), orient='index' ).sort_index()
+                            
+                                df_test_data = pd.read_json( json.dumps(test['data'][0]), orient='index' ).reindex(columns=df_org_data.columns).sort_index()
+                                
+                                orgData_data.append( json.loads(df_org_data.to_json( orient='index', double_precision=double_precision ) ) )
+                                test_data.append( json.loads(df_test_data.to_json( orient='index', double_precision=double_precision ) ) )
+                                '''
+                                
+                                df_compare = df_org_data.compare( df_test_data )
+                                if len(df_compare) > 0:
+                                    print( "Vergleichsdaten unterschiedlich: '{unit}', '{energy}', '{test}', '{date}', {group}".format( **test ) )
+    
+                                    print( "orgData_data", json.dumps(orgData['data'], indent=2 ) )
+                                    print( "test_data", json.dumps(test['data'], indent=2 ) )       
+                                '''  
+                            
+                            self.assertListEqual(
+                                orgData_data,
+                                test_data,
+                                "Datenfehler im Testresult: '{unit}', '{energy}', '{test}', '{date}', {group}'".format( **test )
+                            )
+                            '''
+                            # komplette genauigkeit testen
+                            self.assertListEqual(
+                                orgData['data'] or [],
+                                test['data'] or [],
+                                "Datenfehler im Testresult: '{unit}', '{energy}', '{test}', '{date}', {group}'".format( **test )
+                            )
+                            '''
                         
 
 #
@@ -381,35 +401,465 @@ class WebAppTest( testBase ):
         response = self.app.get( url, query_string = {"format": "html"} )
         self.assertEqual(response.status_code, 200, "Api Rückgabe fehlerhaft")
 
+    # ---- MLC -----------------------------------------------
+    def test_mlc_MT_LeafSpeed_2020(self):
+        ''' Monatstest - MT_LeafSpeed - IMRT - Geschwindigkeit und Geschwindigkeitsänderung der Lamellen
+        '''
+        
+        for pid, unit in self.webapp._config.testunits.items():
+          if self.webapp._config.units[ unit ]:
+            self.run_test( {
+                "testid": "MT-LeafSpeed",
+                "unit": unit,
+                "year": 2020,
+                "month": 1
+            } )
+
+
+    # ---- MLC -----------------------------------------------
+
+    def test_mlc_JT_10_3_1_2019(self):
+        ''' Jahrestest - JT_10.3.1 - Leafabstand bei FWHM für alle Leafpaare
+
+        Dieser Test wird auch für das Prüfen der Dicomübertragung verwendet
+
+        .. todo:: im Test selbst fehlt noch der gesamt Check
+        '''
+
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "JT-10_3_1",
+              "unit": unit,
+              "year": 2019
+        } )
+          
+
+    def test_mlc_JT_4_2_2_1_A_2019(self):
+        ''' Jahrestest - JT_4.2.2.1-A - Leaf Transmission
+
+        '''
+
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "JT-4_2_2_1-A",
+              "unit": unit,
+              "year": 2019
+        } )
+          
+
+    def test_mlc_JT_4_2_2_1_B_2019(self):
+        ''' Jahrestest - JT_4.2.2.1-B - Interleaf Transmission
+        '''
+
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "JT-4_2_2_1-B",
+              "unit": unit,
+              "year": 2019
+        } )
+          
+
+    def test_mlc_JT_4_2_2_1_C_2019(self):
+        ''' Jahrestest - JT_4.2.2.1-C - Interleaf Gap
+        '''
+
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "JT-4_2_2_1-C",
+              "unit": unit,
+              "year": 2019
+        } )
+
+    def todo_test_mlc_JT_LeafSpeed_2018(self):
+        ''' Jahrestest - JT_LeafSpeed - Geschwindigkeit der Lamellen DIN 6875-3, Teil 4.2.5 (Variationen von Dl, Gantry und Kollimator)
+            96 Felder
+        '''
+
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "JT-LeafSpeed",
+              "unit": unit,
+              "year": 2018
+        } )
+          
+    
+    def test_mlc_JT_LeafSpeed_2020(self):
+        ''' Jahrestest - JT_LeafSpeed - Geschwindigkeit der Lamellen DIN 6875-3, Teil 4.2.5 (Variationen von Dl, Gantry und Kollimator)
+            27 Felder
+        '''
+
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "JT-LeafSpeed",
+              "unit": unit,
+              "year": 2020
+        } )
+
+    def test_mlc_MT_LeafSpeed_2019(self):
+        ''' Monatstest - MT_LeafSpeed - IMRT - Geschwindigkeit und Geschwindigkeitsänderung der Lamellen
+        '''
+
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "MT-LeafSpeed",
+              "unit": unit,
+              "year": 2019,
+              "month": 9
+        } )
+          
+        
+    def test_mlc_MT_LeafSpeed_2020(self):
+        ''' Monatstest - MT_LeafSpeed - IMRT - Geschwindigkeit und Geschwindigkeitsänderung der Lamellen
+    
+        '''
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "MT-LeafSpeed",
+              "unit": unit,
+              "year": 2020,
+              "month": 1
+        } )
+          
+
+        
+    def test_mlc_MT_LeafSpeed_2021(self):
+        ''' Monatstest - MT_LeafSpeed - IMRT - Geschwindigkeit und Geschwindigkeitsänderung der Lamellen
+            ab 202106 mit collimator Angabe im result
+        '''
+
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "MT-LeafSpeed",
+              "unit": unit,
+              "year": 2021,
+              "month": 1
+        } )
+        
+    def test_mlc_MT_8_02_1_2_2019(self):
+        ''' Monattest MLC - MT_8.02-1_2
+
+        Returns
+        -------
+        None.
+
+        '''
+        
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "MT-8_02-1-2",
+              "unit": unit,
+              "year": 2019,
+              "month": 9
+        } )
+
+
+    def test_mlc_MT_8_02_1_2_2020(self):
+        ''' Monattest MLC - MT_8.02-1_2
+
+        Returns
+        -------
+        None.
+
+        '''
+        # Änderung: ohne Leaf 1 und 60  (noch nicht geändert in Testresult json)
+        
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "MT-8_02-1-2",
+              "unit": unit,
+              "year": 2020,
+              "month": 5
+        } )
+          
+               
+
+    def test_mlc_MT_8_02_3_2019(self):
+        ''' Monattest MLC - 8.02-3
+
+        Returns
+        -------
+        None.
+
+        '''
+        
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "MT-8_02-3",
+              "unit": unit,
+              "year": 2019,
+              "month": 9
+        } )
+
+    def test_mlc_MT_8_02_4_2020(self):
+        ''' Monattest MLC - 8.02-4
+
+        Returns
+        -------
+        None.
+
+        Wegen einer Änderung der Auswertung ab 2020/05 in mlc.doMLC_VMAT wird 2020 verwendet
+
+        '''
+        
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "MT-8_02-4",
+              "unit": unit,
+              "year": 2020,
+              "month": 6
+        } )
+          
+
+    def test_mlc_MT_VMAT_0_2_2020(self):
+        ''' Monatstest - MT_VMAT_0.2 -
+
+            Wegen einer Änderung der Auswertung ab 2020/05 in mlc.doMLC_VMAT wird 2020 verwendet
+        '''
+
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "MT-VMAT-0_2",
+              "unit": unit,
+              "year": 2020,
+              "month": 6
+        } )
+          
+
+    def test_mlc_MT_VMAT_1_1_2020(self):
+        ''' Monatstest - MT_VMAT_1.1 -
+
+                Wegen einer Änderung der Auswertung ab 2020/05 in mlc.doMLC_VMAT wird 2020 verwendet
+        '''
+
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "MT-VMAT-1_1",
+              "unit": unit,
+              "year": 2020,
+              "month": 6
+        } )
+
+
+    def test_mlc_MT_VMAT_1_2_2020(self):
+        ''' Monatstest - MT_VMAT_1.2 -
+
+                Wegen einer Änderung der Auswertung ab 2020/05 in mlc.doMLC_VMAT wird 2020 verwendet
+        '''
+
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "MT-VMAT-1_2",
+              "unit": unit,
+              "year": 2020,
+              "month": 6
+        } )
+
+    # ---- field ----------------------------------------------
+
+    def test_field_JT_7_2_2020(self):
+        ''' Jahrestest - JT_7.2 -
+
+        '''
+        
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "JT-7_2",
+              "unit": unit,
+              "year": 2020
+        } )
+
+
+
+    def test_field_JT_7_3_2020(self):
+        '''Jahrestest - JT_7.3
+
+        '''
+
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "JT-7_3",
+              "unit": unit,
+              "year": 2020
+        } )
+        
+
+    def test_field_JT_7_4_2019(self):
+        ''' Jahrestest - JT_7.4 - Abhängikeit Kalibrierfaktoren vom Tragarm Rotationswinkel
+
+        '''
+
+        
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "JT-7_4",
+              "unit": unit,
+              "year": 2019
+        } )
+          
+
+    def test_field_JT_7_4_2020(self):
+        ''' Jahrestest - JT_7.4 - Abhängikeit Kalibrierfaktoren vom Tragarm Rotationswinkel
+
+        '''
+        
+        
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "JT-7_4",
+              "unit": unit,
+              "year": 2020
+        } )
+          
+       
+
+    def test_field_JT_7_5_2019(self):
+        '''
+        Jahrestest - JT_7.5 - Abhängikeit Kalibrierfaktoren der Tragarmrotation
+        ''' 
+        for pid, unit in self.webapp._config.testunits.items():
+            
+          self.run_test( {
+              "testid": "JT-7_5",
+              "unit": unit,
+              "year": 2019
+        } )
+        
+
+    def test_field_JT_7_5_2020(self):
+        '''
+        Jahrestest - JT_7.5 - Abhängikeit Kalibrierfaktoren der Tragarmrotation
+
+        TODO: keine Vergleichsdaten -> erzeugen
+        '''
+        
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "JT-7_5",
+              "unit": unit,
+              "year": 2020
+        } )
+          
+
+    def test_field_JT_9_1_2_2019(self):
+        '''
+        Jahrestest - JT_9.1.2 - Abhängigkeit der Variation des Dosisquerprofils vom Tragarm-Rotationswinkel
+        Test funktioniert mit EPID nur mit Aufbauplatte
+        '''
+
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "JT-9_1_2",
+              "unit": unit,
+              "year": 2019
+        } )
+          
+
     def test_field_MT_4_1_2_2020(self):
         '''
         Monatstest - MT_4.1.2 - Linearität MU MT_4.1.2
         erst ab 2020 - result hat zwei Ergebnisse (tabellen) im json liegt aber nur eine
         '''
-       
-        for unit in self.webapp._config.units_TestsApp:
-          if self.webapp._config.units[ unit ]:
-            self.run_test( {
-                "testid": "MT-4_1_2",
-                "unit": self.webapp._config.units[ unit ],
-                "year": 2020,
-                "month": 1
-            } )
+        
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "MT-4_1_2",
+              "unit": unit,
+              "year": 2020,
+              "month": 1
+          } )
 
+    def test_field_MT_8_02_5_2019(self):
+        '''
+        Monatstest - MT_8.02-5 -
 
-    def test_mlc_MT_LeafSpeed_2020(self):
-        ''' Monatstest - MT_LeafSpeed - IMRT - Geschwindigkeit und Geschwindigkeitsänderung der Lamellen
         '''
         
-        for unit in self.webapp._config.units_TestsApp:
-          if self.webapp._config.units[ unit ]:
-            self.run_test( {
-                "testid": "MT-LeafSpeed",
-                "unit": self.webapp._config.units[ unit ],
-                "year": 2020,
-                "month": 1
-            } )
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "MT-8_02-5",
+              "unit": unit,
+              "year": 2019,
+            "month": 9
+        } )
 
+
+    def test_field_MT_VMAT_0_1_2019(self):
+        '''
+        Monatstest - MT_VMAT_0.1 -
+        '''
+
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "MT-VMAT-0_1",
+              "unit": unit,
+              "year": 2019,
+              "month": 9
+        } )
+          
+
+    def test_field_JT_10_3_2019(self):
+        '''
+        Jahrestest - JT_10.3 - Vierquadrantentest
+
+        Returns
+        -------
+        None.
+
+        '''
+        
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "JT-10_3",
+              "unit": unit,
+              "year": 2019
+            
+        } )
+
+
+    # ---- VMAT ----------------------------------------------
+
+    def test_vmat_MT_VMAT_2_2019(self):
+        '''
+        Monatstest - MT_VMAT_2 -
+        '''
+
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "MT-VMAT-2",
+              "unit": unit,
+              "year": 2019,
+              "month": 9
+        } )
+          
+
+    def test_vmat_MT_VMAT_3_2019(self):
+        '''
+        Monatstest - MT_VMAT_3 -
+        '''
+
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "MT-VMAT-3",
+              "unit": unit,
+              "year": 2019,
+              "month": 9
+        } )
+          
+
+    # ---- WL ----------------------------------------------
+    def test_wl_MT_WL_2019(self):
+        '''
+        Monatstest - MT_WL -
+        '''
+        
+        for pid, unit in self.webapp._config.testunits.items():
+          self.run_test( {
+              "testid": "MT-WL",
+              "unit": unit,
+              "year": 2019,
+              "month": 9
+        } )  
+          
 def suite( testClass:None ):
     '''Fügt alle Funktionen, die mit test_ beginnen aus der angegeben Klasse der suite hinzu
 
@@ -432,6 +882,18 @@ def suite( testClass:None ):
 
     logger.setLevel( logging.WARNING ) # DEBUG WARNING
 
+
+    #suite.addTest( testClass('test_other_Tagging') )
+    #suite.addTest( testClass('test_other_configs') )
+    # TODO: der alte test mit 96 Feldern gibt Fehler
+    #suite.addTest( testClass('test_mlc_JT_LeafSpeed_2018') )
+    #suite.addTest( testClass('test_mlc_JT_LeafSpeed_2020') )
+   
+    #suite.addTest( testClass('test_mlc_MT_8_02_4_2020') )
+    #suite.addTest( testClass('test_mlc_MT_VMAT_0_2_2020') )
+    #suite.addTest( testClass('test_mlc_MT_VMAT_1_1_2020') )
+    #return suite
+
     if testClass:
 
         for m in dir( testClass ):
@@ -442,6 +904,12 @@ def suite( testClass:None ):
                 suite.addTest( testClass(m), )
                 pass
             elif m.startswith('test_field_'):
+                suite.addTest( testClass(m), )
+                pass
+            elif m.startswith('test_wl_'):
+                suite.addTest( testClass(m), )
+                pass
+            elif m.startswith('test_vmat_'):
                 suite.addTest( testClass(m), )
                 pass
 

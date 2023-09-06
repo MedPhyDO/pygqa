@@ -332,33 +332,32 @@ SELECT TOP 1000 [ControlPointSer]
 
 
         {
-          gerät - <string>
-          studyID - <string>
-          filename - <string>
-          filepath - <string>
-          id - <string>
-          energy - <string>
-          gantry - <float %1.1f>
-          collimator - <float %1.1f>
-          type - <string> - (offen, kamm, x1zu, x2zu, tips)
+            gerät - <string>
+            studyID - <string>
+            filename - <string>
+            filepath - <string>
+            id - <string>
+            energy - <string>
+            gantry - <float %1.1f>
+            collimator - <float %1.1f>
+            type - <string> - (offen, kamm, x1zu, x2zu, tips)
         }
 
         dateinamen z.B.
 
-
         {
-        'PatientId': '_xxxQA VB',
-        'CourseId': 'Jahrestest',
-        'PlanSetupId': '4Quadrant',
-        'RadiationId': 'X6 Q1',
-        'Energy': 6000,
-        'GantryAngle': 0.01990341513203,
-        'CollRtn': 359.999840036008,
-        'AcquisitionDateTime': datetime.datetime(2019, 3, 20, 19, 7, 9, 510000),
-        'SliceUID': '1.2.246.352.62.1.5343640968774208147.13210826594556886954',
-        'ResourceSer': 1301,
-        'PatientSupportAngle': 0.03125,
-        'FileName': '%%imagedir1\\Patients\\_716\\SliceRT\\1820744_id1432516'
+            'PatientId': '_xxxQA VB',
+            'CourseId': 'Jahrestest',
+            'PlanSetupId': '4Quadrant',
+            'RadiationId': 'X6 Q1',
+            'Energy': 6000,
+            'GantryAngle': 0.01990341513203,
+            'CollRtn': 359.999840036008,
+            'AcquisitionDateTime': datetime.datetime(2019, 3, 20, 19, 7, 9, 510000),
+            'SliceUID': '1.2.246.352.62.1.5343640968774208147.13210826594556886954',
+            'ResourceSer': 1301,
+            'PatientSupportAngle': 0.03125,
+            'FileName': '%%imagedir1\\Patients\\_716\\SliceRT\\1820744_id1432516'
         }
 
         Energy aus SliceRT.Energy, Doserate -> SliceRT.MetersetExposure

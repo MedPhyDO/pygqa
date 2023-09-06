@@ -20,7 +20,8 @@ from isp.safrs import ispSAFRSDummy, iso2date
 
 # Module auch von der Konsole erreichbar machen 
 ABSPATH = osp.dirname( osp.abspath( __file__) )
-
+BASEPATH = osp.join( ABSPATH , "..")
+FILESPATH = osp.join( BASEPATH, 'data', 'tests') 
 
 class dummy( ispSAFRSDummy ):
     """
@@ -332,7 +333,7 @@ class dummy( ispSAFRSDummy ):
         plt.rcParams.update( rcParams )
                
         # plot mit Pandas anzeigen
-        data_frame.plot(kind='bar', title='Rating');
+        data_frame.plot(kind='bar', title='Rating')
         # layout opimieren
         plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
         #plt.show()
@@ -360,7 +361,8 @@ class dummy( ispSAFRSDummy ):
             "tip": "mpdf test tip für die Erstellung eines Unittest mit verschiedenen Elementen und PDF Rückgabe ",
             "Version" : "u.0.1",
             "render_mode": kwargs["format"],
-            "path": osp.join( ABSPATH , "..", "tests", "files", "pdf"),
+            #"path": osp.join( ABSPATH , "..", "tests", "files", "pdf"),
+            "path": osp.join( FILESPATH , "pdf"),
             "resources": "file://{{BASE_DIR}}/tests/resources", 
             "resources_html": "/tests/resources",
         }
@@ -370,6 +372,7 @@ class dummy( ispSAFRSDummy ):
         config = ispConfig( )
         # pdf erstellung bereitstellen
         config.update( DotMap({
+          "resultsPath" :  FILESPATH,
           "pdf": {
             "page-style" : 'test_mpdf_page.css', # aus resources
             "overlay-style" : 'test_mpdf_overlay.css', # aus resources
@@ -516,9 +519,8 @@ class dummy( ispSAFRSDummy ):
                 .set_uuid( "test_pandas_" )
                 .set_table_attributes('class="alayout-fill-width"') \
                 .format( { 'A':'{0:.1f}', 'B':'{0:.1f}', 'D':'{0:.3f}'} )
-                .hide_index()
                 .highlight_max(subset=["D"], color='yellow', axis=0)
-                .render()
+                .to_html( sparse_index=False )
             )
             pdf.html( html, attrs={ "font-size":"9px", "margin-left": "10px" } )
                 
@@ -617,7 +619,7 @@ class dummy( ispSAFRSDummy ):
             pdf.image( plot.getPlot(), area={ "width": 100, "top": 130, "left": 20 } )
             # close all figures
             plt.close('all')
-            # showPlot nur so für coverage durchführen
+            # showPlot nur für coverage durchführen
             plot.showPlot()
         elif kwargs["name"] == "test-5":
             # Inhalte über template File einfügen
@@ -630,9 +632,11 @@ class dummy( ispSAFRSDummy ):
             # finish durchführen (coverage test)
             #        
             
-            # nur pdf erzeugen
+            # 1. nur pdf erzeugen
             result = pdf.finish( )    
-            
+            pdf._variables["unittest"] = True
+            # 2. als unittest pdf und png erzeugen (wie render_pdf_and_png)
+            result = pdf.finish( )
         elif  kwargs["format"] == "html":
             output = pdf.onTheFly( )
             # result is html
@@ -645,6 +649,7 @@ class dummy( ispSAFRSDummy ):
         #
         # pdf und png Datei erstellen
         #        
+        #result = pdf.render_pdf_and_png( )
         result = pdf.render_pdf( )
         
         # add _variables to result

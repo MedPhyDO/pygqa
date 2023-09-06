@@ -39,6 +39,15 @@ class system( system ):
 
         def checkPath( path, info ):
             html = ""
+
+            if not os.path.exists( path ):
+                try:
+                    os.makedirs( path )
+                except IOError as e:
+                    info_class = "danger"
+                    info_text = "{} kann nicht erzeugt werden.".format( info )
+                    html += '<div class="alert alert-{} ">{}</div>'.format( info_class, info_text )
+    
             if os.path.exists( path ):
                 info_class = "success"
                 info_text = "{} ist vorhanden.".format( info )
@@ -113,7 +122,8 @@ class system( system ):
             html += '<div class="alert alert-dark" >Prüfe Patienten für <span class="badge badge-info">units</span> - Konfiguration:'
             html += '</br> <pre>{}</pre>'.format( json.dumps( config.get( "units" ).toDict(), indent=2 ) )
             for name, unit in config.get( "units" ).items():
-
+                if not unit:
+                    continue
                 sql = "SELECT PatientSer, PatientId, FirstName, LastName FROM [{dbname}].[dbo].[Patient] [Patient]"
                 sql = sql + " WHERE [PatientId] = '{}' ".format( name )
                 result = aria.execute( sql )
@@ -180,7 +190,7 @@ class system( system ):
             info_class = "success"
             info_text = "Dicom Zugriff ist möglich. Associations: "
             for association in dicom_info["associations"]:
-                association["ae_title"] = association["ae_title"].decode().strip()
+                association["ae_title"] = association["ae_title"] # .decode().strip()
                 info_text += '</br> <pre>{}</pre>'.format( json.dumps( association, indent=2 ) )
         else:
             info_class = "danger"
