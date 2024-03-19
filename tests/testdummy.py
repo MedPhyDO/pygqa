@@ -21,7 +21,7 @@ from isp.safrs import ispSAFRSDummy, iso2date
 # Module auch von der Konsole erreichbar machen 
 ABSPATH = osp.dirname( osp.abspath( __file__) )
 BASEPATH = osp.join( ABSPATH , "..")
-FILESPATH = osp.join( BASEPATH, 'data', 'tests') 
+FILESPATH = osp.join( BASEPATH, 'data', 'unittest') 
 
 class dummy( ispSAFRSDummy ):
     """
@@ -363,8 +363,8 @@ class dummy( ispSAFRSDummy ):
             "render_mode": kwargs["format"],
             #"path": osp.join( ABSPATH , "..", "tests", "files", "pdf"),
             "path": osp.join( FILESPATH , "pdf"),
-            "resources": "file://{{BASE_DIR}}/tests/resources", 
-            "resources_html": "/tests/resources",
+            "resources": "file://{{BASE_DIR}}/resources", 
+            "resources_html": "/resources",
         }
         
        
@@ -390,13 +390,14 @@ class dummy( ispSAFRSDummy ):
         } ) )
               
         if kwargs["name"] == "test-info":
+            _config = ispConfig( basedir=ABSPATH )
             
             # Erstellung nur mit config Angaben prüfen
-            pdf = PdfGenerator( )
+            pdf = PdfGenerator( config=_config )
             v1 = pdf._variables.get("Version")
        
             # Erstellung mit variables dies lädt config intern  
-            pdf = PdfGenerator( filename=pdfFile, variables=variables )
+            pdf = PdfGenerator( config=_config, filename=pdfFile, variables=variables )
             v2 = pdf._variables.get("Version")
             
             # variables überschreibt den variables Bereich aus config 

@@ -48,6 +48,12 @@ examples ::
 CHANGELOG
 =========
 
+0.1.8 / 2024-03-06
+- change _int_groupby() add order_by
+- change _int_query _log_query() call
+- change some error Messages
+- change _int_add_meta() use info messages as Object with title as key (same updates)
+
 0.1.7 / 2023-08-31
 - change RQLQuery for compatibility with sqlalchemy >=1.4 since newer rqlalchemy (0.4.5) depends on sqlalchemy <2.0 and >=1.2
 
@@ -959,17 +965,22 @@ class ispSAFRS(SAFRSBase):
               if type(json_data) is dict:
                   detail = json_data
           except:  # includes simplejson.decoder.JSONDecodeError
-              
-              pass 
+            pass 
         
         if meta in ["App-Dialog", "App-Info"]:
             if meta == "App-Dialog":
                 # always use dialog as area
                 area = "dialog"
-            
+            if title == "":
+                title="global"
+
             if not area in cls._resultUpdate[ "infos" ]:
-                cls._resultUpdate[ "infos" ][area] = []
-            cls._resultUpdate[ "infos" ][area].append( { 'title':str(title), 'detail': detail, 'code': status_code } )                
+                cls._resultUpdate[ "infos" ][area] = {}
+            if not title in cls._resultUpdate[ "infos" ][area]:
+                cls._resultUpdate[ "infos" ][area][title] = {}
+            cls._resultUpdate[ "infos" ][area][title].update({
+                'title':title, 'detail': detail, 'code': status_code 
+            })             
         else:
             cls._resultUpdate[ "errors" ].append( { 'title':str(title), 'detail': detail, 'code': status_code } )
         if status_code:
@@ -1056,11 +1067,10 @@ class ispSAFRS(SAFRSBase):
 
             
     @classmethod
-    def _log_query( cls, query=None, always:bool()=False):  
+    def _log_query( cls, query=None, always:bool=False):  
         """log last query informations.
         Only log if sever.logging.safrs higher or equal 10 (info) 
         """
-                
         if cls._config.server.logging.get("safrs", 0) >= 10 or always:
             if query:   
                 # add query information 
@@ -1099,9 +1109,7 @@ class ispSAFRS(SAFRSBase):
         _asdict ist in row bei der zusätzlichen Columns durch add_columns
         ohne dies wird die row so verwendet
 
-        """
-
-        cls._log_query( query )
+        """ 
         
         _type = cls.__name__
         if 'type' in kwargs:
@@ -1110,6 +1118,7 @@ class ispSAFRS(SAFRSBase):
         data = []
         if query:
             try:
+                cls._log_query( query )
                 for row in query:
                     # dies geht nur wenn in row _asdict vorhanden ist (z.B. group)
                     if "_asdict" in dir(row):
@@ -1127,7 +1136,6 @@ class ispSAFRS(SAFRSBase):
                     else:
                         data.append( row )
             except Exception as exc:
-                print( "_int_query", exc )
                 cls.appError( "_int_query", str(exc) )
                 
         # Anzahl aus query
@@ -1409,11 +1417,11 @@ class ispSAFRS(SAFRSBase):
 
             # gruppen felder als Gruppierung verwenden
             query = query.group_by( *group_entities )
-            
+            query = query.order_by( *group_entities )
             # bisher alles ok
             ok = True
         except Exception as exc: # pragma: no cover
-            cls.appError( "Fehler bei _int_group", str( exc ) )
+            cls.appError( "_int_group", str( exc ) )
 
             #log.exception(exc)
             ok = False
@@ -1590,7 +1598,7 @@ class ispSAFRS(SAFRSBase):
             try:
                 labels = json.loads( labels )
             except Exception as exc:
-                cls.appError( "Fehler bei groupby json.loads lables", str( exc ) )
+                cls.appError( "groupby json.loads lables", str( exc ) )
                 labels = {}
                 pass
 
@@ -1873,7 +1881,11 @@ class ispSAFRSDummy( ispSAFRS ):
             endpoint url of this instance.
         """
         return ""
-
+    
+    @classproperty
+    def order_by(self, order=[]):
+        return ""
+    
     @classproperty
     def class_(cls):
         """Get class object.

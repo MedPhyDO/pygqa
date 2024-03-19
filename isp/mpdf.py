@@ -65,7 +65,7 @@ Configuration in config.json
 CHANGELOG
 =========
 
-0.1.5 / 2023-08-02
+0.1.5 / 2024-03-06
 ------------------
 - mathtext() and pandas() changes for Python 3.11
 
@@ -397,10 +397,8 @@ class PdfGenerator:
 
         Returns
         -------
-        filepath : str
-            Name and path for the new file
-        filename : str
-            Name only for the new file
+        content : str
+ 
         """
         
         filename = self._config.render_template(name, self._variables )
@@ -411,7 +409,7 @@ class PdfGenerator:
                 content = myfile.read()
 
         if not content:
-            content = "<!-- missig:'{}' -->".format( filename )
+            content = "<!-- missing template:'{}' -->".format( filename )
             
         return content        
 
@@ -1119,7 +1117,7 @@ class PdfGenerator:
 
             return self._text( text, area, attrs, render, replaceNewLine )
         else:
-            return "<!-- missig:'{}' -->".format( filename )
+            return "<!-- missing file:'{}' -->".format( filename )
 
     def mathtext(self, text, area:dict={}, attrs:dict={}, render=None, fontsize=12, dpi=300):
         r"""Rendert Text und TeX Formel nach SVG mit mathtext.
@@ -1161,7 +1159,7 @@ class PdfGenerator:
         return self.image( output, area, attrs, render, 'svg+xml' )
 
 
-    def image(self, image: [str, io.BytesIO], area:dict={}, attrs:dict={}, render=None, imageType="png"):
+    def image(self, image: str|io.BytesIO, area:dict={}, attrs:dict={}, render=None, imageType="png"):
         """Bild an der aktuellen Cursor Position oder wenn angegeben bei x, y einfügen.
 
         Internen Cursor auf die neuen x,y Positionen setzen
@@ -1228,30 +1226,13 @@ class PdfGenerator:
             else:
                 # aus resources
                 filepath = osp.join( self._variables["resources"], image )
-
             element_html = '\n\t<img class="image {_class}" style="{_style} {_area}" src="{filepath}" />'.format(
                 _class = _class,
                 _style = _style,
                 _area=_area,
                 filepath=filepath
             )
-            # gibt es die Datei dann einbinden
-            '''
-            if osp.exists( filepath ):
-                element_html = '\n\t<img class="image {_class}" style="{_style} {_area}" src="{filepath}" />'.format(
-                    _class = _class,
-                    _style = _style,
-                    _area=_area,
-                    filepath=filepath
-                )
-            else:
-                element_html = '\n\t<img class="image {_class}" style="{_style} {_area}" src="{filepath}" />'.format(
-                    _class = _class,
-                    _style = _style,
-                    _area=_area,
-                    filepath=filepath
-                )
-            '''
+            
         if render:
             self._html(element_html)
         return element_html
@@ -1353,8 +1334,9 @@ class PdfGenerator:
                 .format( pf["field_format"] )
                 .set_table_styles( pf["table_styles"] )
                 .set_uuid( uuid )
-                .to_html( sparse_index=False )
-                .replace('nan','')
+                .hide( axis="index")
+                .to_html( )
+                    .replace('nan','')
             , area=area
             , attrs=attrs
             , render=render
@@ -1363,8 +1345,9 @@ class PdfGenerator:
             html = self.html( df.style
                 .set_table_attributes('class="layout-fill-width"')
                 .set_uuid( uuid )
-                .to_html( sparse_index=False )
-                .replace('nan','')
+                .hide( axis="index")
+                .to_html( )
+                    .replace('nan','')
             , area=area
             , attrs=attrs,
             render=render

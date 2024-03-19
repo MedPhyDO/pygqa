@@ -6,8 +6,8 @@
 ##
 
 services:
-  pygqa_3.11:
-    container_name: pygqa_3.11
+  pygqa_0.2.x:
+    container_name: pygqa_0.2.x
     user: "${USE_UID}:${USE_GID}"
     build: .
     command: python ./pygqa.py

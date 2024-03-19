@@ -3,7 +3,7 @@
         "webserver":{
             "host": "127.0.0.1",
             "port": 5000,
-            "name": "gqa",
+            "name": "pygqa",
             "title" : "GQA - Geräte-QA",
             "reloader": false
         },
@@ -14,6 +14,8 @@
         },
         "logging":{
             "__level__" : "0 - NOTSET, 10 - DEBUG, 20 - INFO, 30 - WARNING, 40 - ERROR, 50 - CRITICAL",
+            "root" : 40,
+            "mqtt" : 30,
             "safrs": 30,
             "webapp": 30,
             "sqlalchemy" : 40
@@ -38,7 +40,7 @@
         "main": ["gqa"],
         "gqa" : {
             "name" : "pygqa.json",
-            "connection": "sqlite:///{{BASE_DIR}}/data/pygqa.db"
+            "connection": "sqlite:///{{BASE_DIR}}/data/results/pygqa.db"
         }
     },
     "dicom": {

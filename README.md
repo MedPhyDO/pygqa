@@ -50,14 +50,14 @@ für die Korrektheit der Ergebnisse.
 
 ## Installation und Konfiguration
 
-* [Installation (en)](docs/en/installation.md)
+* [Installation](docs/de/Installation.md)
 
 Durch Bearbeiten der Konfigurationsdateien im Ordner `config` die Konfiguration anpassen.
 
-Allgemeine Anpassungen werden in [Konfiguration (de)](docs/de/Konfiguration.md) beschrieben.
-Zusätzliche Anpassungen werden in [Konfiguration GQA (de)](docs/de/Konfiguration-QA.md) beschrieben.
+Allgemeine Anpassungen werden in [Konfiguration](docs/de/Konfiguration.md) beschrieben.
+Zusätzliche Anpassungen werden in [Konfiguration GQA](docs/de/Konfiguration-QA.md) beschrieben.
 
-Eine Beschreibung der Tests befindet sich in: [GQA-Test (de)](docs/de/GQA-Tests.md)
+Eine Beschreibung der Tests befindet sich in: [GQA-Test](docs/de/GQA-Tests.md)
 
 Einfache Installation für Mac User: [MacDummies](docs/de/MacDummies.md)
 
@@ -70,34 +70,33 @@ Der Oberfläche von **pyGQA** ist jetzt über die URL: **127.0.0.1:5000** oder d
 
 ## Zugriff
 
-    /                   - Interface with documentation / Oberfläche mit Dokumentation
-    /api                - Documentation of the API interface / Dokumentation der Api Schnittstelle
-    /api/{class}/{id}   - Access to the API interface / Zugriff auf die Api Schnitstelle
+```
+  /                   - Interface with documentation / Oberfläche mit Dokumentation
+  /api                - Documentation of the API interface / Dokumentation der Api Schnittstelle
+  /api/{class}/{id}   - Access to the API interface / Zugriff auf die Api Schnitstelle
     /docs               - Documentation of the program / Dokumentation des Programms
+```
 
 ## Wichtige Komponenten
-* [pylinac](https://pylinac.readthedocs.io/en/stable/) für die Auswertung der Testdaten
-* [flask](https://de.wikipedia.org/wiki/Flask) und [safrs](https://github.com/thomaxxl/safrs/) für die Weboberfläche und API-Schnittstelle
-* [weasyprint](https://weasyprint.readthedocs.io/en/stable/tutorial.html) für die Erstellung der PDF Ausgaben
-* [Pandas](https://de.wikipedia.org/wiki/Pandas_(Software)) für die Gruppierung der Testdaten und Erstellung von Tabellen für die Ausgabe
-* [unittest](https://docs.python.org/3/library/unittest.html) für die Prüfung der internen Abläufe besonders nach Programmänderugen
-* Das [MQTT-Protokoll](https://de.wikipedia.org/wiki/MQTT) wird verwendet um Informationen zwischen verschiedenen Anwendungen zu übertragen
-* [node-red](https://nodered.org/) wird verwendet um MQTT Meldungen zu prüfen, zu verarbeiten und weiterzuleiten
+- [pylinac](https://pylinac.readthedocs.io/en/stable/) für die Auswertung der Testdaten
+- [flask](https://de.wikipedia.org/wiki/Flask) und [safrs](https://github.com/thomaxxl/safrs/) für die Weboberfläche und API-Schnittstelle
+- [weasyprint](https://weasyprint.readthedocs.io/en/stable/tutorial.html) für die Erstellung der PDF Ausgaben
+- [Pandas](https://de.wikipedia.org/wiki/Pandas_(Software)) für die Gruppierung der Testdaten und Erstellung von Tabellen für die Ausgabe
+- [unittest](https://docs.python.org/3/library/unittest.html) für die Prüfung der internen Abläufe besonders nach Programmänderugen
+- Das [MQTT-Protokoll](https://de.wikipedia.org/wiki/MQTT) wird verwendet um Informationen zwischen verschiedenen Anwendungen zu übertragen
+- [node-red](https://nodered.org/) wird verwendet um MQTT Meldungen zu prüfen, zu verarbeiten und weiterzuleiten
 
 Durch die Verwendung der inline API-Dokumentation von **safrs** ist es möglich autom. eine API Beschreibung zu generieren.
 Durch einen Aufruf der Python Dateien in Ordner **tests** kann der Systemlauf geprüft werden. Ein Aufruf von **all_unittest.py** aktualisiert zusätzlich die Dokumentation der python module.
 
 ## Zukunft
 
-* [ ] Dokumentation in Englisch und/oder Deutsch
-* [ ] Weitere Tests implementieren
-* [ ] Trends über alle Ergebnisse
-* [ ] Templatesystem für die PDF Erstellung statt fester Angaben im source
-* [ ] Verwendung von ESAPI https://github.com/VarianAPIs/PyESAPI als Verbindung zum Aria anstelle einer SQL Verbindung.
-* [ ] Datenbank für die Testergebnisse statt json Dateien
-* [ ] Wechseln von pylinac Version 2.3.1 zu pylinac Version 2.4.0
-* [ ] Verwendung von Python 3.8 und 3.9
-* [ ] Überarbeitung und Erweiterung des DICOM Moduls
+- [ ] Implementation weiterer Tests beschreiben
+- [ ] Trends über alle Ergebnisse
+- [ ] Datenbank für die Testergebnisse statt json Dateien
+- [ ] Templatesystem für die PDF Erstellung statt fester Angaben im source.
+- [ ] Änderung der Oberfäche auf vuejs
+- [ ] Zusätzliche Verwendung einer Socket-Verbindung für die Fortschrittsanzeige
 
 ## Fehler und Anmerkungen
 

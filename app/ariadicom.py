@@ -4,7 +4,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 __status__ = "Prototype"
 
 from dotmap import DotMap
@@ -21,7 +21,6 @@ from isp.config import dict_merge
 from app.config import infoFields
 
 from app.aria import ariaClass
-#from app.dicom import dicomClass
 from app.results import ispResults
 
 from app.qa.mlc import checkMlc
@@ -31,7 +30,6 @@ from app.qa.vmat import checkVMAT
 
 import logging
 logger = logging.getLogger( "MQTT" )
-
 
 class ariaDicomClass( ariaClass, ispDicom ):
     '''Zentrale Klasse
@@ -88,7 +86,7 @@ class ariaDicomClass( ariaClass, ispDicom ):
         Parameters
         ----------
         AcquisitionYear : TYPE, optional
-            DESCRIPTION. The default is None.
+            DESCRIPTION. default: None.
 
         Returns
         -------
@@ -115,27 +113,24 @@ class ariaDicomClass( ariaClass, ispDicom ):
 
         return dirname
 
-    def getAllGQA(self, pids=None, testTags:list=None, year:int=None, month:int=None, day:int=None, withInfo=True, withResult=False ):
+    def getAllGQA(self, pids=None, testTags:list=None, year:int=None, month:int=None, day:int=None, withResult=False ):
         '''Holt für die angegebenen PatientenIds aus allen Courses
         die Felder mit Angaben in [Radiation].[Comment] und wertet sie entsprechend aus
-
 
         Parameters
         ----------
         pids : list, optional
-            DESCRIPTION. The default is None.
+            PatientIds to be searched for. default: None.
         testTags : list, optional
-            DESCRIPTION. The default is None.
-        year : int, optional
-            DESCRIPTION. The default is None.
-        month : int, optional
-            DESCRIPTION. The default is None.
-        day : int, optional
-            DESCRIPTION. The default is None.
-        withInfo : TYPE, optional
-            DESCRIPTION. The default is True.
-        withResult : TYPE, optional
-            DESCRIPTION. The default is False.
+            tags to be searched for. default: None.
+        AcquisitionYear : str, optional
+            Year to search in AcquisitionDateTime Field, default: None
+        AcquisitionMonth : str, optional
+           Mounth to search in AcquisitionDateTime Field, default: None
+        AcquisitionDay : str, optional
+            Day to search in AcquisitionDateTime Field, default: None
+        withResult : boolean, optional
+            Testergebnisse mit ausgeben. default: False.
 
         Returns
         -------
@@ -197,9 +192,9 @@ class ariaDicomClass( ariaClass, ispDicom ):
         # Pfad für die PDF Dateien
         self.initResultsPath( year )
 
-        return self.prepareGQA( images, year=year, withInfo=withInfo, withResult=withResult )
+        return self.prepareGQA( images, year=year, withResult=withResult )
 
-    def prepareGQA(self, imagedatas=[], year:int=0, withInfo=True, withResult=False, withDicomData:bool=False ):
+    def prepareGQA(self, imagedatas=[], year:int=0, withResult=False, withDicomData:bool=False ):
         """Auswertung für GQA vorbereiten zusätzlich noch Ergebnisse aus der Datenbank einfügen
 
         Benötig config.GQA und config.units
@@ -214,15 +209,13 @@ class ariaDicomClass( ariaClass, ispDicom ):
         Parameters
         ----------
         imagedatas : list, optional
-            Auflistungen von Bildinformationen aus der Aria Datenbank. The default is [].
+            Auflistungen von Bildinformationen aus der Aria Datenbank. default: is [].
         year : int, optional
-            DESCRIPTION. The default is 0.
-        withInfo : TYPE, optional
-            alle ImageInfos mit hinzufügen. The default is True.
+            Das zu verwendende Jahr. default: is 0.
         withResult : boolean, optional
-            Testergebnisse mit ausgeben. The default is False.
+            Testergebnisse mit ausgeben. default: is False.
         withDicomData : boolean, optional
-           Info pro gerät in dicomfiles ablegen. The default is False.
+           Info pro Gerät in dicomfiles ablegen. default: is False.
 
         Returns
         -------
@@ -247,9 +240,8 @@ class ariaDicomClass( ariaClass, ispDicom ):
 
         # dicom gerät , name , infos
         self.dicomfiles = {}
-
-        units = self.config.units
-
+        units = {key: value for (key, value) in self.config.get( "units", {} ).items() if value }
+        
         # Dateien im Pfad
         pdfFiles = []
         if osp.exists( self.variables["path"] ):
@@ -396,14 +388,14 @@ class ariaDicomClass( ariaClass, ispDicom ):
         Parameters
         ----------
         art : str, optional
-            Art der Tagging Tabellen (). The default is "full".
+            Art der Tagging Tabellen (). default: full
             * full
             * sum
             * test
             * tags
 
         pid : list, optional
-            Angabe von PatientsIds für die Tags bestimmt werden sollen. The default is [].
+            Angabe von PatientsIds für die Tags bestimmt werden sollen. default: []
 
         output_format: str
             Format der Ausgabe [ json, html ]
@@ -471,7 +463,7 @@ class ariaDicomClass( ariaClass, ispDicom ):
                     columns='PatientId',
                     values= "nummer",
                     fill_value=0
-                    )
+                )
         elif art == "sum":
             table = pd.pivot_table( df,
                     index=['Comment', 'CourseId', 'PlanSetupId','Energy', 'DoseRate'],
@@ -479,7 +471,7 @@ class ariaDicomClass( ariaClass, ispDicom ):
                     values= 'nummer',
                     aggfunc=[np.sum],
                     fill_value=0
-                    )
+                )
         elif art == "test":
             table = pd.pivot_table( df,
                     index=['Comment', 'CourseId', 'Energy', 'DoseRate'],
@@ -487,23 +479,18 @@ class ariaDicomClass( ariaClass, ispDicom ):
                     values= 'nummer',
                     aggfunc=[np.sum],
                     fill_value=0
-                    )
+                )
         elif art == "tags":
             table = pd.pivot_table( df,
                     index=['Comment'],
                     columns=['PatientId'],
                     values= 'nummer',
                     fill_value=0
-                    #aggfunc=[np.sum]
-                    )
-             # tags zurückgeben als einfache Tabelle
-             #table = df[ ["Comment"] ].groupby( "Comment" ).first().reset_index()
+                )
+          
 
-
-        # table.fillna('', inplace=True)
         def highlight_fifty( val ):
            color = 'black' if val > 0 else 'white'
-           #print(val , color)
            return 'color: %s' % color
 
         html += (table.style
@@ -534,7 +521,6 @@ class ariaDicomClass( ariaClass, ispDicom ):
             html matrix code oder dict.
 
         """
-
 
         # jahr und Monat bei 0 mit dem aktuellen belegen
         today = date.today()
@@ -701,7 +687,7 @@ class ariaDicomClass( ariaClass, ispDicom ):
             id des zu verarbeitenden tolerance Bereichs
 
         energy : str, optional
-            Augabe der Energie für die Info. The default is None.
+            Augabe der Energie für die Info. default: None.
             Ohne Angabe wird nur der Parameter info zurückgegeben
 
         Returns
@@ -738,15 +724,14 @@ class ariaDicomClass( ariaClass, ispDicom ):
         else:
             tolerance = default
 
-        #print("prepare_tolerance tolerance", tolerance )
         import functools
         # alle Angaben durchgehen
         for name in tolerance:
             if not isinstance( tolerance.get(name), dict ):
                 continue
             for artName, art in tolerance.get(name).items():
-                # überspringen wenn art = soll oder f schon vorhanden
-                if artName == "soll" or art.get("f", None):
+                # überspringen wenn art ein string ist oder f schon vorhanden
+                if type(art) is str or art.get("f", None):
                     continue
                 # gibt es keine formel dann erstellen
                 # wurde ein wert angegeben
@@ -770,8 +755,31 @@ class ariaDicomClass( ariaClass, ispDicom ):
     # ---------------------- Test durchführung
     def runTests(self, pid=None,
                  year:int=None, month:int=None, day:int=None,
-                 testId:str=None, addWhere:str="", reloadDicom:bool=False, unittest:bool=False ):
+                 testId:str=None, reloadDicom:bool=False, unittest:bool=False ):
+        """Einen angegebenen Test vorbereiten und durchführen
 
+        Parameters
+        ----------
+        pid : str, optional
+            die zu verwendende PatientId, default: None
+        year : int, optional
+            das zu verwendende Jahr, default: None
+        month : int, optional
+            der zu verwendende Monat, default: None
+        day : int, optional
+            der zu verwendende Tag, default: None
+        testId : str, optional
+            die id des durchzuführenden Test, default: None
+        reloadDicom : bool, optional
+            Dicomdaten neu laden oder vorhandene verwenden, default: False
+        unittest : bool, optional
+            spezieller modus für unittest, default: False
+
+        Returns
+        -------
+        dict
+            Testergebnisse
+        """        
         # die results der jeweiligen pdf Datei
         test_results = {}
 
@@ -789,10 +797,8 @@ class ariaDicomClass( ariaClass, ispDicom ):
             if "tag" in item:
                 tags[ item["tag"] ] = key
 
-
         testTag = test.tag
-        #testId = tags[ testTag ]
-        #unit = units[ pid ]
+        
         # getTestData sucht in der datenbank nach dem tag des tests
         data = self.getTestData(
             PatientId=pid,
@@ -801,8 +807,6 @@ class ariaDicomClass( ariaClass, ispDicom ):
             AcquisitionDay=day,
             testTags=[ testTag ]
         )
-
-        #print("runTests", testTag, data )
 
         energyFields = self.config.get( ["GQA", testId, unit, 'energyFields'], {} )
 
@@ -848,8 +852,31 @@ class ariaDicomClass( ariaClass, ispDicom ):
 
 
     def doTestType(self, testId:str, data=None, payload:dict={} ):
+        """Den angegebene Test durchführen. Dabei die passende Klasse verwenden
+
+        Parameters
+        ----------
+        testId : str
+            die id des durchzuführenden Test, default: None
+        data : dict, optional
+            Imageinfos per SliceUID, default: None
+        payload : dict, optional
+            erweitert self.variables für den Test, default: {}
+
+        Returns
+        -------
+        str
+            pdf_filepath des erzeugten pdf
+        dict
+            Ergebnis der Testauswertung
+            - result
+            - pdfData
+
+        """        
+
+        imageCount = len( data )
         # ohne Daten nichts machen
-        if len(data) == 0:
+        if imageCount == 0:
             # Anzeigen des problems?
             return False
 
@@ -860,19 +887,10 @@ class ariaDicomClass( ariaClass, ispDicom ):
         # variables um payload erweitern
         variables.update( payload )
 
-        # variables um info Bereich des test erweitern
-        #variables.update( self.prepare_tolerance( variables['testId'], variables['energy'] ) )
-
-
         # metadaten um die test Variante erweitern
         variables["variante"] = payload["testTag"]
 
-        #variables["testTag"] = payload["testTag"]
-        #variables["testId"] = testId
-
         # variables um configdaten des Tests erweitern diese werden in der test Klasse als metadata verwendet
-
-        # TODO: AcquisitionYear und AcquisitionMonth als year und month in current ablegen
         variables["testConfig"] = self.config.get( ["GQA", testId ], DotMap() );
         current = self.config.get( ["GQA", testId, "current" ], DotMap() )
         variables["testConfig"]["current"] = dict_merge( current, DotMap({
@@ -883,13 +901,10 @@ class ariaDicomClass( ariaClass, ispDicom ):
             "year": variables["AcquisitionYear"],
             "month": variables["AcquisitionMonth"],
             "fields": self.config.get( ["GQA", testId, variables["unit"], "energyFields", variables["energy"] ], current.get( "fields" ,0) ),
-        #    "tolerance": self.config.get( ["GQA", testId, "info", "tolerance",  variables["energy"] ], current.get( "tolerance", {} ) )
             "tolerance": self.prepare_tolerance( variables['testId'], variables['energy'] )
         }) )
         variables["testConfig"]["AcquisitionYear"] = variables["AcquisitionYear"]
         variables["testConfig"]["AcquisitionMonth"] = variables["AcquisitionMonth"]
-
-        # print("doTestType", variables.testConfig.current.toDict() )
 
         # die benötigten Daten vom server oder aus dem DICOM dir holen
         # in self.dicomfiles liegen dann pro gerät die Infos als dict
@@ -905,7 +920,6 @@ class ariaDicomClass( ariaClass, ispDicom ):
         # Pfad für die Ergebnisse vorbereiten
         self.initResultsPath( AcquisitionYear )
 
-        imageCount = len( data )
         # Dicom Daten einlesen
         i = 0
         read_count = 0
@@ -924,8 +938,6 @@ class ariaDicomClass( ariaClass, ispDicom ):
        'varianten', 'AcquisitionDateTime', 'dicom', 'check_variante',
        'check_subtag'],
         '''
-
-        #print("doTestType", variante, df[ [ 'energy', "AcquisitionYear", "AcquisitionMonth", "varianten"]  ] )
 
         # progress starten
         if hasattr( logger, "progressStart"):
@@ -1079,7 +1091,5 @@ class ariaDicomClass( ariaClass, ispDicom ):
         # progress beenden
         if hasattr( logger, "progress"):
             logger.progressReady( testId )
-
-        #print("doTestType", testId, result )
 
         return pdfData["pdf_filepath"], { "result":result, "pdfData": pdfData }

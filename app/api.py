@@ -22,10 +22,11 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 __status__ = "Prototype"
 
 import json
+import os
 
 from isp.config import ispConfig
 
@@ -169,9 +170,16 @@ class gqa( ispSAFRSDummy ):
         
         """
         _kwargs = cls.init( kwargs )
+        subfolders = [ f.name for f in os.scandir(cls.config.resultsPath) if f.is_dir() ]
+
+        units = {key: value for (key, value) in cls.config.get( "units", {} ).items() if value }
         
         result = {
-         "firstYear" : cls.config.get("firstYear", 2017)
+            "version" :cls.config.version,
+            "resultsPath" :cls.config.resultsPath,
+            "units": units,
+            "years": subfolders,
+            "firstYear" : cls.config.get("firstYear", 2017),
         }
         
         return  cls._int_json_response( { "data": result } )
@@ -221,7 +229,6 @@ class gqa( ispSAFRSDummy ):
             result = cls.ariaDicom.getAllGQA(
                 pids = _kwargs["pid"],
                 year = _kwargs["year"],
-                withInfo=False,     # alle ImageInfos mit hinzufügen
                 withResult=True     # Testergebnisse mit ausgeben
             )
 
@@ -360,8 +367,6 @@ class gqa( ispSAFRSDummy ):
 
         cls.appInfo("matrix", _kwargs )
 
-        # print("getMatrix", kwargs)
-
         # Matrix HTML holen
         data = cls.ariaDicom.getMatrix( output_format=_kwargs[ 'format' ], params=_kwargs )
         if kwargs[ 'format' ] == "json":
@@ -397,7 +402,6 @@ class gqa( ispSAFRSDummy ):
 
         gqa_df = gqa_config().read().matrix()
 
-        # print( kwargs )
         if kwargs[ 'format' ] == "json":
             return cls._int_json_response( {"data" : gqa_df.replace({np.nan:None}).to_dict() } )
 
@@ -463,10 +467,6 @@ class gqa( ispSAFRSDummy ):
         }
 
         """
-        def json_pretty( value ):
-            #value = "<pre>" + value + "</pre>"
-
-            return value
 
         html = '<div class="gqa-config flex-1">'
         html += (gqa_df.replace({np.nan:''}).style
@@ -619,9 +619,9 @@ class gqa( ispSAFRSDummy ):
                     year =          int( _kwargs["year"] ),
                     month =         int( _kwargs["month"] ),
                     day =           int( _kwargs["day"] ),
-                    testId =      _kwargs["testid"],
-                    reloadDicom =  _kwargs["reloadDicom"],
-                    unittest =     _kwargs["unittest"]
+                    testId =        _kwargs["testid"],
+                    reloadDicom =   _kwargs["reloadDicom"],
+                    unittest =      _kwargs["unittest"]
                 )
 
         if _kwargs["getall"] == True: # pragma: no cover
@@ -632,7 +632,6 @@ class gqa( ispSAFRSDummy ):
             _result = cls.ariaDicom.getAllGQA(
                 pids = list(cls.config.units.toDict().keys()),
                 year = int( _kwargs["year"] ),
-                withInfo=False,
                 withResult=True
             )
         elif not _kwargs["unittest"] == True:

@@ -29,8 +29,9 @@ py_linq==1.4.0
 pydicom==2.4.3
 pyflakes==3.1.0
 Pygments==2.16.1
-pylinac==3.14.0
+pylinac==3.20.0
 pylint==2.17.5
+pymysql==1.1.0
 pynetdicom==2.0.2
 pyodbc==4.0.39
 pyrql==0.7.7
@@ -47,4 +48,4 @@ sphinx==7.1.1
 sphinx-rtd-theme==1.3.0
 SQLAlchemy==2.0.20
 tinycss2==1.2.1
-weasyprint==59.0
+weasyprint==61.1

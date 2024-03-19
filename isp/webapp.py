@@ -137,7 +137,6 @@ def expose_object( self, safrs_object, url_prefix="", **properties):
         except Exception as exc:
             # method_name query gibt gibt einen fehler
             # SQL expression, column, or mapped entity expected - got '<class 'xxxxx'>'
-            #print( "expose_object - error beim bestimmen von", method_name, exc)
             pass
 
         if method and hasattr(method, '__qualname__') and hasattr(method, '__rest_doc'):
@@ -419,7 +418,6 @@ class ispBaseWebApp():
         #self.app.config.update( DEBUG=True )
         self.app.config.update( SQLALCHEMY_TRACK_MODIFICATIONS=False)
 
-        # print("_create_app-bind", binds, binds.keys() )
         if db:
             # SQLAlchemy mit app initialisieren
             db.init_app( self.app )
@@ -506,8 +504,6 @@ class ispBaseWebApp():
             if hasattr( model, "no_flask_admin") and model.no_flask_admin == True:
                 expose_object(self.api, model)
             model._api = self.api
-            
-        #print( "server.api.models", sys.modules['db.dbtests'] )
 
     def _checkNetarea( self ): # pragma: no cover
         """Simple check whether the access is from the same subnetwork.
@@ -567,7 +563,7 @@ class ispBaseWebApp():
         """
         # params mit defaults vorbelegen
         params = defaults.copy()
-        #print( ">params", params)
+
         #logger.debug( "parseRequestParams: bei json parse in url content" )
         #
         # Vorarbeiten <_urlContentParamsKey> auswerten und aus queryParams entfernen
@@ -593,15 +589,12 @@ class ispBaseWebApp():
                     rparams = json.loads( urlContentParams )
                     params.update( rparams )
                 except:
-                    # print( "json.loads error", urlContentParams )
                     logger.debug( "parseRequestParams: bei json parse in url content" )
-                    #self.sendAppInfo( "parseRequestParams", "bei json parse in url content" )
                     pass
             elif type( urlContentParams ) == dict: # pragma: no cover
                 # kann nur passieren wenn render nicht über den Webserver aufgerufen wird
                 params.update( urlContentParams )
 
-        #print( "params>", params)
         return params
 
     def routeIndex(self, filepath="" ):
@@ -793,9 +786,6 @@ class ispBaseWebApp():
                 
             )
         except Exception as err:
-
-            # print("[webapp] ERROR: render_template:", err, self._config.get("variables", {} ) )
-
             output = "<h1>Das Template {} wurde nicht gefunden oder ein parser error [ {} ] liegt vor.</h1>".format( filepath, err )
             self.status_code = 404
             pass

@@ -7,7 +7,7 @@ RUN env
 ## ----------------------------------------------------------------
 ## Install Packages 
 ## ----------------------------------------------------------------
-RUN apt update && apt install -y curl locales-all build-essential mc libpango-1.0-0 libpangoft2-1.0-0 tk gsfonts fonts-noto poppler-utils libpoppler-cpp-dev pkg-config cmake && rm -rf /var/lib/apt/lists/*
+RUN apt update && apt install -y curl locales-all build-essential mc nano libpango-1.0-0 libpangoft2-1.0-0 tk gsfonts fonts-noto poppler-utils libpoppler-cpp-dev pkg-config cmake && rm -rf /var/lib/apt/lists/*
 
 ## ----------------------------------------------------------------
 ## Add custom Microsoft repository and install database driver 
@@ -26,7 +26,7 @@ RUN python3 -m pip install --upgrade pip
 
 COPY ./requirements.txt /tmp/requirements.txt
 
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt 
  
 ## ----------------------------------------------------------------
 ## Copy files into container
@@ -40,10 +40,8 @@ COPY ./ ./
 RUN python ./install-resources.py
 
 # copy webfont to system for pdf creation
-COPY --chmod=644 ./resources/vendor/fonts/materialdesignicons-webfont.ttf /usr/share/fonts/truetype/materialdesignicons_webfont.ttf
+COPY --chmod=644 /resources/vendor/fonts/materialdesignicons-webfont.ttf /usr/share/fonts/truetype/materialdesignicons_webfont.ttf
 RUN fc-cache -v
-
-COPY ./config/odbc.ini /etc/odbc.ini
 
 ENV MPLCONFIGDIR="/tmp" 
 

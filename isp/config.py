@@ -31,6 +31,10 @@ logging level:
 CHANGELOG
 =========
 
+0.1.4 / 2024-03-05
+------------------
+- change __init__() test for config=None 
+
 0.1.3 / 2023-04-17
 ------------------
 - use merge.mergedeep instead function with colletions
@@ -78,6 +82,8 @@ import logging
 
 from isp.mqtt import MQTTclass
 
+from version import __version__ as project_version
+
 default_config = {
     "server" : {
         "webserver" : {
@@ -104,12 +110,12 @@ default_config = {
         }
     },
     "use_as_variables":{
-     #   "webserver" : "server.webserver",
         "api" : "server.api",
         "mqtt" : "server.mqtt",
         "title" : "server.webserver.title",
         "resources" : "server.webserver.resources"
-    }
+    },
+    "version": project_version
 }
 
 class ispConfig( object ):
@@ -163,9 +169,9 @@ class ispConfig( object ):
     def __init__( self, lastOverlay:int=None, development:bool=True,
                  rootlevel:int=logging.ERROR,
                  mqttlevel:int=logging.NOTSET,
-                 cleanup:bool=False,
-                 config:dict=None
-                 ):
+                 config:dict=None,
+                 basedir:str=None
+                ):
         """Konfiguration initialisieren und laden.
 
         Zuerst wird die Konfiguration config.json eingelesen
@@ -174,7 +180,8 @@ class ispConfig( object ):
         Parameters
         ----------
         lastOverlay : int
-            Gibt an bis zu welcher config Datei eingelesen wird.Default = 99999999 (config-99999999.json).
+            Gibt an bis zu welcher config Datei eingelesen wird. 
+            Default = aktuelles Datum als Zahlenwert z.B. 20230514. 
 
         development : bool
             Entwicklungszweig verwenden oder nicht. Default is True.
@@ -187,16 +194,19 @@ class ispConfig( object ):
         mqttlevel: int - logging.NOTSET
             NOTSET=0, DEBUG=10, INFO=20, WARN=30, ERROR=40, and CRITICAL=50. Default: NOTSET
 
-        cleanup: bool
-            MQTT Cleanup vor dem initialisieren durchführen. Default = False
-
         config: dict
             mit dieser Angabe wird keine Konfiguration geladen, sondern die angegebenen Daten verwendet
 
+        basedir: str
+            ein anderes basedir statt des autm. ermittelten verwenden
         """
         
         # _basedir festlegen mit __file__ damit ein testaufruf von hier funktioniert
-        self._basedir = osp.abspath( osp.join( osp.dirname( osp.abspath( __file__ ) ) , "../" ) )
+        if basedir:
+            self._basedir = basedir
+        else:
+            self._basedir = osp.abspath( osp.join( osp.dirname( osp.abspath( __file__ ) ) , "../" ) )
+        
         # name des startenden programms
         self._name = osp.basename( sys.argv[0] )
 
@@ -218,8 +228,7 @@ class ispConfig( object ):
         # default werte setzen
         self._config = DotMap( default_config )
         self._configs = ["default"]
-
-        if config:
+        if config != None:
             # config in self._config merken
             self.update( config )
             self._configs.append( "init" )
@@ -233,13 +242,13 @@ class ispConfig( object ):
         self._config[ "BASE_DIR" ] = self._basedir
 
         # default logger
-        self.rootInitLogger( rootlevel )
+        self.rootInitLogger( self._config.server.logging.get("root", rootlevel ) )
 
         # logger für mqtt zugriff über self._mqtthdlr
         self._mqtthdlr = None
 
         # mqtt Logger bereitstellen oder initialisieren
-        self.mqttInitLogger( mqttlevel, cleanup )
+        self.mqttInitLogger( self._config.server.logging.get("mqtt", mqttlevel ) )
 
         # variables vorbelegen
         self.setVariables()
@@ -382,7 +391,7 @@ class ispConfig( object ):
         use_as_variables = self._config.get("use_as_variables", DotMap() ).toDict()
 
         variables["BASE_DIR"] = self._basedir
-        variables["version"] = self.get( "version", __version__)
+        variables["Version"] = self.get( "version", __version__)
         variables["serverHost"] = "{}://{}:{}".format(
             self.get("server.webserver.scheme", ""),
             self.get("server.webserver.host", ""),

@@ -2,12 +2,14 @@
 
 __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
-__credits__ = ["R.Bauer", "K.Loot"]
+__credits__ = ["R.Bauer", "K.Loot", "J.Wüller"]
 __license__ = "MIT"
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 __status__ = "Prototype"
 
-from pylinac.picketfence import PFDicomImage, PicketFence, Orientation, MLC, MLCArrangement
+from pylinac.picketfence import PicketFence, Orientation, MLC, MLCArrangement
+from pylinac.core.profile import FWXMProfilePhysical, MultiProfile
+
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from app.base import ispBase
@@ -15,15 +17,10 @@ from app.image import DicomImage
 from app.check import ispCheckClass
 
 from isp.config import dict_merge
-#from datetime import datetime
-#from dateutil.parser import parse
 
 from dotmap import DotMap
 import numpy as np
 import pandas as pd
-#from pandas.io.json import json_normalize
-
-from pylinac.core.profile import SingleProfile, MultiProfile
 
 import matplotlib.pyplot as plt
 
@@ -31,25 +28,6 @@ import logging
 logger = logging.getLogger( "MQTT" )
 
 from isp.plot import plotClass
-
-
-class PFImage( PFDicomImage, DicomImage ):
-    '''
-    '''
-
-    def __init__(self, pathOrData=None, **kwargs ):
-        """ Erweitert PFDicomImage um die eigene DicomImage Klasse
-
-        """
-
-        #print("PFImage.__init__", path, kwargs)
-
-        # das pylinacpicketfence Image
-        #image.LinacDicomImage.__init__( self, path, **kwargs )
-
-        # die eigene Erweiterung
-        DicomImage.__init__( self, pathOrData )
-
 
 class qa_mlc( PicketFence, ispCheckClass ):
     """Erweitert die Klasse PicketFence, um eine eigene DicomImage Erweiterung zu verwenden
@@ -86,8 +64,6 @@ class qa_mlc( PicketFence, ispCheckClass ):
         self._is_analyzed = False
 
         self._kennung = kennung
-        #print( "qa_mlc" , checkField )
-
         self.checkField = checkField
         self.baseField = baseField
 
@@ -96,15 +72,15 @@ class qa_mlc( PicketFence, ispCheckClass ):
             # checkField und baseField wurden angegeben, normalize möglich
             # self.image und self.baseImage initialisieren und ggf normalisieren
             ispCheckClass.__init__( self,
-                image=PFImage( self.checkField ),
-                baseImage=PFImage( self.baseField ),
+                image=DicomImage( self.checkField ),
+                baseImage=DicomImage( self.baseField ),
                 normalize=normalize
             )
         elif self.checkField:
             # nur checkfield wurde angegeben
             # self.image initialisieren
             ispCheckClass.__init__( self,
-                image=PFImage( self.checkField )
+                image=DicomImage( self.checkField )
             )
 
         # default Settings einstellen
@@ -112,7 +88,6 @@ class qa_mlc( PicketFence, ispCheckClass ):
 
         tolerance = 0.5
         action_tolerance = None
-        hdmlc = False
 
         self.mlc = self._get_mlc_arrangement(mlc)
         
@@ -122,45 +97,6 @@ class qa_mlc( PicketFence, ispCheckClass ):
             "action_tolerance": action_tolerance,
             "_log_fits": self._log_fits
         }
-
-        # image muss da sein
-        '''
-        if self.image:
-            self.settings = Settings(self.orientation, tolerance, action_tolerance, hdmlc, self.image, self._log_fits )
-        '''   
-
-    def _leaves_in_view(self, analysis_width) -> list[tuple[int, int, int]]:
-        """Crop the leaves if not all leaves are in view.
-
-        Modifications: 
-            a) add 1 to leaf_num because enumerate(self.mlc.centers) is 0 based
-        """
-        range = (
-            self.image.shape[0] / 2
-            if self.orientation == Orientation.UP_DOWN
-            else self.image.shape[1] / 2
-        )
-        # cut off the edge so that we're not halfway through a leaf.
-        range -= (
-            max(
-                self.mlc.widths[0] * analysis_width,
-                self.mlc.widths[-1] * analysis_width,
-            )
-            * self.image.dpmm
-        )
-        leaves = [
-            i
-            for i, c in enumerate(self.mlc.centers)
-            if abs(c) < (range / self.image.dpmm)
-        ]
-        return [
-            (leaf_num + 1, center, width) # a) 
-            for leaf_num, center, width in zip(
-                leaves,
-                self.mlc.centers[leaves[0] : leaves[-1] + 1],
-                self.mlc.widths[leaves[0] : leaves[-1] + 1],
-            )
-        ]
 
     def getLeafCenterPositions( self ):
         """Gibt die Positionen der Leaf Mitte aller Leafs
@@ -178,7 +114,6 @@ class qa_mlc( PicketFence, ispCheckClass ):
         Attributes
         ----------
         positions : Positionen an denen ermittelt werden soll
-
 
         Returns
         -------
@@ -207,15 +142,8 @@ class qa_mlc( PicketFence, ispCheckClass ):
 
         # PixelPosition ermitteln
         pxPosition = self.image.mm2dots_X( position )
-        # int(round( self.image.dpmm * position + self.image.cax.x ))
+
         """ Analysis """
-
-        #position = 0.6
-        # Profilwerte in %
-        #profile = MultiProfile(self.image.array[:, int(round(self.image.array.shape[1]*vert_position))])
-        #profile = MultiProfile( self.image.array[:, 563] * 100  )
-        # evt. asl % mit MultiProfile( self.image.array[:, pixPosition]  * 100 )
-
         if self.infos["collimator"] == 90:
             self.image.rot90( n=3 )
         elif self.infos["collimator"] == 180:
@@ -224,7 +152,6 @@ class qa_mlc( PicketFence, ispCheckClass ):
             self.image.rot90( n=1 )
 
         profile = MultiProfile( self.image.array[:, pxPosition] )
-
 
         """ max Peaks (interleaf) suchen """
         # max peaks für innere leafs bei 10 für äußere bei 20
@@ -319,7 +246,7 @@ class qa_mlc( PicketFence, ispCheckClass ):
             shift.mean.
 
         """
-
+        
         # alle Leaf center Positionen bestimmen
         checkPositions = self.getLeafCenterPositions()
 
@@ -349,16 +276,23 @@ class qa_mlc( PicketFence, ispCheckClass ):
                 # Abhängigkeit von der Kollimatorrotation
                 if self.infos["collimator"] == 90 or self.infos["collimator"] == 270:
                     # umdrehen für 270 oder 90
-                    profile = SingleProfile( self.image.array[ : , self.image.mm2dots_X( p ) ] )
+                    profile = FWXMProfilePhysical( 
+                        self.image.array[ : , self.image.mm2dots_X( p ) ],
+                        fwxm_height=50,
+                        dpmm=self.image.dpmm
+                    )
                 else:
-                    profile = SingleProfile( self.image.array[ self.image.mm2dots_Y( p ) ] )
+                    profile = FWXMProfilePhysical( 
+                        self.image.array[ self.image.mm2dots_Y( p ) ],
+                        fwxm_height=50,
+                        dpmm=self.image.dpmm
+                    )
 
-                fwxm_data = profile.fwxm_data()
-                # Abstand der Lamellen bei 50%
-                fwxm = fwxm_data["width (exact)"]
+                # Abstand der Lamellen 
+                fwxm = profile.field_width_px
                 leafData["fwxm"][p] = fwxm / self.image.dpmm
-                # Zentrumsversatz bei 50% bestimmen
-                center = fwxm_data["center index (exact)"]
+                # Zentrumsversatz bestimmen
+                center = profile.center_idx
                 leafData["shift"][p] = ( (len(profile.values) / 2) - center ) / self.image.dpmm
 
         # die eigentlichen Werte in ein array übernehmen
@@ -416,7 +350,7 @@ class qa_mlc( PicketFence, ispCheckClass ):
         limit = 2 * (error + virtLeafSize)
         # Chart Titel wenn nicht angegeben
         if plotTitle == "":
-            plotTitle = "lfd:{lfd:d} G:{gantry:01.1f} K:{collimator:01.1f}"
+            plotTitle = "lfd:{lfd:d} G:{gantry:.0f} K:{collimator:.0f}"
 
         plot = plotClass( )
         fig, ax = plot.initPlot( size, False, nrows=1, ncols=1 )
@@ -489,8 +423,8 @@ class qa_mlc( PicketFence, ispCheckClass ):
             df_fwxm.boxplot(ax = ax[0], whis=[0,100])
 
             ax[0].set_title('Leafpaarabstand (fwxm)')
-            ax[0].get_yaxis().set_ticklabels([48.5, 49, 49.5, 50, 50.5, 51, 51.5])
             ax[0].get_yaxis().set_ticks( [48.5, 49, 49.5, 50, 50.5, 51, 51.5] )
+            ax[0].get_yaxis().set_ticklabels([48.5, 49, 49.5, 50, 50.5, 51, 51.5])
             ax[0].axhline(50, color='k', linewidth = 0.5)
 
         #
@@ -502,8 +436,8 @@ class qa_mlc( PicketFence, ispCheckClass ):
             df_shift.boxplot(ax = ax[1], whis=[0,100])
 
             ax[1].set_title('Zentrumsabweichung (shift)')
-            ax[1].get_yaxis().set_ticklabels([1.5, 1, 0.5, 0, -0.5, -1, -1.5])
             ax[1].get_yaxis().set_ticks( [1.5, 1, 0.5, 0, -0.5, -1, -1.5] )
+            ax[1].get_yaxis().set_ticklabels([1.5, 1, 0.5, 0, -0.5, -1, -1.5])
             ax[1].axhline(0, color='k', linewidth = 0.5)
 
         plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
@@ -520,7 +454,6 @@ class qa_mlc( PicketFence, ispCheckClass ):
         plot = plotClass( )
         fig, ax = plot.initPlot( chartSize )
 
-        #ax.set_ylabel('%')
         ax.set_xlabel('Position [mm]')
 
         plt.title('Transmission von %s an der Position: %i mm. Mean: Leaf=%1.3f Interleaf=%1.3f ' % (
@@ -533,7 +466,6 @@ class qa_mlc( PicketFence, ispCheckClass ):
         # kurve anzeigen
         plt.plot( transmission["profile"]  )
 
-
         # Achsenbeschriftung in mm
         # x-Achse
         xlim = ax.get_xlim()
@@ -541,12 +473,6 @@ class qa_mlc( PicketFence, ispCheckClass ):
         x = np.arange(0, len( transmission["profile"] ), width / 4 )
         ax.get_xaxis().set_ticklabels([ -200, -100, 0, 100, 200])
         ax.get_xaxis().set_ticks( x )
-
-        # mittelwert linie
-        #ax.axhline( vmean, linestyle="--", linewidth=1, color="gray" )
-
-        #
-        #plt.plot(peaks, x[peaks], "x", color="red" )
 
         # maxPeaks (interleaf)
         if showInterleafPeaks:
@@ -605,15 +531,9 @@ class qa_mlc( PicketFence, ispCheckClass ):
         if not hasattr(self, "pickets"):
             return result
       
-        # print("picketfence_results", self.pickets )
-
-        rd = self.results_data()
-
-        #print( len( self._flattened_errors()) )
-       
+        rd = self.results_data()       
         offsets = " ".join(f"{pk.dist2cax:.1f}" for pk in self.pickets)
-        
-      
+              
         '''
 
         # max von mean bestimmen
@@ -663,15 +583,7 @@ class qa_mlc( PicketFence, ispCheckClass ):
             "max_from_mean" : max_from_mean_error,
             "max_from_mean_leaf" : max_from_mean_leaf,
         }
-        #print( "picketfence - result", result )
         return result
-        """
-        string = f"Picket Fence Results: \n{pass_pct:2.1f}% " \
-                 f"Passed\nMedian Error: {self.abs_median_error:2.3f}mm \n" \
-                 f"Mean picket spacing: {self.pickets.mean_spacing:2.1f}mm \n" \
-                 f"Picket offsets from CAX (mm): {offsets}\n" \
-                 f"Max Error: {self.max_error:2.3f}mm on Picket: {self.max_error_picket}, Leaf: {self.max_error_leaf}"
-        """
 
     def picketfence_plotImage(self, guard_rails: bool=True, mlc_peaks: bool=True, overlay: bool=True,
                             leaf_error_subplot: bool=True, show: bool=False, metadata={} ):
@@ -704,7 +616,7 @@ class qa_mlc( PicketFence, ispCheckClass ):
             original=False, 
             getPlot=False,
             metadata=metadata,
-            plotTitle="{Kennung} - G:{gantry:01.1f} K:{collimator:01.1f}",
+            plotTitle="{Kennung} - G:{gantry:.0f} K:{collimator:.0f}",
             plotCax=False,
             plotField=True,
             figsize=figsize,
@@ -790,7 +702,7 @@ class qa_mlc( PicketFence, ispCheckClass ):
             error_stdev.append(
                 np.std([m.error for m in self.mlc_meas if m.leaf_num == leaf_num])
             )
-        #print("leafs", leaf_nums, error_vals)
+
         # plot the leaf errors as a bar plot
         if self.orientation == Orientation.UP_DOWN:
             axtop.barh(
@@ -862,7 +774,6 @@ def transmissionsToPlot( **args ):
             pxPosition = self.mm2dots_X(transmissions[idx]["position"]  )
             ax.axhline( transmissions[idx]["pxPosition"] , **style )
 
-
 #
 # -----------------------------------------------------------------------------
 #
@@ -886,7 +797,6 @@ class checkMlc( ispBase ):
         ----------
         fileData : pandas.DataFrame
 
-
         Returns
         -------
         pdfFilename : str
@@ -899,7 +809,6 @@ class checkMlc( ispBase ):
         isp.results : Aufbau von result
         """
 
-        # print( fileData )
         result=[]
 
         # wird für progress verwendet
@@ -912,23 +821,24 @@ class checkMlc( ispBase ):
             "series_sort_values" : ['check_subtag'],
             "field_count": 2,
             "manual": {
-                "filename": self.metadata.info["anleitung"],
                 "attrs": {"class":"layout-fill-width"},
             },
-            "_image": { "width": 80, "height": 80 },
-            "_image_attrs" : {"class":"layout-50-width", "margin-right": "20px"},
+            "plotImage_pdf": {
+                "area" : { "width": 80, "height": 80 },
+                "attrs": {"class":"layout-50-width", "margin-right": "20px"},
+            },
+
             "_chart": { "width": 180, "height": 45 },
             "_text" : { },
             "_text_attrs" : {"margin-left":"5mm"},
             # Messorte alle 10mm im Bereich von -70mm bis 70mm
             "checkPositions" : np.arange(-70, 80, 10),
 
-
             #"groupby": [ "day", "SeriesNumber" ], # groupby in der config angegeben werden sonst default (2019 nicht in der gleichen Serie)
             "table_fields" : [
                 {'field': 'position', 'label':'Position', 'format':'{0:d}' },
-                {'field': 'gantry', 'label':'Gantry', 'format':'{0:.1f}' },
-                {'field': 'collimator', 'label':'Kollimator', 'format':'{0:.1f}' },
+                {'field': 'gantry', 'label':'Gantry', 'format':'{0:.0f}' },
+                {'field': 'collimator', 'label':'Kollimator', 'format':'{0:.0f}' },
                 {'field': 'leaf.mean_x', 'label':'X1-Leaf Mean', 'format':'{0:.3f}' },
                 {'field': 'leaf.mean_x_passed', 'label':'X1-Passed'},
                 {'field': 'leaf.mean_y', 'label':'X2-Leaf Mean', 'format':'{0:.3f}' },
@@ -936,7 +846,6 @@ class checkMlc( ispBase ):
             ]
         } ), self.metadata )
 
-        # print("doJT_4_2_2_1_A", md.groupby )
         # Felder für die Tabelle
         def groupBySeries( df_group ):
             """gruppenweise Auswertung
@@ -951,7 +860,6 @@ class checkMlc( ispBase ):
             #
             self.pdf.textFile( **md.manual )
 
-            #print("doJT_4_2_2_1_A - df_group", df_group)
             # das offene Feld merken
             try:
                 df_base = df_group.query("check_subtag.isnull()", engine='python')
@@ -959,7 +867,6 @@ class checkMlc( ispBase ):
                 # ein leeres df damit in checkFields geprüft wird
                 df_base = pd.DataFrame()
 
-            #print("doJT_4_2_2_1_A - df_base", df_base)
             # alle anderen filtern
             try:
                 df_fields = df_group.query("check_subtag.notnull()", engine='python')
@@ -976,15 +883,6 @@ class checkMlc( ispBase ):
                     errors=errors
                 ) )
                 return
-            '''
-            if not self.checkFields( md, df_base, df_fields, 2 ):
-                result.append( self.pdf_error_result(
-                    md, date=checkDate, group_len=len( result ),
-                    msg='<b>Datenfehler</b>: keine Felder gefunden oder das offene Feld fehlt.'
-
-                ) )
-                return
-            '''
 
             # alle Felder durchgehen
             transmissionData = {}
@@ -1016,7 +914,7 @@ class checkMlc( ispBase ):
                             , arg_function=transmissionsToPlot, arg_dict={"transmissions": transmission}
                             )
 
-                self.pdf.image( img, md["_image"], attrs=md["_image_attrs"] )
+                self.pdf.image( img, **md.plotImage_pdf )
 
 
                 # Chart Transmission an der Positon 0 ohne Kreuze erzeugen
@@ -1093,11 +991,8 @@ class checkMlc( ispBase ):
             self.pdf.text( text, md["_text"], attrs=md["_text_attrs"] )
 
             # Gesamt check
-
             self.pdf.resultIcon( acceptance )
 
-        # print(fileData[ ["energy", "day", "AcquisitionMonth", "AcquisitionYear", "SeriesNumber"] ])
-        #print( md.get("groupby", [ "day", "SeriesNumber" ]) )
         #
         # Sortiert nach check_subtag
         # Gruppiert nach day und SeriesNumber abarbeiten
@@ -1128,8 +1023,7 @@ class checkMlc( ispBase ):
 
         Parameters
         ----------
-        fileData : Pandas
-
+        fileData : pandas.DataFrame
 
         Returns
         -------
@@ -1154,12 +1048,13 @@ class checkMlc( ispBase ):
             "series_groupby": [ "day", "SeriesNumber" ],
             "series_sort_values" : ['check_subtag', 'gantry', 'collimator'],
             "manual": {
-                "filename": self.metadata.info["anleitung"],
                 "attrs": {"class":"layout-fill-width"},
             },
             "field_count": 3,
-            "_image": { "width": 58, "height": 58 },
-            "_image_attrs" : {"class":"layout-50-width"},
+            "plotImage_pdf":{
+                "area": { "width": 58, "height": 58 },
+                "attrs": {"class":"layout-50-width"}
+            },
             "_text" : {},
             "_text_attrs" : {},
             "_table_attrs" : {"class":"layout-fill-width", "margin-top": "2mm"},
@@ -1168,19 +1063,16 @@ class checkMlc( ispBase ):
 
             "table_fields" : [
                 {'field': 'Kennung', 'label':'Kennung', 'format':'{0}', 'style': [('text-align', 'left')] },
-                {'field': 'gantry', 'label':'Gantry', 'format':'{0:.1f}' },
-                {'field': 'collimator', 'label':'Kollimator', 'format':'{0:.1f}' },
+                {'field': 'gantry', 'label':'Gantry', 'format':'{0:.0f}' },
+                {'field': 'collimator', 'label':'Kollimator', 'format':'{0:.0f}' },
                 {'field': 'interleaf.mean', 'label':'interleaf Mean', 'format':'{0:.3f}' },
                 {'field': 'interleaf.mean_passed', 'label':'Passed'}
             ]
         } ), self.metadata )
 
-        #print(fileData[ ["energy", "day", "gantry", "collimator", "SeriesNumber", "check_subtag"] ])
-
         def groupBySeries( df_group ):
             """gruppenweise Auswertung
             """
-            # print( df_group[ ['check_subtag', 'gantry', 'collimator', 'Kennung'] ] )
             # das Datum vom ersten Datensatz verwenden
             checkDate = df_group['AcquisitionDateTime'].iloc[0].strftime("%d.%m.%Y")
             self.pdf.setContentName( checkDate )
@@ -1217,12 +1109,6 @@ class checkMlc( ispBase ):
                         errors=errors
                     ) )
                     return
-                '''
-                # übergebene felder prüfen
-                if not self.checkFields( md, df_base, df_fields, 3 ):
-                    return
-                '''
-                #print( df[ ['check_subtag', 'gantry', 'collimator', 'Kennung'] ] )
 
                 # baseField bereitstellen
                 baseField = self.getFullData( df_base.iloc[0] )
@@ -1254,7 +1140,7 @@ class checkMlc( ispBase ):
                                     , arg_function=transmissionsToPlot, arg_dict={"transmissions": transmissions}
                                     )
 
-                        self.pdf.image( img, md["_image"], attrs=md["_image_attrs"]  )
+                        self.pdf.image( img, **md.plotImage_pdf )
 
                     # progress pro file stimmt nicht immer genau (baseimage)
                     # 40% für die dicom daten 40% für die Auswertung 20 % für das pdf
@@ -1357,8 +1243,7 @@ class checkMlc( ispBase ):
 
         Parameters
         ----------
-        fileData : Pandas
-
+        fileData : pandas.DataFrame
 
         Returns
         -------
@@ -1384,12 +1269,12 @@ class checkMlc( ispBase ):
             "series_groupby": ["day", "SeriesNumber"],
             "field_count": 3, # drei Felder pro Auswertung
             "manual": {
-                "filename": self.metadata.info["anleitung"],
                 "attrs": {"class":"layout-fill-width", "margin-bottom": "5mm"},
             },
-
-            "_image": { "width": 58, "height": 58 },
-            "_image_attrs" : {"class":"layout-50-width"},
+            "plotImage_pdf":{
+                "area": { "width": 58, "height": 58 },
+                "attrs": {"class":"layout-50-width"}
+            },
 
             "_image_-40": { "width": 55, "height": 55, "left": 0, "top" : 15 },
             "_image_0": { "width": 55, "height": 55, "left": 60, "top" : 15 },
@@ -1408,8 +1293,8 @@ class checkMlc( ispBase ):
             "checkPositions_tipsX2" : [-40],
             "table_fields": [
                 {'field': 'Kennung', 'label':'Kennung', 'format':'{0}', 'style': [('text-align', 'left')] },
-                {'field': 'gantry', 'label':'Gantry', 'format':'{0:.1f}' },
-                {'field': 'collimator', 'label':'Kollimator', 'format':'{0:.1f}' },
+                {'field': 'gantry', 'label':'Gantry °', 'format':'{0:.0f}' },
+                {'field': 'collimator', 'label':'Kollimator °', 'format':'{0:.0f}' },
                 {'field': 'position'},
                 {'field': 'soll', 'label':'Mean soll', 'format':'{0:.3f}' },
                 {'field': 'interleaf.mean', 'label':'interleaf Mean', 'format':'{0:.3f}' },
@@ -1422,9 +1307,6 @@ class checkMlc( ispBase ):
                 "40" : None
             }
         } ), self.metadata )
-
-        #print("fileData", fileData[ [ "day", "SeriesNumber", "gantry", "collimator", "check_variante", "check_subtag" ] ] )
-
 
         try:
             md["checkValues"]["-40"] = md.current.tolerance.get( "-40" ).soll.value
@@ -1472,7 +1354,6 @@ class checkMlc( ispBase ):
                     # ein leeres df damit in checkFields geprüft wird
                     df_fields = pd.DataFrame()
 
-                # print("groupByGantryKolli", md.current)
                 # logger.error( "Base: {}, Fields:{}".format( len(df_base.index), len(df_base.index) ) )
                 # alles notwendige da? Ein base und 2 weitere Felder
                 errors = self.checkFields( md, df_base, df_fields, md["field_count"])
@@ -1482,14 +1363,7 @@ class checkMlc( ispBase ):
                         errors=errors
                     ) )
                     return
-                '''
-                # übergebene felder prüfen
-                if not self.checkFields( md, df_base, df_fields, 3, warn=False ):
-                    return
-                '''
-
-                #print( df[ ['check_subtag', 'gantry', 'collimator', 'Kennung'] ] )
-                #print( df_fields[ ['check_subtag', 'gantry', 'collimator'] ] )
+                
                 # baseField bereitstellen
                 baseField = self.getFullData( df_base.iloc[0] )
                 self.fileCount += 1
@@ -1522,7 +1396,7 @@ class checkMlc( ispBase ):
                                     , metadata=md
                                     , arg_function=transmissionsToPlot, arg_dict={"transmissions": transmissions}
                                     )
-                        self.pdf.image( img, md[ "_image_{0:d}".format( positions[0] ) ], attrs=md["_image_attrs"] )
+                        self.pdf.image( img, md[ "_image_{0:d}".format( positions[0] ) ], attrs=md["plotImage_pdf"]["attrs"] )
 
                     # progress pro file stimmt nicht immer genau (baseimage)
                     # 40% für die dicom daten 40% für die Auswertung 20 % für das pdf
@@ -1572,31 +1446,31 @@ class checkMlc( ispBase ):
             ) )
 
             # zusätzliche Gantry/Kollimator spalte
-            df["Gantry/Kollimator"] = df.apply(lambda x:'{0:.1f}/{1:.1f}'.format( x['gantry'], x['collimator']  ),axis=1)
+            df["Gantry/Kollimator"] = df.apply(lambda x:'{0:.0f}/{1:.0f}'.format( x['gantry'], x['collimator']  ),axis=1)
 
             #
             # charts plotten
             #
             self.pdf.pandasPlot( df[df.position == -40], md["_chart_-40"],
-                    ylim=(0,0.5),
-                    grid=True,
-                    y='interleaf.mean',
-                    x='Gantry/Kollimator',
-                    label='position -40',
+                ylim=(0,0.5),
+                grid=True,
+                y='interleaf.mean',
+                x='Gantry/Kollimator',
+                label='position -40',
             )
             self.pdf.pandasPlot( df[df.position == 0], md["_chart_0"],
-                    grid=True,
-                    ylim=(0,0.5),
-                    y='interleaf.mean',
-                    x='Gantry/Kollimator',
-                    label='position 0',
+                grid=True,
+                ylim=(0,0.5),
+                y='interleaf.mean',
+                x='Gantry/Kollimator',
+                label='position 0',
             )
             self.pdf.pandasPlot( df[df.position == 40], md["_chart_40"],
-                    ylim=(0,0.5),
-                    grid=True,
-                    y='interleaf.mean',
-                    x='Gantry/Kollimator',
-                    label='position 40',
+                ylim=(0,0.5),
+                grid=True,
+                y='interleaf.mean',
+                x='Gantry/Kollimator',
+                label='position 40',
             )
 
             #
@@ -1647,8 +1521,7 @@ class checkMlc( ispBase ):
 
         Parameters
         ----------
-        fileData : Pandas
-
+        fileData : pandas.DataFrame
 
         Returns
         -------
@@ -1664,42 +1537,41 @@ class checkMlc( ispBase ):
 
         result=[]
 
-
         # wird für progress verwendet
         filesMax=len( fileData )
         self.fileCount = 0
 
         # metadata vorbereiten
         md = dict_merge( DotMap( {
-            "field_count": 1,
             "manual": {
-                "filename": self.metadata.info["anleitung"],
                 "attrs": {"class":"layout-fill-width", "margin-bottom": "5mm"},
             },
-            "_text": { "left":0, "top": 0 },
-            "_table": { "class":"layout-40-width", "margin-top": "1mm"},
-           # "_table": { "left":0, "top":55, "width":65 },
-            "_infobox" : { "left":75, "top":50, "width":100 },
+            "field_count": 1,
+            "_text": { "left":85, "top":220, "width" : 100 },
+            "_table": { "left":0, "top":140, "width" : 80, "height" : 60},
+            "_infobox" : { "left":40, "top":50, "width":100 },
             "_clip" : { "width":"80mm", "height":"30mm", "margin-left":"10mm", "margin-top":"5mm" },
-            "_clipLegend" : { "margin-top": "5mm" },
-            "_chart": { "left":75, "top":135, "width":100, "height":100},
-            "_toleranz": { "left":75, "top":235, "width" : 100 },
+            "_clipLegend" : { "margin-left":"10mm", "margin-top": "5mm" },
+            "_chart": { "left":85, "top":140, "width" : 100, "height" : 60},
             "table_fields": [
                 {'field': 'doserate', 'label':'Dosisleistung', 'format':'{0}'},
-                {'field': 'gantry', 'label':'Gantry', 'format':'{0:.1f}' },
-                {'field': 'collimator', 'label':'Kolli', 'format':'{0:.1f}' },
+                {'field': 'gantry', 'label':'Gantry', 'format':'{0:.0f}' },
+                {'field': 'collimator', 'label':'Kolli', 'format':'{0:.0f}' },
                 {'field': 'speed', 'label':'Geschw.', 'format':'{0}'},
                 {'field': 'delta', 'label':'Delta [%]', 'format':'{0:.1f}' },
                 {'field': 'delta_passed', 'label':'Passed', 'style':  [('max-height', '10px'), ('vertical-align','top')] }
             ]
         } ), self.metadata )
 
+        # gruppieren Doserate und Geschwindigkeit (V1, V2, V3)
+        # Speed über doserate und MonitorEinheiten(MetersetExposure)
+        # MLCPlanType=DynMLC Plan; IndexParameterType=MU
+        # Radiation.TechniqueLabel = STATIC|SLIDING_WINDOW
         def groupBy( df_group ):
+            """Datumsweise Auswertung
             """
-            """
-
             # das Datum vom ersten Datensatz verwenden
-            checkDate=df_group['AcquisitionDateTime'].iloc[0].strftime("%d.%m.%Y")
+            checkDate = df_group['AcquisitionDateTime'].iloc[0].strftime("%d.%m.%Y")
             self.pdf.setContentName( checkDate )
 
             #
@@ -1715,55 +1587,93 @@ class checkMlc( ispBase ):
             html += self.pdf.image( "qa/LeafSpeed.svg", attrs=md["_clip"], render=False)
             html += self.pdf.textFile("qa/LeafSpeed_Legend.md", attrs=md["_clipLegend"], render=False)
 
-            data = []
-            # pro speed
-            def groupBySpeed(df_speed):
-                #print( len(df_speed) )
-                #print( df_speed)
-                df_base = df_speed.query("open == 'OF'")
-                df_fields = df_speed.query("open != 'OF'")
+            self.pdf.html( html, md["_infobox"], { "class" : "infobox" })
 
-                # alles notwendige da?
-                errors = self.checkFields( md, df_base, df_fields, md["field_count"])
+            data = []
+            # pro speed 
+            # das offene Feld der jeweiligen Geschwindigkeit wird für alle Gantry- und Kolli-Winkel verwendet
+            def groupBySpeed(df_speed):
+                try:
+                    # das offene Feld merken
+                    df_base = df_speed.query("open == 'OF'").iloc[0]
+                    self.fileCount += 1
+                except:
+                    # ein leeres df damit in checkFields geprüft wird
+                    df_base = pd.DataFrame()
+                    #logger.warning( "kein offenes Feld" )
+ 
+                # alles notwendige da, erstmal nur df_base?
+                errors = self.checkFields( md, df_base )
                 if len(errors) > 0:
                     result.append( self.pdf_error_result(
                         md, date=checkDate, group_len=len( result ),
                         errors=errors
                     ) )
                     return
-                '''
-                if not self.checkFields( md, df_base, df_field, 1 ):
-                    return
-                '''
 
-                check = qa_mlc(
-                    checkField=self.getFullData( df_fields.iloc[0] ),
-                    baseField=self.getFullData( df_base.iloc[0] ),
-                    normalize="prozent"
-                )
-
-                # Daten merken
-                data.append( {
-                    "doserate" : check.infos["doserate"],
-                    "speed" : check.infos["speed"],
-                    "gantry" : check.infos["gantry"],
-                    "collimator" : check.infos["collimator"],
-                    "delta" : check.image.getFieldRoi().mean() * 100
-                })
-
-                # progress pro file stimmt nicht immer genau (baseimage)
-                # 40% für die dicom daten 40% für die Auswertung 20 % für das pdf
-                self.fileCount += 2
-                if hasattr( logger, "progress"):
-                    logger.progress( md["testId"],  40 + ( 40 / filesMax * self.fileCount ) )
-
-            # alle speed arten durch gehen
-            df_group.groupby( [ "gantry", "collimator", "doserate", "speed" ] ).apply( groupBySpeed )
+                # alle anderen durchgehen
+                # alle Felder durchgehen
+                for (idx, df_field) in df_speed.query("open != 'OF'").iterrows():
 
 
-            self.pdf.html( html,  md["_infobox"], { "class" : "infobox" })
+                    # alles notwendige da?
+                    errors = self.checkFields( md, df_base, df_field, md["field_count"] )
+                    if len(errors) > 0:
+                        result.append( self.pdf_error_result(
+                            md, date=checkDate, group_len=len( result ),
+                            errors=errors
+                        ) )
+                        return
 
-            # es wurden keine Felder gefunden (checkFields fehler)
+                    # die Bilder von den Felder mit gedrehtem Kollimator drehen
+                    if df_field["collimator"] == 90:
+                        dicomfile=df_field["dicom"]
+                        arr=dicomfile.pixel_array
+                        arr=np.rot90(arr, k=3)
+                        dicomfile.PixelData=arr.tobytes()
+                        df_field["dicom"]=dicomfile
+                    if df_field["collimator"] == 270:
+                        dicomfile=df_field["dicom"]
+                        arr=dicomfile.pixel_array
+                        arr=np.rot90(arr)
+                        dicomfile.PixelData=arr.tobytes()
+                        df_field["dicom"]=dicomfile
+
+                    # es wurden keine Felder gefunden (checkFields fehler)
+                    check = qa_mlc(
+                        checkField=self.getFullData( df_field ),
+                        baseField=self.getFullData( df_base ),
+                        normalize="prozent"
+                    )
+
+                    if check.infos["collimator"] == 90:
+                        check.image.rot90( n=3 )
+                    elif check.infos["collimator"] == 270:
+                        check.image.rot90( n=1 )
+
+                    # Daten merken
+                    data.append( {
+                        "doserate" : check.infos["doserate"],
+                        "speed" : check.infos["speed"],
+                        "gantry" : check.infos["gantry"],
+                        "collimator" : check.infos["collimator"],
+                        "AcquisitionDateTime" : check.infos["AcquisitionDateTime"],
+                        "delta" : check.image.getFieldRoi().mean() * 100
+                    })
+
+                    # progress pro file stimmt nicht immer genau (baseimage)
+                    # 40% für die dicom daten 40% für die Auswertung 20 % für das pdf
+                    self.fileCount += 1
+                    if hasattr( logger, "progress"):
+                        logger.progress( md["testId"],  40 + ( 40 / filesMax * self.fileCount ) )
+
+            # alle doserate speed Arten durch gehen
+            ( df_group
+                 .sort_values(by=[ "gantry", "collimator", "doserate", "speed", "AcquisitionDateTime"])
+                 .groupby( [ "speed" ] )
+                 .apply( groupBySpeed )
+            )
+
             if len( data ) < 1:
                 result.append( self.pdf_error_result(
                     md, date=checkDate, group_len=len( result ),
@@ -1772,8 +1682,9 @@ class checkMlc( ispBase ):
                 ) )
                 return
 
-
-            df = pd.DataFrame(data)
+            # dataframe erstellen
+            df = pd.DataFrame( data )
+            df.sort_values(['doserate', 'gantry', 'collimator', 'speed'], inplace=True)
 
             #
             # Abweichung ausrechnen und Passed setzen
@@ -1787,43 +1698,47 @@ class checkMlc( ispBase ):
             # Ergebnis in result merken
             #
             result.append( self.createResult( df, md, check,
-                df_group['AcquisitionDateTime'].iloc[0].strftime("%Y%m%d"),
-                len( result ), # bisherige Ergebnisse in result
-                acceptance
+                    df_group['AcquisitionDateTime'].iloc[0].strftime("%Y%m%d"),
+                    len( result ), # bisherige Ergebnisse in result
+                    acceptance
             ) )
-
 
             #
             # Tabelle erzeugen
             #
-            self.pdf.pandas( df,
-                attrs=md["_table"],
+            self.pdf.pandas( df, md["_table"],
+                #attrs={"class":"layout-40-width", "margin-top": "205mm"},
                 fields=md["table_fields"]
             )
-
 
             #
             # chart
             #
+            if len( data ) > 24:
+                result.append( self.pdf_error_result(
+                    md, date=checkDate, group_len=len( result ),
+                    msg='<b>Datenfehler</b>: zu viele Felder pro Doserate, Art, Geschw. gefunden. Chart kann nicht angezeigt werden',
+                    pos={ "top":150 }
+                ) )
+            else:
+                # plot anlegen
+                plot = plotClass( )
+                fig, ax = plot.initPlot( md["_chart"] , True )
 
-            # plot anlegen
-            plot = plotClass( )
-            fig, ax = plot.initPlot( md["_chart"] , True )
+                # data frame gruppieren und mit neuem index versehen
+                df_chart = df.set_index([ 'gantry', 'collimator', 'speed' ])['delta'].unstack()
+                # als bar plot ausgeben
+                df_chart.plot( ax=ax, kind='bar', rot=0)
 
-            # data frame gruppieren und mit neuem index versehen
-            df_chart = df.set_index(['gantry', 'collimator', 'speed', 'doserate' ])['delta'].unstack()
-            # als bar plot ausgeben
-            df_chart.plot( ax=ax, kind='bar', rot=75)
+                # limits legende und grid
+                ax.set_ylim( [-2.0, 2.0] )
+                ax.grid( )
+                ax.legend( )
 
-            # limits legende und grid
-            ax.set_ylim( [-2.0, 2.0] )
-            ax.grid( )
-            ax.legend( )
+                plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
 
-            plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
-
-            # chart im PDF anzeigen
-            self.pdf.image( plot.getPlot(), md["_chart"] )
+                # chart im PDF anzeigen
+                self.pdf.image( plot.getPlot(), md["_chart"] )
 
             # toleranz anzeigen
             text_values = {
@@ -1834,7 +1749,7 @@ class checkMlc( ispBase ):
                 Warnung bei: <b style="position:absolute;left:25mm;">{f_warning}</b><br>
                 Fehler bei: <b style="position:absolute;left:25mm;">{f_error}</b>
             """.format( **text_values ).replace("{value}", "Delta")
-            self.pdf.text( text, md["_toleranz"] )
+            self.pdf.text( text, md["_text"] )
 
 
             # Gesamt check - das schlechteste aus der tabelle
@@ -1858,8 +1773,7 @@ class checkMlc( ispBase ):
         # Gruppiert nach day abarbeiten
         #
         (fileData
-             .sort_values(["gantry", "collimator", "doserate", "speed"])
-             .groupby( [ 'day' ] ) # , 'SeriesNumber'
+             .groupby( [ 'day' ] )
              .apply( groupBy )
         )
         # abschließen pdfdaten und result zurückgeben
@@ -1872,8 +1786,7 @@ class checkMlc( ispBase ):
 
         Parameters
         ----------
-        fileData : Pandas
-
+        fileData : pandas.DataFrame
 
         Returns
         -------
@@ -1896,7 +1809,6 @@ class checkMlc( ispBase ):
         # metadata vorbereiten
         md = dict_merge( DotMap( {
             "manual": {
-                "filename": self.metadata.info["anleitung"],
                 "attrs": {"class":"layout-fill-width", "margin-bottom": "5mm"},
             },
             "field_count" : 1,
@@ -1909,7 +1821,7 @@ class checkMlc( ispBase ):
             "_text": { "left":0, "top":220, "width" : 100 },
             "table_fields" : [
                 {'field': 'doserate', 'label':'Dosisleistung', 'format':'{0}'},
-                {'field': 'collimator', 'label':'Kolli', 'format':'{0}' },
+                {'field': 'collimator', 'label':'Kolli', 'format':'{0:.0f}' },
                 {'field': 'gating', 'label':'Art', 'format':'{0}' },
                 {'field': 'speed', 'label':'Geschw.', 'format':'{0}'},
                 {'field': 'delta', 'label':'Delta [%]', 'format':'{0:.1f}' },
@@ -1926,7 +1838,6 @@ class checkMlc( ispBase ):
         def groupBySeries( df_group ):
             """Datumsweise Auswertung
             """
-            #print( df_group[ ["open", "check_subtag" ] ] )
             # das Datum vom ersten Datensatz verwenden
             checkDate = df_group['AcquisitionDateTime'].iloc[0].strftime("%d.%m.%Y")
             self.pdf.setContentName( checkDate )
@@ -1950,9 +1861,6 @@ class checkMlc( ispBase ):
             # pro speed und check_subtag
             # das offene Feld der jeweiligen Geschwindigkeit wird für Gating und MLC verwendet
             def groupBySpeed(df_speed):
-                #print( len(df_speed) )
-                #print( df_speed[ ["open" ] ] )
-
                 try:
                     # das offene Feld merken
                     df_base = df_speed.query("open == 'OF'").iloc[0]
@@ -1960,9 +1868,8 @@ class checkMlc( ispBase ):
                 except:
                     # ein leeres df damit in checkFields geprüft wird
                     df_base = pd.DataFrame()
-                    #logger.warning( "kein offenes Feld" )
-                #df_base = pd.DataFrame()
-                # prüfung von df_base
+                    #logger.warning( "doMT_LeafSpeed: kein offenes Feld" )
+
 
                 # alles notwendige da, erstmal nur df_base?
                 errors = self.checkFields( md, df_base )
@@ -2031,7 +1938,6 @@ class checkMlc( ispBase ):
                  .apply( groupBySpeed )
             )
 
-
             # es wurden keine Felder gefunden (checkFields fehler)
             if len( data ) < 1:
                 result.append( self.pdf_error_result(
@@ -2074,7 +1980,6 @@ class checkMlc( ispBase ):
             #
             # chart
             #
-# es wurden keine Felder gefunden (checkFields fehler)
             if len( data ) > 12:
                 result.append( self.pdf_error_result(
                     md, date=checkDate, group_len=len( result ),
@@ -2146,10 +2051,11 @@ class checkMlc( ispBase ):
 
         Parameters
         ----------
-        fileData : Pandas
+        fileData : pandas.DataFrame
 
-        md : dotmap
-
+        md: dotmap
+            metadata
+        
         Returns
         -------
         pdfFilename : str
@@ -2236,7 +2142,6 @@ class checkMlc( ispBase ):
                 ) )
                 return
 
-
             # dataFrame erzeugen und passed spalten einfügen
             df = pd.DataFrame( leafData )
 
@@ -2254,8 +2159,6 @@ class checkMlc( ispBase ):
             acceptance = self.check_acceptance( df, md, check )
 
             # im Dataframe die Abweichungen nur in einer Spalte für FWXM und Shift anzeigen
-            #print( df )
-
             df["fwxm.passed"] = df["fwxm.min_passed"] + df["fwxm.mean_passed"] + df["fwxm.max_passed"]
             df["shift.passed"] = df["shift.min_passed"] + df["shift.mean_passed"] + df["shift.max_passed"]
             #
@@ -2313,7 +2216,7 @@ class checkMlc( ispBase ):
 
         Parameters
         ----------
-        fileData : pandas.dataframe
+        fileData : pandas.DataFrame
 
         Returns
         -------
@@ -2325,7 +2228,6 @@ class checkMlc( ispBase ):
         See Also
         --------
         isp.results : Aufbau von result
-
         """
 
         # metadata defaults vorbereiten
@@ -2333,23 +2235,22 @@ class checkMlc( ispBase ):
             "series_sort_values" :  ["gantry", "collimator"],
             "series_groupby" :  ['day', 'SeriesNumber'],
             "manual": {
-                "filename": self.metadata.info["anleitung"],
                 "attrs": {"class":"layout-fill-width"},
             },
             "_leafPlot" : { "width" : 45, "height" : 45},
             "_boxPlot" : { "width" : 90, "height" : 45},
-            "plotTitle" : "lfd:{lfd:d} G:{gantry:01.1f} K:{collimator:01.1f}",
+            "plotTitle" : "lfd:{lfd:d} G:{gantry:.0f} K:{collimator:.0f}",
             "table_fields" : [
                 {'field': 'lfd', 'label':'lfd', 'format':'{0:d}' },
-                {'field': 'gantry', 'label':'Gantry', 'format':'{0:1.1f}' },
-                {'field': 'collimator', 'label': 'Kollimator', 'format':'{0:1.1f}' },
-                {'field': 'fwxm.min', 'label':'FWXM<br>min', 'format':'{0:.3f}' },
-                {'field': 'fwxm.mean', 'label':'FWXM<br>mean', 'format':'{0:.3f}' },
-                {'field': 'fwxm.max', 'label':'FWXM<br>max', 'format':'{0:.3f}' },
+                {'field': 'gantry', 'label':'Gantry', 'format':'{0:.0f}' },
+                {'field': 'collimator', 'label': 'Kollimator', 'format':'{0:.0f}' },
+                {'field': 'fwxm.min', 'label':'FWXM<br>min<br>[mm]', 'format':'{0:.3f}' },
+                {'field': 'fwxm.mean', 'label':'FWXM<br>mean<br>[mm]', 'format':'{0:.3f}' },
+                {'field': 'fwxm.max', 'label':'FWXM<br>max<br>[mm]', 'format':'{0:.3f}' },
                 {'field': 'fwxm.passed', 'label':'FWXM<br>passed' },
-                {'field': 'shift.min', 'label':'Shift<br>min', 'format':'{0:.3f}' },
-                {'field': 'shift.mean', 'label':'Shift<br>mean', 'format':'{0:.3f}' },
-                {'field': 'shift.max', 'label':'Shift<br>max', 'format':'{0:.3f}' },
+                {'field': 'shift.min', 'label':'Shift<br>min<br>[mm]', 'format':'{0:.3f}' },
+                {'field': 'shift.mean', 'label':'Shift<br>mean<br>[mm]', 'format':'{0:.3f}' },
+                {'field': 'shift.max', 'label':'Shift<br>max<br>[mm]', 'format':'{0:.3f}' },
                 {'field': 'shift.passed', 'label':'Shift<br>passed' },
             ],
             "options":{
@@ -2365,6 +2266,10 @@ class checkMlc( ispBase ):
     def doMT_8_02_3(self, fileData ):
         """Lamellenpositioniergenauigkeit
         Hysterese bei großem/kleinen Feld
+
+        Parameters
+        ----------
+        fileData : pandas.DataFrame
 
         Returns
         -------
@@ -2383,7 +2288,6 @@ class checkMlc( ispBase ):
             "series_sort_values" : ['day'],
             "series_groupby": ["day", "SeriesNumber"],
             "manual": {
-                "filename": self.metadata.info["anleitung"],
                 "attrs": {"class":"layout-fill-width"},
             },
             "_leafPlot" : { "width" : 45, "height" : 45},
@@ -2393,13 +2297,13 @@ class checkMlc( ispBase ):
                 {'field': 'lfd', 'label':'lfd', 'format':'{0:d}' },
                 {'field': 'Richtung', 'label':'Richtung', 'format':'{0}' },
                 {'field': 'Datum', 'label':'Datum', 'format':'{0:%d.%m.%Y %H:%M:%S}' },
-                {'field': 'fwxm.min', 'label':'FWXM<br>min', 'format':'{0:.3f}' },
-                {'field': 'fwxm.mean', 'label':'FWXM<br>mean', 'format':'{0:.3f}' },
-                {'field': 'fwxm.max', 'label':'FWXM<br>max', 'format':'{0:.3f}' },
+                {'field': 'fwxm.min', 'label':'FWXM<br>min<br>[mm]', 'format':'{0:.3f}' },
+                {'field': 'fwxm.mean', 'label':'FWXM<br>mean<br>[mm]', 'format':'{0:.3f}' },
+                {'field': 'fwxm.max', 'label':'FWXM<br>max<br>[mm]', 'format':'{0:.3f}' },
                 {'field': 'fwxm.passed', 'label':'FWXM<br>passed' },
-                {'field': 'shift.min', 'label':'Shift<br>min', 'format':'{0:.3f}' },
-                {'field': 'shift.mean', 'label':'Shift<br>mean', 'format':'{0:.3f}' },
-                {'field': 'shift.max', 'label':'Shift<br>max', 'format':'{0:.3f}' },
+                {'field': 'shift.min', 'label':'Shift<br>min<br>[mm]', 'format':'{0:.3f}' },
+                {'field': 'shift.mean', 'label':'Shift<br>mean<br>[mm]', 'format':'{0:.3f}' },
+                {'field': 'shift.max', 'label':'Shift<br>max<br>[mm]', 'format':'{0:.3f}' },
                 {'field': 'shift.passed', 'label':'Shift<br>passed' },
             ],
 
@@ -2420,16 +2324,20 @@ class checkMlc( ispBase ):
         """VMAT MLC-PicketFence Auswertung
 
         In tolerance value und nicht Formel angeben, da analyze die Angaben benötigt
-
+    
+        Parameters
+        ----------
         fileData : pandas.DataFrame
 
         overrideMD: dict
+            metadata 
 
         passedOn : bool
             wann ist der Test OK bei VMAT_1_2 ist er bei false OK
 
         withOffsets: bool
-
+            offsets Tabelle drucken
+        
         Returns
         -------
         pdfFilename : str
@@ -2452,20 +2360,19 @@ class checkMlc( ispBase ):
         # metadata vorbereiten
         md = dict_merge( DotMap( {
             "manual": {
-                "filename": self.metadata.info["anleitung"],
                 "attrs": {"class":"layout-fill-width"},
             },
             "_chartSize" : { "width" : 180, "height" : 110},
             "_table" : { "top" : 165 },
             "table_fields_offsets" : [
                 {'field': 'Kennung', 'label':'Kennung', 'format':'{0}', 'style': [('text-align', 'left')] },
-                {'field': 'gantry', 'label':'Gantry', 'format':'{0:1.1f}' },
+                {'field': 'gantry', 'label':'Gantry', 'format':'{0:1.0f}' },
                 {'field': 'offsets', 'label':'Picket offsets from CAX [mm]' }
             ],
             "table_fields" : [
                 {'field': 'Kennung', 'label':'Kennung', 'format':'{0}', 'style': [('text-align', 'left')] },
-                {'field': 'gantry', 'label':'Gantry', 'format':'{0:1.1f}' },
-                {'field': 'collimator', 'label':'Kollimator', 'format':'{0:1.1f}' },
+                {'field': 'gantry', 'label':'Gantry', 'format':'{0:.0f}' },
+                {'field': 'collimator', 'label':'Kollimator', 'format':'{0:.0f}' },
                 {'field': 'pass_pct', 'label':'Passed %', 'format':'{0:2.1f}' },
 
                 {'field': 'mean_spacing', 'label':'Mean spacing [mm]', 'format':'{0:2.1f}' },
@@ -2567,7 +2474,7 @@ class checkMlc( ispBase ):
                         invert=False 
                     )
                 except ValueError as value_error:
-                    print( "_doMLC_VMAT analyze ValueError: {}.\n{}{:02d} - {} - {} - {}".format( value_error, md.current.year, md.current.month, md.current.unit, md.current.energy,  md.current.testTag) )
+                    logger.warning( "_doMLC_VMAT analyze ValueError: {}.\n{}{:02d} - {} - {} - {}".format( value_error, md.current.year, md.current.month, md.current.unit, md.current.energy,  md.current.testTag) )
                     result.append( self.pdf_error_result(
                         md, date=checkDate, group_len=len( result ),
                         msg= '<b>Analyze Error</b>: keine Pickets gefunden. "{}"'.format(value_error)
@@ -2674,6 +2581,10 @@ class checkMlc( ispBase ):
         Plan/Feld:
             Monatstest/MLC 4 neu
 
+        Parameters
+        ----------
+        fileData : pandas.DataFrame
+
         Returns
         -------
         pdfFilename : str
@@ -2698,6 +2609,21 @@ class checkMlc( ispBase ):
         """PicketFence statisch eines 80x100 großen Feldes
         Auswertung wie in VMAT 1.1 und 1.2 Ergebnisse in einer Tabelle
         Toleranz Angaben in der Config mit value, da value Werte für analyze benötigt werden
+        
+        Parameters
+        ----------
+        fileData : pandas.DataFrame
+
+        Returns
+        -------
+        pdfFilename : str
+            Name der erzeugten Pdfdatei
+        result : list
+            list mit dicts der Testergebnisse
+
+        See Also
+        --------
+        isp.results : Aufbau von result
 
         """
         md = {
@@ -2709,6 +2635,10 @@ class checkMlc( ispBase ):
 
     def doMT_VMAT_1_1( self, fileData ):
         """PicketFence mit rot
+
+        Parameters
+        ----------
+        fileData : pandas.DataFrame
 
         Returns
         -------
@@ -2726,6 +2656,10 @@ class checkMlc( ispBase ):
 
     def doMT_VMAT_1_2( self, fileData ):
         """PicketFence mit rot und absichtlichen Fehler
+
+        Parameters
+        ----------
+        fileData : pandas.DataFrame
 
         Returns
         -------
@@ -2746,13 +2680,15 @@ class checkMlc( ispBase ):
         """Jahrestest: 10.3.1  ( )
         Breite des peaks bei 50% peakhöhe für jedes Leafpaar
         Abstand bei FWHM für alle Leafpaare
-        d-4: Bilder vom leafGAP Feld tips_0_0 verwenden (tips)
 
-        d-6:
+        - d-4: Bilder vom leafGAP Feld tips_0_0 verwenden (tips)
+        - d-6:
+        - d-7:
+        - d-8:
 
-        d-7:
-
-        d-8:
+        Parameters
+        ----------
+        fileData : pandas.DataFrame
 
         Returns
         -------
@@ -2776,18 +2712,26 @@ class checkMlc( ispBase ):
         # metadata vorbereiten
         md = dict_merge( DotMap( {
             "manual": {
-                "filename": self.metadata.info["anleitung"],
                 "attrs": {"class":"layout-fill-width", "margin-bottom": "5mm"},
             },
             "imgSize" : {"width" : 100, "height" : 100},
-            "_image": { "left":40, "top":10, "width" : 100, "height":100 },
+            "plotImage_pdf": {
+                "area" : { "left":40, "top":15, "width" : 100, "height":100  }
+            },
+            
             "_tableA": { "left":25, "top":110, "width" : 50 },
             "_tableB": { "left":110, "top":110, "width" : 50 },
             "table_fields" : [
-                {'field': 'leaf', 'label':'Leaf' },
+                {'field': 'leaf', 'label':'Leaf', 'format':'{0:01.0f}' },
                 {'field': 'position', 'label':'Position', 'format':'{0:01.1f}' },
                 {'field': 'value', 'label':'50%', 'format':'{0:01.3f}' },
-            ]
+                {'field': 'value_passed', 'label':'Passed' }
+            ],
+            "tolerance_pdf": { 
+                "area" : { "top": 85, "width" : 50 }
+            },
+            "tolerance_field": "value",
+            "evaluation_replaces": { "value": "50%" }
         } ), self.metadata )
 
         # Auswertepositionen (Mitte der Leafs) festlegen
@@ -2795,7 +2739,6 @@ class checkMlc( ispBase ):
         hl =  np.arange(-97.5, 100, 5 )
         fl2 = np.arange(105, 200, 10 )
         checkPositions = np.concatenate( ( fl1, hl, fl2) )
-
 
         def groupBySeries( df_group ):
             """Datumsweise Auswertung
@@ -2820,32 +2763,32 @@ class checkMlc( ispBase ):
                 i = 0
                 for p in checkPositions:
                     i += 1
-                    profile = SingleProfile( check.image.array[ check.image.mm2dots_Y( p ) ] )
-                    fwxm_data = profile.fwxm_data()
-                    fwxm= fwxm_data["width (exact)"]  
+                    profile = FWXMProfilePhysical( 
+                        check.image.array[ check.image.mm2dots_Y( p ) ],
+                        fwxm_height=50,
+                        dpmm=check.image.dpmm
+                    )
+
                     # daten zusammenstellen
                     data[ i ] = {
                         "leaf" : i,
                         "position" :  p,
-                        "value" : (fwxm / check.image.dpmm / 2)
+                        "value" : (profile.field_width_px / check.image.dpmm / 2)
                     }
-
 
                 #
                 # Bild anzeigen
                 #
                 img = check.image.plotImage(  )
-                self.pdf.image(img, md["_image"] )
-
-                #
-                # Tabellen
-                #
+                self.pdf.image(img, **md.plotImage_pdf )
 
                 # pandas dataframe erstellen
                 #
-                # durch zusätzliche angabe von columns kann sortiert werden
                 # transpose um x und y zu vertauschen
-                data_frame = pd.DataFrame( data ).transpose()
+                evaluation_df = pd.DataFrame( data ).T
+                
+                data_frame, text, acceptance = self.evaluationCalculate( evaluation_df, md, [], "value" )
+        
                 # erste Tabelle bis Leaf 30
                 self.pdf.pandas( data_frame[:30],
                     area=md["_tableA"],
@@ -2858,6 +2801,9 @@ class checkMlc( ispBase ):
                     attrs={"class":"layout-fill-width", "margin-top": "5mm"},
                     fields=md["table_fields"]
                 )
+    
+                self.pdf.text( text, **md.tolerance_pdf )
+                self.pdf.resultIcon( acceptance )
 
                 # progress pro file stimmt nicht immer genau (baseimage)
                 # 40% für die dicom daten 40% für die Auswertung 20 % für das pdf
@@ -2870,10 +2816,6 @@ class checkMlc( ispBase ):
         #
         series = fileData.groupby( [ 'day', 'SeriesNumber' ] )
 
-        #print( series.size() )
-
         series.apply( groupBySeries )
         # abschließen pdfdaten und result zurückgeben
         return self.pdf.finish(), result
-
-

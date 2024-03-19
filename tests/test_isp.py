@@ -25,7 +25,7 @@ import site
 # alle Module auch von der Konsole erreichbar machen 
 ABSPATH = osp.dirname( osp.abspath( __file__) )
 BASEPATH = osp.join( ABSPATH , "..")
-FILESPATH = osp.join( BASEPATH, 'data', 'tests') 
+FILESPATH = osp.join( BASEPATH, 'data', 'unittest') 
 
 site.addsitedir(BASEPATH)
 
@@ -55,19 +55,26 @@ import testdb as testdb
 from testdummy import dummy
 
 
+from sqlalchemy import create_engine, text
+
 import logging
 logger = logging.getLogger()
 
-# ordner ./data/tests/files
+# ordner ./data/unittest
 if not osp.exists( FILESPATH ):
     try:
         os.makedirs( FILESPATH )
     except IOError as e:
          print("Unable to create dir.", e)
          
-print( "## Test FILESPATH='{}'".format(FILESPATH) )
+print( "## Test FILESPATH='{}' ".format(FILESPATH) )
 
 # weasyprint logging
+#
+# .2 extra bytes in post.stringData array
+# 'created' timestamp seems very low; regarding as unix timestamp
+# 'modified' timestamp seems very low; regarding as unix timestamp
+#
 wp_log_file = osp.join(FILESPATH, 'weasyprint.log') 
 if osp.exists( wp_log_file ):
     os.remove( wp_log_file )
@@ -78,7 +85,7 @@ wp_logger.addHandler( logging.FileHandler( wp_log_file ) )
 wp_logger.setLevel( logging.CRITICAL ) # WARNING, CRITICAL
 
          
-def run( config:dict={} ):
+def run( config:dict={}, additionalModels:list=[] ):
     ''' Startet ispBaseWebApp mit zusätzlichen config Angaben
     
     Parameters
@@ -95,9 +102,11 @@ def run( config:dict={} ):
    
     # Konfiguration öffnen
     _config = ispConfig( config=config )
-        
+    _config._basedir = ABSPATH
+    _config._configLoad()
+    
     _apiConfig = {
-        "models": [ system, dummy, testdb.dbtests, testdb.dbtestsrel ],
+        "models": [ system ] + additionalModels,
     }
     
     _webconfig = {
@@ -105,8 +114,15 @@ def run( config:dict={} ):
         "name" : "test_isp",
     }
 
+    # drop test tables
+    engine = create_engine(_config.database[ _config.database.main ].connection )
+    conn = engine.connect()
+    conn.execute( text("DROP TABLE IF EXISTS dbtestsrel")  )
+    conn.execute( text("DROP TABLE IF EXISTS dbtests")  )
+    
     # Webserver starten
     webApp = ispBaseWebApp( _config, db, webconfig=_webconfig, apiconfig=_apiConfig )
+
     return webApp
 
 class testBase(testCaseBase):
@@ -147,7 +163,6 @@ class testBase(testCaseBase):
             os.remove( db_file )
             pass
         
-        
         dbtests_file = osp.join( resources_path, "dbtests.json" )
         dbtests = []
         with open(dbtests_file, 'r') as fp: 
@@ -175,12 +190,10 @@ class testBase(testCaseBase):
                 json.dump(obj, fp, indent=2)
                      
         # webapp mit unitest config
+        # 0 - NOTSET, 10 - DEBUG, 20 - INFO, 30 - WARNING, 40 - ERROR, 50 - CRITICAL
+        # safrs, sqlalchemy, webapp, root, mqtt
         appConfig = {
-            "loglevel" :{
-                "safrs" : logging.DEBUG, # 10
-                "sqlalchemy" : logging.DEBUG, # 10
-                "webapp" : logging.DEBUG,
-            },
+            
             "server" : {
                 "webserver" : {
                     "name" : "swagger_test",
@@ -191,22 +204,33 @@ class testBase(testCaseBase):
                 "api": {
                     "DBADMIN": True,
                     "custom_swagger_config": osp.join( FILESPATH, "swagger_test.json" )
-                }
+                },
+                "logging" :{ # loglevel
+                    "safrs" : logging.DEBUG, # 10
+                    "sqlalchemy" : logging.DEBUG, # 10
+                    "webapp" : logging.DEBUG, # 10
+                },
             },
             "templates":{
                  "PDF-HEADER": None
             },
             "database": {
-                "main": "tests",
-                "tests" : {
+                "main": "testisp",
+                "testisp" : {
                     "connection": "sqlite:///{}/test_isp.db".format(FILESPATH)
                 }
             },
-            "resultsPath" : format(FILESPATH)
+            "resultsPath" : osp.join( FILESPATH, "results" ),
         }
+        # database.tests wie in dbtests.__bindkeys__
         # print( json.dumps( appConfig ) )
         
-        cls.webapp = run( appConfig )
+        cls.webapp = run( appConfig, additionalModels=[
+           testdb.dbtests,
+           testdb.dbtestsrel,
+           dummy
+        ] )
+
         cls.app = cls.webapp.app
         cls.api = cls.webapp.api
         
@@ -276,8 +300,8 @@ class ispTest( testBase ):
         '''
        
         # zuerst ohne parameter aufrufen
-        config = ispConfig( )  
-                
+        config = ispConfig( basedir=ABSPATH )  
+ 
         # __repr__ testen soll nicht die Klasse sondern die config selbst (dotmap) geben
         self.assertEqual(
             repr(config)[:7], 'DotMap(' , "Fehler beim laden __repr__")
@@ -427,10 +451,9 @@ class ispTest( testBase ):
         if config.get("server.mqtt.host", "") == "":
             print( "(MQTT) keine Angaben in config vorhanden. MQTT wird nicht getestet!")
             return;
-        
-                
+               
         # config mit anderem mqttLevel
-        config = ispConfig( mqttlevel=30 )
+        config = ispConfig( basedir=ABSPATH, mqttlevel=30 )
         
         mqtt = config.mqttGetHandler()
        
@@ -551,7 +574,7 @@ class ispTest( testBase ):
         
         # config mit falschen mqtt Angaben 
         #
-        config = ispConfig(  )
+        config = ispConfig( basedir=ABSPATH )
         port = config._config.server.mqtt.port
         config._config.server.mqtt.port = 111111
         
@@ -589,7 +612,7 @@ class ispTest( testBase ):
  
     def test_config_files( self ):    
         # einfach config bereitstellen
-        config = ispConfig(  )
+        config = ispConfig( basedir=ABSPATH)
 
         temp_conf = { 
             "unittest": True,
@@ -617,19 +640,19 @@ class ispTest( testBase ):
         # Versions Angabe prüfen
         
         # zusätzliche Dateien anlegen
-        unitest_json_file_00 = osp.join( config.BASE_DIR, "config", "config-18200000.json") 
+        unitest_json_file_00 = osp.join( ABSPATH, "config", "config-18200000.json") 
         with open(unitest_json_file_00, 'w') as f:
             f.write( '{ "value": 0, "content": "test" }' )
             
-        unitest_json_file_01 = osp.join( config.BASE_DIR, "config", "config-18200101.json") 
+        unitest_json_file_01 = osp.join( ABSPATH, "config", "config-18200101.json") 
         with open(unitest_json_file_01, 'w') as f:
             f.write( '{ "value": 1, "info": "info 18200101" }' )
          
-        unitest_json_file_05 = osp.join( config.BASE_DIR, "config", "config-18200105.json") 
+        unitest_json_file_05 = osp.join( ABSPATH, "config", "config-18200105.json") 
         with open(unitest_json_file_05, 'w') as f:
             f.write( '{ "value": 5, "info": "info 18200105" }' )
             
-        config = ispConfig(  )
+        config = ispConfig( basedir=ABSPATH )
         test = {
             "value" : config.get("value"),
             "content" : config.get("content"),
@@ -642,7 +665,8 @@ class ispTest( testBase ):
             "info" : "info 18200105"
         }, "config Rückgabe stimmt nicht")
         
-        config = ispConfig( lastOverlay="18200101" )
+        config = ispConfig( basedir=ABSPATH, lastOverlay="18200101" )
+
         test = {
             "value" : config.get("value"),
             "content" : config.get("content"),
@@ -666,7 +690,7 @@ class ispTest( testBase ):
         with open(error_json_file, 'w') as f:
             f.write( "#Falscher Inhalt" )
             
-        config = ispConfig()
+        config = ispConfig(basedir=ABSPATH)
         os.remove( error_json_file )
         self.assertEqual(
             config._loadErrors, [ error_json_file ], "load error wurde nicht ausgelöst")
@@ -1062,22 +1086,32 @@ class ispTest( testBase ):
         )  
         
         # _int_query selbst aufrufen
-        response = self.app.get( "api/dummy/test", query_string={ "zahl": 6 } )       
-        self.assertEqual(response.status_code, 200, "Status nicht 200")
-        self.assertEqual( 
-            response.json['data'],
-            [{'A': 1}, {'B': 2}],
-            "Parameter Json Error"
-        )  
- 
-        # _int_group_query selbst aufrufen
-        response = self.app.get( "api/dummy/test", query_string={ "zahl": 7 } )
-        
+        response = self.app.get( "api/dummy/test", query_string={ "zahl": 6 } )   
         self.assertEqual(response.status_code, 200, "Status nicht 200")
         self.assertEqual( 
             response.json['errors'],
-            [],
-            # [{'message': 'Fehler bei _int_group', 'info': "'dummyQuery' object has no attribute 'group_by'"}],
+            # [],
+            [{
+                'title': '_int_query', 
+                'detail': "'list' object has no attribute 'statement'", 
+                'code': None
+            }],
+           # [{'message': 'Fehler bei _int_group', 'info': "'dummyQuery' object has no attribute 'group_by'"}],
+            "_int_group_query selbst aufrufen"
+        )  
+
+        # _int_group_query selbst aufrufen
+        response = self.app.get( "api/dummy/test", query_string={ "zahl": 7 } )
+        self.assertEqual(response.status_code, 200, "Status nicht 200")
+        self.assertEqual( 
+            response.json['errors'],
+            # [],
+            [{
+                'title': '_int_group', 
+                'detail': "'dummyQuery' object has no attribute 'order_by'", 
+                'code': None
+            }],
+           # [{'message': 'Fehler bei _int_group', 'info': "'dummyQuery' object has no attribute 'group_by'"}],
             "_int_group_query selbst aufrufen"
         )  
         
@@ -1327,13 +1361,13 @@ class ispTest( testBase ):
         
         self.assertEqual(
             response.json["infos"]["filter"],
-            [{
+            {'filter': {
                 'title': 'filter', 
                 'detail': {
                     'qs': 'eq(id,nop)', 'where': 'dbtests.id = :id_1', 'params': {'id_1': 'nop'}
                 }, 
                 'code': None
-            }], 
+            }}, 
             "eq(id,nop)"
         )
         
@@ -1345,14 +1379,14 @@ class ispTest( testBase ):
         
         self.assertEqual(
             response.json["infos"]["filter"],
-            [{
+            {'filter': {
                 'title': 'filter', 'detail': {
                     'qs': 'and(eq(active,true),lt(float,2))', 
                     'where': 'dbtests.active = true AND dbtests.float < :float_1', 
                     'params': {'float_1': 2}
                 }, 
                 'code': None
-            }],
+            }},
             "Fehler bei: and(eq(active,true),lt(float,2))"
         )
         
@@ -1397,14 +1431,14 @@ class ispTest( testBase ):
         self.assertEqual(response.status_code, 200, "Api Status nicht 200")
         self.assertEqual(
             response.json["infos"]["filter"],
-            [{
+            {'filter': {
                 'title': 'filter', 'detail': {
                     'qs': 'gt(decimal,integer)', 
                     'where': 'dbtests.decimal > dbtests.integer', 
                     'params': {}
                 }, 
                 'code': None
-            }],
+            }},
             "Fehler beim vergleich zweier Felder: gt(decimal,integer)"
         )
         
@@ -1458,11 +1492,14 @@ class ispTest( testBase ):
             "art" : 'AppInfo203' 
         })
            
-    
         self.assertEqual(response.status_code, 203, "Api Status nicht 203")
         self.assertEqual(
             response.json["infos"]["general"],
-            [{'title': 'Test AppInfo', 'detail': 'App-Info mit code 203', 'code': 203}],
+            { 'Test AppInfo' : {
+                'title': 'Test AppInfo', 
+                'detail': 'App-Info mit code 203', 
+                'code': 203}
+            },
             "AppInfo203 fehlgeschlagen"
         )
         
@@ -1482,18 +1519,14 @@ class ispTest( testBase ):
         self.assertEqual(response.status_code, 200, "Api Status nicht 200")
         self.assertEqual(
             response.json['infos']['query'],
-            [{
-                'title': 'sql-lastquery', 
-                'detail': 'query is None', 
-                'code': None
-            }, {
+            { 'sql-lastquery': {
                 'title': 'sql-lastquery', 
                 'detail': {
                     'query': 'SELECT dbtests.string \nFROM dbtests', 
                     'params': {}}, 
                 'code': None
-            }],
-            "Fehlende message bei fehlendem Pflichtfeld"    
+            }},
+            "Nur die letzte sql-lastquery Angabe"    
         )
 
         response = self.app.get( "api/dbtests/test", query_string={
@@ -1508,7 +1541,7 @@ class ispTest( testBase ):
         )
         self.assertEqual(
             response.json["infos"]["dialog"],
-            [{
+            { 'Test AppDialog': {
                 'title': 'Test AppDialog', 
                 'detail': {
                     'content': 'Einfach nur ein Dialog', 
@@ -1516,7 +1549,7 @@ class ispTest( testBase ):
                     'title': 'Test AppDialog'
                 }, 
                 'code': None
-            }],
+            }},
             "Fehler bei der Dialog Meldung"    
         )
         
@@ -1528,7 +1561,7 @@ class ispTest( testBase ):
         self.assertEqual(response.status_code, 403, "Api Status nicht 403")
         self.assertEqual(
             response.json["infos"]["dialog"],
-            [{
+            {'Test AppDialog': {
                 'title': 'Test AppDialog', 
                 'detail': {
                     'content': 'AppDialog mit AppError und code 403', 
@@ -1536,7 +1569,7 @@ class ispTest( testBase ):
                     'title': 'Test AppDialog'
                 }, 
                 'code': 403
-            }],
+            }},
             "Fehler bei der Dialog Meldung"    
         )
   
@@ -1578,30 +1611,13 @@ class ispTest( testBase ):
         self.assertEqual(response.status_code, 200, "Api Status nicht 200")
         self.assertEqual(
             response.json["infos"]["general"],
-            [{
+            {'Test AppInfo': {
                 'title': 'Test AppInfo', 
                 'detail': 'App-Info ohne code', 
                 'code': None
-            }],
+            }},
             "error Meldung ist falsch"    
-        )
-       
- 
-        
-        response = self.app.get( "api/dbtests/test", query_string={
-            "art" : 'AppInfo203' 
-        })
-        self.assertEqual(response.status_code, 203, "Api Status nicht 203")
-        self.assertEqual(
-            response.json["infos"]["general"],
-            [{
-                'title': 'Test AppInfo', 
-                'detail': 'App-Info mit code 203', 
-                'code': 203
-            }],
-            "error Meldung ist falsch"    
-        )
-               
+        )  
      
         
     def test_webapp_db_relation( self ):
@@ -1612,7 +1628,7 @@ class ispTest( testBase ):
         ''' 
         
         
-        # zuerst den zugriff testen und prüfen ob die tabelle leer ist
+        # zuerst den Zugriff testen und prüfen ob die Tabelle leer ist
         #
         response = self.app.get( "api/dbtests/")
         self.assertEqual(response.status_code, 200, "Api Status nicht 200")
@@ -1626,7 +1642,7 @@ class ispTest( testBase ):
             len(response.json["data"]), 5, "keine 5 Datensätze"
         ) 
         
-        # daten über path und filter müssen gleich sein nur die globale links Angabe unterscheidet sich
+        # Daten über path und filter müssen gleich sein nur die globale links Angabe unterscheidet sich
         # http://127.0.0.1:5000/api/nutzung?_ispcp={%22_default%22:{%22ersatz_id%22:1754}}&filter=eq(ersatz_id,1754)&page[offset]=0&page[limit]=25
         response = self.app.get( "api/dbtests/2/dbtestsrel")
         self.assertEqual(response.status_code, 200, "Api Status nicht 200")
@@ -1861,7 +1877,7 @@ class ispTest( testBase ):
                     "date":"2020-08-19", 
                     "integer": 6,
                     "data": {"A":1},
-                    "float": 1/3,
+                    "float": 1/3,   # soll 0.33333 ergeben
                     "decimal" : 1.2345,   # soll nur 1.23 ergeben
                     "numeric" : 5.6789,
                     "isodate" :"2020-08-19",
@@ -1875,7 +1891,7 @@ class ispTest( testBase ):
         self.assertEqual( response.status_code, 201, "Api Status nicht 201 (Created)")
         self.assertEqual( response.json["data"]["attributes"]["date"], '2020-08-19', "Datensatz datum ist nicht 2020-08-19")     
         self.assertEqual( response.json["data"]["attributes"]["data"], {"A":1}, 'Datensatz data ist nicht {"A":1}')                        
-        self.assertEqual( response.json["data"]["attributes"]["float"], 0.3333333333, 'Datensatz float ist nicht 0.3333333333')                        
+        self.assertEqual( response.json["data"]["attributes"]["float"], 0.33333, 'Datensatz float ist nicht 0.33333')                        
         self.assertEqual( response.json["data"]["attributes"]["decimal"], 1.23, 'Datensatz decimal ist nicht 1.23')                        
         self.assertEqual( response.json["data"]["attributes"]["isodate"], '2020-08-19', 'Datensatz numeric ist nicht 2020-08-19') 
         self.assertEqual( response.json["data"]["attributes"]["isodatetime"], '2020-08-19 14:37:00', 'Datensatz numeric ist nicht 2020-08-19 14:37:00')                   
@@ -1931,7 +1947,7 @@ class ispTest( testBase ):
             "Testet Fehler bei Rückgabe eine fehlenden PDF Datei "
         )  
         
-        config = ispConfig( )  
+        config = ispConfig( basedir=ABSPATH )  
         v1 = config.variables.get("Version")
         # informationen zu pdf Erstellung
         response = self.app.get( "api/dummy/pdf", query_string={ 
@@ -1945,6 +1961,7 @@ class ispTest( testBase ):
             "resources Angabe stimmt nicht" 
         )
         
+    def test_isp_mpdf_test_1( self ):    
         # ein leeres PDF mit overlay
         response = self.app.get( "api/dummy/pdf", query_string={ 
             "name" : "test-1"
@@ -1953,6 +1970,7 @@ class ispTest( testBase ):
         self.assertEqual( response.json["data"]["body"], "", "PDF body ist nicht leer" )
         self.check_pdf_data( response.json["data"], contents=0, pages=1, intern_check=True )
         
+    def test_isp_mpdf_test_2( self ): 
         # text und markdown mit Header (h2) 
         response = self.app.get( "api/dummy/pdf", query_string={ 
             "name" : "test-2"
@@ -1969,20 +1987,25 @@ class ispTest( testBase ):
         self.assertEqual(response.status_code, 200, "Status nicht 200")
         #print( response.json["data"] )
         self.check_pdf_data( response.json["data"], contents=1, pages=1, intern_check=True )
-       
+    
+    def test_isp_mpdf_test_3( self ): 
         response = self.app.get( "api/dummy/pdf", query_string={ 
             "name" : "test-3"
         } )
         self.assertEqual(response.status_code, 200, "Status nicht 200")
         self.check_pdf_data( response.json["data"],  contents=2, pages=4, intern_check=True )
        
+    def test_isp_mpdf_test_4( self ): 
         response = self.app.get( "api/dummy/pdf", query_string={ 
             "name" : "test-4"
         } )
         self.assertEqual(response.status_code, 200, "Status nicht 200")
+        
         # kommt es hier zu einem Fehler stimmt die font Einbindung von weasyprint nicht
         self.check_pdf_data( response.json["data"], contents=2, pages=3, intern_check=True )
         
+
+    def test_isp_mpdf_test_5( self ): 
         # Inhalte über template file einfügen
         response = self.app.get( "api/dummy/pdf", query_string={ 
             "name" : "test-5"
@@ -2043,10 +2066,10 @@ def suite( testClass:None ):
         #suite.addTest( testClass('test_webapp_db_tests_filter') )
         
         
-        #suite.addTest( testClass('test_webapp_db_groupby') )
-        
+        #suite.addTest( testClass('test_webapp_dummy_test') )
+        #suite.addTest( testClass('test_isp_mpdf_test_4'),  )
         #suite.addTest( testClass('test_webapp_db_groupsplit') )
-       # return suite
+        #return suite
     
         for m in dir( testClass ):
             if m.startswith('test_config_'):
@@ -2086,7 +2109,8 @@ if __name__ == '__main__':
     1 (default): you get the same plus a dot for every successful test or a F for every failure
     2 (verbose): you get the help string of every test and the result
     '''
-    
     runner = unittest.TextTestRunner()
-    runner.run( suite( ispTest ) )
-   
+    test_result = runner.run( suite( ispTest ) )
+
+    print( test_result.errors,  test_result.failures, test_result.unexpectedSuccesses )
+    

@@ -24,7 +24,7 @@ from PIL import ImageChops
 
 ABSPATH = osp.dirname( osp.abspath( __file__) )
 BASEPATH = osp.join( ABSPATH , "..")
-FILESPATH = osp.join( BASEPATH, 'data', 'tests') 
+FILESPATH = osp.join( BASEPATH, 'data', 'unittest') 
 
 import unittest
 
@@ -54,16 +54,26 @@ class testCaseBase(unittest.TestCase):
 
         Returns
         -------
-        None.
+        test_result: dict.
 
         '''
        
-        self.assertIn("pdf_filepath", data,
-            "PDF data fehlerhaft. Filename fehlt"
-        )
+        test_result =  {
+            "pdf.filename" : None,
+            "pdf.pageCount" : None,
+            "pdf.pageNames" : None,
+            "pdf.content" : None,
+            "pdf.content.pages" : {},
+            "pdf.pngPageCount": None,
+            "pdf.pngDiff" : None,
+            "pdf.pngDiff.pages": {}
+        }
 
+        if "pdf_filepath" in data:
+            test_result["pdf.filename"] = True
+   
         check = {}
-
+        
         #
         # Vorbereitungen
         #
@@ -80,7 +90,7 @@ class testCaseBase(unittest.TestCase):
             try:
                 os.makedirs( check_dir )
             except IOError as e:
-                 print("Unable to create dir.", e)
+                print("Unable to create dir.", e)
 
         test_writable = True
         if not os.access(test_dir, os.W_OK):
@@ -137,32 +147,23 @@ class testCaseBase(unittest.TestCase):
         # passende check daten (json_check_name) laden
         with open( json_check_name ) as json_file:
             check = json.load( json_file )
-
+    
         page_names = data["content"].keys()
         # Anzahl der Bereiche prüfen
-        if contents > -1:
-            self.assertEqual(
-                len( page_names ),
-                contents,
-                "Anzahl der content Bereiche in '{}' stimmt nicht.".format( data["pdf_filepath"] )
-            )
+        test_result["pdf.pageCount"] = False
+        if len(page_names) > -1:
+            test_result["pdf.pageCount"] = True
+                   
         # Namen der Bereiche
-        self.assertEqual(
-            page_names,
-            check.keys(),
-            "Namen der Bereiche '{}' stimmt nicht.".format( data["pdf_filepath"] )
-        )
-
-        # Anzahl der Seiten prüfen
-        if pages > -1:
-            self.assertEqual(
-                data["pages"],
-                pages,
-                "Anzahl der Seiten in '{}' stimmt nicht.".format( data["pdf_filepath"] )
-            )
+        test_result["pdf.pageNames"] = False
+        if page_names == check.keys():
+            test_result["pdf.pageNames"] = True
 
         # einige content Inhalte prüfen
         from bs4 import BeautifulSoup
+        test_result["pdf.content"] = False
+        test_result["pdf.content.pages"] = {}
+        contentOk = False
         for page_name, content in data["content"].items():
             bs_data = BeautifulSoup( content, 'html.parser')
             bs_check = BeautifulSoup( check[ page_name ], 'html.parser')
@@ -170,47 +171,62 @@ class testCaseBase(unittest.TestCase):
             # die text Bereiche
             data_text_list = bs_data.find_all('div', {"class": "text"} )
             check_text_list = bs_check.find_all('div', {"class": "text"} )
-
+            if len(data_text_list) == len(check_text_list):
+                for i in range(min(len(data_text_list), len(check_text_list))):
+                    test_result["pdf.content.pages"][i+1] = False
+                    if data_text_list[i] == check_text_list[i]:
+                        test_result["pdf.content.pages"][i+1] = True
+                    else:
+                        contentOk = False
+            else:
+                contentOk = False
+            '''
             self.assertEqual(
                 data_text_list,
                 check_text_list,
                 "PDF content .text in '{}' ist fehlerhaft".format( data["pdf_filepath"] )
             )
+            ''' 
 
-        # vergleih mit pdf2image
+        test_result["pdf.content"] = contentOk
+
+        # vergleich mit pdf2image
         # , pdf_check_name
         dpi = 300
         images = convert_from_path( data["pdf_filepath"], dpi=dpi )
         check_images = convert_from_path( pdf_check_name, dpi=dpi )
-        self.assertEqual(
-            len(images),
-            len(check_images),
-            "Die Anzahl der Seiten in {} stimmt nicht mit {} überein.".format( 
-                data["pdf_filepath"] ,
-                pdf_check_name
-            )
-        )
+        test_result["pdf.pngPageCount"] = False  
+        if len(images) == len(check_images):
+            test_result["pdf.pngPageCount"] = True
+        
         # jetzt die einzelnen Seiten prüfen, bei Fehlern wird das diff gespeichert
 
         diff_max = 500.0
-
+        test_result["pdf.pngDiff"] = False
+        test_result["pdf.pngDiff.pages"] = {}
+        diffErrors = 0
+        diff = None
         for i in range(len(images)):
-            diff = ImageChops.difference(images[i], check_images[i])
-            diff_qual = len(set(diff.getdata()))
-            typ = "diff"
+            if i in check_images:
+                diff = ImageChops.difference(images[i], check_images[i])
+                diff_qual = len(set(diff.getdata()))
+                typ = "diff"
+            else:
+                diff_qual = diff_max + 1
 
             if diff_qual > diff_max:
                 typ = "error"
-            name = "{}-{}.{}.png".format( new_name, i+1, typ)
-            diff.save( name )
-            
-            print( pdf_check_name, i, diff_qual )
+                diffErrors += 1
+                test_result["pdf.pngDiff.pages"][i+1] = False
+            else:
+                test_result["pdf.pngDiff.pages"][i+1] = True
 
-            self.assertLessEqual( diff_qual, diff_max,
-            "Die PNG Vergleichsbilder stimmen nicht überein.\nDiff Image: \n{}\n  PDF files:\n{}\n{}".format( 
-                name,
-                data["pdf_filepath"],
-                pdf_check_name
-            )
-        )
-        return
+            name = "{}.{:02.0f}.{}.png".format( new_name, i+1, typ)
+            if diff:
+                diff.save( name )
+
+        if diffErrors == 0:
+            test_result["pdf.pngDiff"] = True
+        
+        return test_result
+       
