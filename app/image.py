@@ -7,7 +7,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.6"
+__version__ = "0.2.1"
 __status__ = "Prototype"
 
 from pylinac.core.image import DicomImage as pyDicomImage
@@ -53,10 +53,13 @@ class plotImage( pyDicomImage, plotClass ):
         Returns
         -------
         int
-            Umgewandelte Position
+            Umgewandelte Position immer größer gleich 0
 
         """
-        return int(round( self.dpmm * position + self.cax.x ))
+        x = int(round( self.dpmm * position + self.cax.x ))
+        if x < 0:
+            x = 0
+        return x
     
     def mm2dots_Y( self, position ):
         """Wandelt eine Y mm Angabe in die Pixel Positionen des image um.
@@ -69,10 +72,13 @@ class plotImage( pyDicomImage, plotClass ):
         Returns
         -------
         int
-            Umgewandelte Position
+            Umgewandelte Position immer größer gleich 0
 
         """
-        return int(round( self.dpmm * position + self.cax.y ))
+        y = int(round( self.dpmm * position + self.cax.y ))
+        if y < 0:
+            y = 0
+        return y
 
         
     def dots2mm_X( self, dots ):
@@ -157,18 +163,20 @@ class plotImage( pyDicomImage, plotClass ):
     def axTicks(self, ax, limits:dict={}):
         """Achsen Beschriftung und Limits ändern.
         
-        ohne Angaben in dict Achse entfernen
-        
-        - xStep, yStep : dict - mit pos:label werden diese gesetzt
-        - xStep, yStep : int,float - wird der Abstand aus breite/step gebildet
+        wenn xStep kein dict ist 
+        wird der Type der Achsenbeschriftung durch den Type der limits bestimmt 
         
         Parameters
         ----------
         ax: axis
             das axis element auf das die Änderungen angewandt werden sollen
         limits: dict
-            Elemente: X1, X2, Y1, Y2, xStep, yStep
-            
+            Elemente: X1, X2, Y1, Y2, xStep, yStep, X, Y
+            - X1, X2, Y1, Y2, 
+            - xStep, yStep : dict - mit pos:label werden diese gesetzt
+            - xStep, yStep : int,float - wird der Abstand aus breite/step gebildet
+            - X, Y - ohne andere limits Angaben und nicht auto als Angabe wird die Achse entfernt  
+         
         """
         # gibt es Angaben für x
         if "X1" in limits and "X2" in limits and "xStep" in limits:
@@ -187,23 +195,21 @@ class plotImage( pyDicomImage, plotClass ):
                 for t in l_step.keys():
                     ticks.append( self.mm2dots_X( float(t) ) )
             else:
+                is_type = np.result_type( l_min, l_max, l_step)
                 # ticklabels bestimmen
                 l_width = abs(l_min) + abs(l_max)
                 step = (l_width / l_step)
-                labels = np.arange(l_min, l_max + l_width / step, l_width / step ) 
+                labels = np.arange(l_min, l_max + l_width / step, l_width / step, dtype=is_type ) 
                 # ticks bestimmen
                 t_width = abs(px_max - px_min)   
                 ticks = np.arange(px_min, px_max + t_width / step , t_width / step )
-                
-            
-            
-            # FixedFormatter should only be used together with FixedLocator
-            # ticks setzen
-            ax.get_xaxis().set_ticks( ticks )
-            # label setzen
-            ax.get_xaxis().set_ticklabels( labels )
 
-        else:
+            # ticks setzen
+            ax.xaxis.set_ticks( ticks )
+            # label setzen
+            ax.xaxis.set_ticklabels( labels )
+
+        elif not "X" in limits or limits["X"] != "auto":
             # x-Achse entfernen
             ax.get_xaxis().set_ticklabels([])
             ax.get_xaxis().set_ticks( [] )
@@ -225,20 +231,21 @@ class plotImage( pyDicomImage, plotClass ):
                 for t in l_step.keys():
                     ticks.append( self.mm2dots_Y( float(t) ) )
             else:
+                is_type = np.result_type( l_min, l_max, l_step)
                 # ticklabels bestimmen
                 l_width = abs(l_min) + abs(l_max)
                 step = (l_width / l_step)
-                labels = np.arange(l_min, l_max + l_width / step, l_width / step ) 
+                labels = np.arange(l_min, l_max + l_width / step, l_width / step, dtype=is_type) 
                 # ticks bestimmen
                 t_width = abs(px_max - px_min) 
                 ticks = np.arange(px_min, px_max + t_width / step , t_width / step )
             
             # ticks setzen
             ax.get_yaxis().set_ticks( ticks )
-            
             # label setzen
             ax.get_yaxis().set_ticklabels( labels )
-        else:
+
+        elif not "Y" in limits or limits["Y"] != "auto":
             # y-Achse entfernen
             ax.get_yaxis().set_ticklabels([])
             ax.get_yaxis().set_ticks( [] )    
@@ -262,7 +269,7 @@ class DicomImage( plotImage ):
         Gibt an ob schon ein rescale durchgeführt wurde
     """
     
-    def __init__(self, path: [str,dict, tuple]=None, infoOnly: bool=False, testType: str="unbekannt" ):
+    def __init__(self, path: type[str|dict|tuple]=None, infoOnly: bool=False ):
         """ Klasse initialisieren
         wird path angegeben aus dem Pfad das DicomBild einlesen
         
@@ -276,13 +283,10 @@ class DicomImage( plotImage ):
             Pandas tuple 
         infoOnly : bool
             Nur infos holen oder auch schon RescaleSlope durchführen
-            
-        testType : str
-            type auf einem bestimmten type setzen
-         
+                     
         """
         
-        self.infos = None
+        self.infos = {}
         
         # siehe: isp.config.infoFields
         self.infoFields = infoFields
@@ -290,8 +294,7 @@ class DicomImage( plotImage ):
         self.arrayOriginal = None
     
         self.isRescaled = False
-        
-        
+                
         if not path: 
             # es wurde nichts übergeben
             initOK = False
@@ -309,7 +312,7 @@ class DicomImage( plotImage ):
             self.doRescaleSlope()       
         
     
-    def initMemoryDicom(self, data):
+    def initMemoryDicom(self, data:dict={}):
         """ Lädt Dicom daten die schon im Speicher sind
         
         Parameters
@@ -320,6 +323,11 @@ class DicomImage( plotImage ):
                 Dicomdaten Dataset oder FileDataset
             - info: dict
                 Info der Dicomdaten
+
+        Returns
+        -------
+        boolean
+            true wenn ok 
         """
        
         if "info" in  data:
@@ -335,9 +343,9 @@ class DicomImage( plotImage ):
         # auf Dataset oder FileDataset <class 'pydicom.dataset.FileDataset'> abfragen
         if not data["dicom"].__class__.__name__ in [ "Dataset",  "FileDataset"]:
             return False
-        
+                       
         self.metadata = data["dicom"] # pydicom.FileDataset <class 'pydicom.dataset.FileDataset'>
-        
+       
         # dtype=uint16; SOPClassUID=RT Image Storage
         self._original_dtype = self.metadata.pixel_array.dtype
         if dtype is not None:
@@ -525,7 +533,7 @@ class DicomImage( plotImage ):
             fieldTicks = field
            
         else:
-            # komplett anziegen
+            # komplett anzeigen
             fieldTicks = { "X1":-200, "X2": 200, "Y1": -200, "Y2":200, "xStep":100, "yStep":100 }
             
             
@@ -533,8 +541,10 @@ class DicomImage( plotImage ):
             metadata["imgSize"] = {"width": 90, "height": 90 }
             
             
-        fig, ax = self.initPlot( metadata["imgSize"], getPlot=getPlot, **args )
-        
+        # plot anlegen
+        plot = plotClass( )
+        fig, ax = plot.initPlot( metadata["imgSize"], getPlot=getPlot, **args )
+         
         # wurde in original eine instance von BaseImage angegeben dann diese verwenden
         imageArray = None
         
@@ -619,14 +629,16 @@ class DicomImage( plotImage ):
         
         # layout optimieren
         plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
-        
+         
         if getPlot==True:
             # data der Grafik zurückgeben
-            return self.getPlot()
+            data = self.getPlot()
+            plt.close("all")
+            return data
         else:
             return self, fig, ax
             
-    def getRoi( self, field=None ):
+    def getRoi( self, field:dict=None ):
         """ holt region of interest des angegebenen Bereichs aus image.array
         
         """
@@ -638,8 +650,7 @@ class DicomImage( plotImage ):
         
         """
         da = self.getFieldDots( )
-        return self.array[ da["Y1"]:da["Y2"], da["X1"]:da["X2"] ]
-        
+        return self.array[ da["Y1"]:da["Y2"], da["X1"]:da["X2"] ]     
     
     def getLine( self, field=None ):
         """ holt eine pixel Reihe 
@@ -651,17 +662,17 @@ class DicomImage( plotImage ):
             line = self.array[ self.mm2dots_Y(field["y"]) ]
         return line
         
-    def cropField( self, field ):
+    def cropField( self, field:dict=None ):
         """ Das image auf die angegebene Größe beschneiden
             Dabei wird image.cax auf das neue Zentrum gesetzt
             { "X1":-200, "X2": 200, "Y1": -200, "Y2":200 }
         """
+        da = self.getFieldDots( field )
         self.array = self.array[ 
-                self.mm2dots_Y( field["Y1"] ) : self.mm2dots_Y(field["Y2"]), 
-                self.mm2dots_X( field["X1"] ) : self.mm2dots_X(field["X2"]) 
-            ]
+            da["Y1"]:da["Y2"], da["X1"]:da["X2"]
+       ]
         #print( self.image.array.shape,  self.image.array )
         self.center.x = self.array.shape[0] / 2
         self.center.y = self.array.shape[1] / 2
         
-        return self.array
+        return self

@@ -16,18 +16,18 @@ class dbtestsrel( ispSAFRSModel ):
      #  'useexisting': True
     }
         
-    __bind_key__ = 'tests'
+    __bind_key__ = 'unittest'
     
     __tablename__ = "dbtestsrel"
     
     id = db.Column('id', db.Integer, primary_key=True, unique=True, autoincrement=True)
     dbtests_id = db.Column( 'dbtests_id', db.Integer, db.ForeignKey("dbtests.id") ) 
     
-    rstring = db.Column('rstring', db.String, nullable=True) # 
+    rstring = db.Column('rstring', db.String(255), nullable=True) # 
 
     rdate = db.Column('rdate', db.Date, nullable=True) # YYYYMMDD
     rinteger = db.Column('rinteger', db.Integer, nullable=True)
-    rdata = db.Column('rdata', db.JSON ) # .. todo::json type?
+    rdata = db.Column('rdata', db.JSON ) # .. todo::json type? db.JSON
     
     # relationen 
     dbtests = db.relationship(
@@ -62,26 +62,26 @@ class dbtests( ispSAFRSModel ):
        # 'useexisting': True
     }
     
-    __bind_key__ = 'tests'
+    __bind_key__ = 'unittest'
     
     __tablename__ = "dbtests"
     
     id = db.Column('id', db.Integer, primary_key=True, unique=True, autoincrement=True)
-    string = db.Column('string', db.String, nullable=False) #
+    string = db.Column('string', db.String(255), nullable=False) #
     date = db.Column('date', isoDateType, nullable=True ) # YYYY-MM-DD
     
     isodatetime = db.Column('isodatetime', isoDateTimeType, nullable=True) # YYYY-MM-DD HH:mm:SS
     isodate = db.Column('isodate', isoDateType, nullable=True) # YYYY-MM-DD
     
     integer = db.Column('integer', db.Integer, nullable=True)
-    float = db.Column('float', db.Float( asdecimal=True ), nullable=False, default=0) # (5,True,4) gibt 0.3333 als str
-    decimal = db.Column('decimal', db.DECIMAL( 5, 2, 1, True ), nullable=False, default=0)
+    float = db.Column('float', db.Float(precision=5, asdecimal=True, decimal_return_scale=5 ), nullable=False, default=0) # (5,True,4) gibt 0.3333 als str
+    decimal = db.Column('decimal', db.Float( asdecimal=True, decimal_return_scale=2 ), nullable=False, default=0) # db.DECIMAL( 5, 2, 1, True )
     numeric = db.Column('numeric', db.Numeric( 5, 2, 3, False ), nullable=False, default=0 )
 
     active = db.Column('active', db.Integer, nullable=False, default=1)
-    tags = db.Column('tags',  db.String, nullable=True)
+    tags = db.Column('tags',  db.String(255), nullable=True)
 
-    gruppe = db.Column('gruppe',  db.String, nullable=True)
+    gruppe = db.Column('gruppe',  db.String(255), nullable=True)
     data = db.Column('data', db.JSON ) # .. todo::json type?
  
     # relationen
@@ -130,9 +130,11 @@ class dbtests( ispSAFRSModel ):
             .set_uuid( "test_pandas_" )
             .set_table_attributes('class="dbtests sysinfo layout-fill-width"') \
             #.format( { 'Gantry':'{0:.1f}', 'Kollimator':'{0:.1f}', 'delta':'{0:.3f}'} )
-            .hide_index()
+            #.hide_index()
             #.highlight_max(subset=["delta"], color='yellow', axis=0)
-            .render()
+            #.render()
+            .to_html( sparse_index=False )
+           
         )
 
         style = '''
@@ -226,10 +228,10 @@ class dbtests( ispSAFRSModel ):
 
             _result = {
                 "data" : [
-                    {"attributes": {"Geraet": "AL", "hasChildren": 1, "label": "AL"}, "type": "Ersatz"},
-                    {"attributes": {"Geraet": "la", "hasChildren": 1, "label": "LA20"}, "type": "Ersatz"},
-                    {"attributes": {"Geraet": "vb", "hasChildren": 1, "label": "VitalBeam"}, "type": "Ersatz"},
-                    {"attributes": {"Geraet": "tb", "hasChildren": 1, "label": "TrueBeam"}, "type": "Ersatz"}
+                    {"attributes": {"Geraet": "AL", "hasChildren": 1, "label": "AL"}, "type": "spare"},
+                    {"attributes": {"Geraet": "la", "hasChildren": 1, "label": "LA"}, "type": "spare"},
+                    {"attributes": {"Geraet": "vb", "hasChildren": 1, "label": "VB"}, "type": "spare"},
+                    {"attributes": {"Geraet": "tb", "hasChildren": 1, "label": "TB"}, "type": "spare"}
                 ]
             }
         return cls._int_json_response( _result )

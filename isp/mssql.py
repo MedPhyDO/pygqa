@@ -23,6 +23,9 @@ use {dbname} in sql querys to replace it with dbname from config
 
 CHANGELOG
 =========
+0.1.2 / 2024-03-18
+------------------
+- some code cleanup and documentation
 
 0.1.1 / 2021-09-03
 ------------------
@@ -38,7 +41,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 __status__ = "Prototype"
 
 
@@ -61,10 +64,13 @@ class ispMssql( ):
          Databaseengine `pytds` or `pyodbc`
 
     dbname : object
-        Names of dbname in connection. Default is `name`
+        Names of dbname in connection
 
     lastExecuteSql: str
         Holds last executed sql query
+
+    config: Dot
+        An instance of ispConfig
 
     '''
 
@@ -74,10 +80,9 @@ class ispMssql( ):
         Parameters
         ----------
         name : str, optional
-            database configuration name from config. The default is None.
+            used to get database configuration from config
         config : Dot, optional
-            An instance of ispConfig. The default is None.
-
+            An instance of ispConfig
         Returns
         -------
         None.
@@ -86,7 +91,6 @@ class ispMssql( ):
 
         self.connect = None
         self.engine = None
-        self.database = None
         self.name = None
         self.dbname = None
         self.lastExecuteSql = ""
@@ -106,7 +110,7 @@ class ispMssql( ):
         Parameters
         ----------
         name : str, optional
-            databasename. The default is None.
+            used to get database configuration from config
 
         Returns
         -------
@@ -143,12 +147,14 @@ class ispMssql( ):
 
             elif self.engine == "pyodbc":
                 import pyodbc
+                DRIVER = self.config.database[name].driver
+                SERVER = self.config.database[name].server_ip
+                DATABASE = self.config.database[name].dbname
+                USERNAME = self.config.database[name].user
+                PASSWORD = self.config.database[name].password
+                connectionString = f'DRIVER={DRIVER};SERVER={SERVER};DATABASE={DATABASE};UID={USERNAME};PWD={PASSWORD}'
                 try:
-                    self.connect = pyodbc.connect( "DSN={};UID={};PWD={}".format(
-                        self.config.database[name].dsn,
-                        self.config.database[name].user,
-                        self.config.database[name].password
-                    ) )
+                    self.connect = pyodbc.connect( connectionString )
                 except Exception as err:
                     logger.warning( "mssqlClass.openDatabase '{}' failed. {}".format( name, err ) )
 
@@ -165,6 +171,16 @@ class ispMssql( ):
         If not connected open database
 
         holds last sqlquery in this.lastExecuteSql
+
+        Parameters
+        ----------
+        sql : str
+            sql query string
+
+        Returns
+        -------
+        list
+            query result from execute fetchall
 
         """
 
@@ -196,6 +212,14 @@ class ispMssql( ):
         return result
 
     def getDbVersion(self):
+        """Ask database for version
+
+        Returns
+        -------
+        str
+            version result string
+
+        """
         result = self.execute( "select @@version as version" )
         if len( result ) > 0:
             return str(result[0]["version"])

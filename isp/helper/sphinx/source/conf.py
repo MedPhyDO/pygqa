@@ -23,17 +23,18 @@ __author__ = "R. Bauer"
 __copyright__ = "2020, MedPhyDO - Machbarkeitsstudien im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund und Klinikum Dortmund"
 __credits__ = ["R. Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 __status__ = "Prototype"
 
 import os
 import sys
-#sys.path.append(os.path.abspath('../..'))
-sys.path.insert(0, os.path.abspath('../..'))
 
-# own extensions
-# Set Python’s module search path, sys.path, accordingly so that Sphinx can find them
-sys.path.append(os.path.abspath("./_ext"))
+if not os.path.abspath("./_ext") in sys.path:
+    sys.path.insert(0, os.path.abspath('../..'))
+
+    # own extensions
+    # Set Python’s module search path, sys.path, accordingly so that Sphinx can find them
+    sys.path.append(os.path.abspath("./_ext"))
 
 # --- General configuration --------------------------------------------------
 #
@@ -53,7 +54,6 @@ extensions = [
     'sphinx.ext.autosummary',
     'sphinx.ext.todo',
     'm2r2',
-    'sphinx_rtd_theme',
     'sphinx.ext.napoleon',
     'ext_restdoc',
 ]

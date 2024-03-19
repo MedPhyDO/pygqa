@@ -4,7 +4,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.0"
+__version__ = "0.2.1"
 __status__ = "Prototype"
 
 from safrs import jsonapi_rpc # rpc decorator
@@ -16,11 +16,16 @@ import json
 
 class gqadb( ispSAFRSModel ):
     """
-        description: Geräte QA - Datenbank mit Auswertungen 
+        description: Geräte QA - Datenbank mit Auswertungen
+
+    ----
+
+        __bind_key__ same as config database main 
 
     """
-    
-    __tablename__ = "gqadb"
+    __tablename__ = "gqadb"      
+    __bind_key__ = 'gqa'      
+    __table_args__ = {'extend_existing': True}
     
     id = db.Column('id', db.Integer, primary_key=True, unique=True, autoincrement=True)
     unit = db.Column('unit', db.String, nullable=False)

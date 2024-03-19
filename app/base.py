@@ -8,16 +8,11 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.9"
+__version__ = "0.2.1"
 __status__ = "Prototype"
 
-import sys
 import json
 import datetime
-
-#from app.core import ispCore
-
-#from app.pdf import appPdf as ispPdf
 
 from isp.mpdf import PdfGenerator as ispPdf
 from isp.config import dict_merge
@@ -62,9 +57,9 @@ class ispBase(  ):
         config:
             Die aktuelle config
         variables : TYPE, optional
-            Metadaten aus config.metadata. The default is {}.
+            Metadaten aus config.metadata. default: {}.
         dicomData : TYPE, optional
-            Zu bearbeitende Dicomdaten. The default is {}.
+            Zu bearbeitende Dicomdaten. default: {}.
 
         Returns
         -------
@@ -97,8 +92,6 @@ class ispBase(  ):
 
         # pdf erstellung bereitstellen
         self.pdf = ispPdf( variables=variables, config=self._config )
-
-        # print("_variables", self.pdf._variables )
 
         # kleine icons size=x1 für result Tabelle bereitstellen
         self.icons: dict = {
@@ -141,8 +134,9 @@ class ispBase(  ):
         Returns
         -------
         result : dict
-            * info: field
-            * dicom:
+            - _type
+            - info: field
+            - dicom:
 
         """
 
@@ -158,12 +152,10 @@ class ispBase(  ):
             # ein OrderedDict in ein dict umwandeln
             field = dict( field )
 
-        #print("getFullData", field )
         result = {
             "_type" : "fulldata",
             "info" : field,
             "dicom" : {}
-
         }
         #
         if "dicom" in field:
@@ -181,7 +173,7 @@ class ispBase(  ):
         Parameters
         ----------
         meta : DotMap, optional
-            Metadata. The default is {}.
+            Metadata. default: {}.
 
         Returns
         -------
@@ -228,8 +220,6 @@ class ispBase(  ):
             - data: list of fields
         """
         err_columns = ["CourseId", "PlanSetupId", "RadiationId", "ImageId", "acquisition", "gantry", "SliceUID"]
-
-        # err_columns = ["FeldArt", "CourseId", "PlanSetupId", "RadiationId", "ImageId", "acquisition", "SliceUID"]
         result = {}
 
         errors = []
@@ -242,8 +232,7 @@ class ispBase(  ):
                 errors.append( "- baseField ist nicht 1" )
                 dfb = baseField[ err_columns ]
                 dfb['FeldArt'] = 'base'
-
-                err_fields = err_fields.append(dfb)
+                err_fields = pd.concat( [ err_fields, dfb ] )
             else:
                 errors.append( "- baseField fehlt" )
 
@@ -253,42 +242,38 @@ class ispBase(  ):
             dff = fields[ err_columns ]
             dff['FeldArt'] = 'field'
 
-            err_fields = err_fields.append(dff)
+            err_fields = pd.concat( [ err_fields, dff ] )
 
             errors.append( "- Feldzahl ist {} statt {}".format( len(fields.index), fieldLen ) )
 
-            #errors.append( err_fields )
-
         if len(errors) > 0:
             meta_str = self.getMetaErrorString( meta )
-            # self.appError( meta_str, errors )
             if warn:
                 logger.error( meta_str + ": " + json.dumps( errors ) )
 
             result = {"msg": "\n\n".join(errors), "data": err_fields}
-        #print( result )
         return result
 
 
-    def pdf_error_result(self, md:dict={}, date="", group_len:int=0, errors:dict={}, msg:str="", pos:dict={},  ):
-        """Für das PDF eine fehlermeldung erzeugen.
+    def pdf_error_result(self, md:dict={}, date="", group_len:int=0, errors:dict={}, msg:str="", area:dict={},  ):
+        """Für das PDF eine Fehlermeldung erzeugen.
 
         Parameters
         ----------
         md : dict, optional
-            DESCRIPTION. The default is {}.
+            test config parameter. default: {}.
         date : TYPE, optional
-            DESCRIPTION. The default is "".
+            Testdatum. default: "".
         group_len : int, optional
-            DESCRIPTION. The default is 0.
+            Ergebnislänge. default: 0.
         errors: dict
-            immer mit
+            Normalserweise checkFields() Rückgabe mit
             - msg: str
             - data: DataFrame
         msg : str, optional
-            DESCRIPTION. The default is "".
-        pos : dict, optional
-            DESCRIPTION. The default is {}.
+            Ausgabetext bei Fehlern. default: "".
+        area : dict, optional
+            Die größe und Position der Ausgabe. default: {}.
 
         Returns
         -------
@@ -309,7 +294,7 @@ class ispBase(  ):
         self.pdf.markdown( msg )
 
         if "data" in errors:
-            self.pdf.pandas( errors["data"], pos )
+            self.pdf.pandas( errors["data"], area )
 
 
         result = self.createResult( md=md, date=date,
@@ -381,9 +366,7 @@ class ispBase(  ):
                                 acceptance = 1
                     except : # pragma: no cover
                         acceptance = 0
-
-                    #print( f.format( value=row ) )
-        #print("check_tolerance",  value, acceptance, tolerance )
+                        
         return acceptance
 
     def check_tolerance_ext(self, row, ci, tolerance=None, name="default" ):
@@ -424,7 +407,8 @@ class ispBase(  ):
 
         Returns
         -------
-        acceptance: int
+        row: pandas.row
+            erweitert row um <ci.field>_acceptance"
 
         """
         value = row[ ci['field'] ]
@@ -471,7 +455,7 @@ class ispBase(  ):
         Parameters
         ----------
         df : DataFrame
-            Pandas DataFrame mit den in  'field' angegebenen Feldern
+            Pandas DataFrame mit den in check.field angegebenen Feldern
         md : dict
             metadata mit tolerance angaben für die Energie in md["energy"]
         check : list with dict
@@ -538,7 +522,7 @@ class ispBase(  ):
                 result_type='expand'
             )
 
-            # und ein zusätzliches feld <field>_passed anlegen     und füllen
+            # und ein zusätzliches Feld <field>_passed anlegen und mit icon füllen
             qdf[ ci['field'] + "_passed" ] = qdf[ ci['field'] + "_acceptance" ].apply(
                 self.getIcon
             )
@@ -546,18 +530,14 @@ class ispBase(  ):
             # das feld in fullCheck merken
             fullCheck[ ci['field'] + "_acceptance" ] = ci['field'] + "_acceptance"
 
-            #print( "# check_acceptance_ext-qdf", qdf )
             # in der liste der dataframes anfügen
             dfs.append( qdf )
 
-
         # alle teile des dataframes zusammenfassen
         df = pd.concat( dfs )
-
-        # print( "check_acceptance_ext df", df)
-
+       
         # minimun des fullcheck ermitteln
-        minAll = df[ fullCheck ].min(axis=None, skipna=True)
+        minAll = df[ fullCheck.values() ].min(axis=None, skipna=True)
         acceptance = minAll.min()
 
         return df, acceptance
@@ -570,10 +550,10 @@ class ispBase(  ):
         Parameters
         ----------
         df : DataFrame
-            Pandas DataFrame mit den in  'field' angegebenen Feldern
+            Pandas DataFrame mit den in check.field angegebenen Feldern
         md : dict
             metadata mit tolerance angaben für die Energie in md["energy"]
-        check : dict
+        check : list with dict
             field: str
                 Name des Feldes
             tolerance: str
@@ -595,7 +575,6 @@ class ispBase(  ):
             999 - (n.a.) Not applicable
 
         """
-        #print( "check_acceptance", df, md.current, check )
 
         fullCheck = []
         for ci in check:
@@ -614,19 +593,17 @@ class ispBase(  ):
                     df[ ci['field'] + "_soll" ] = sollValue
 
             df[ ci['field'] + "_acceptance" ] = df[ ci['field'] ].apply(
-                    self.check_tolerance,
-                    args=[md.current.get( "tolerance", None ), tolerance ]
+                self.check_tolerance,
+                args=[md.current.get( "tolerance", None ), tolerance ]
             )
 
             # und in passed anzeigen
-            #df[ ci['field'] + "_passed" ] = df[ ci['field'] + "_acceptance" ].apply( lambda x: 999 if 888 else self.icons[ x ] )
             df[ ci['field'] + "_passed" ] = df[ ci['field'] + "_acceptance" ].apply( self.getIcon )
             # das feld in fullCheck einfügen
             fullCheck.append( ci['field'] + "_acceptance")
         minAll = df[ fullCheck ].min(axis=None, skipna=True)
         acceptance = minAll.min()
 
-        #print("check_acceptance",df, acceptance )
         return acceptance
 
     def getIcon(self, acceptance):
@@ -730,9 +707,9 @@ class ispBase(  ):
             ok = False
 
         return ok, df_base, df_fields
-
-    def evaluationResult(self, df, md={}, result:list=[], field:str=None, printResultIcon:bool=True):
-        """Printout tolerance and result icon.
+    
+    def evaluationCalculate(self, df, md={}, result:list=[], field:str=None):
+        """calculates tolerance and result icon.
 
         Parameters
         ----------
@@ -749,18 +726,12 @@ class ispBase(  ):
                     - fields
                     - area
                     - attr
-                - tolerance_pdf: dict
-                    - area
-                    - attr
-                    - mode
                 - evaluation_replaces: dict - text replaces with format
 
         field: str, optional
             simple evaluation of field
         result : list, optional
             List for results and error Messages.
-        printResultIcon: bool
-            print Result Icon at end of page
 
         Returns
         -------
@@ -771,10 +742,6 @@ class ispBase(  ):
         _md = dict_merge( DotMap( {
             "table_sort_values_by" : [],
             "table_sort_values_ascending": [],
-            "evaluation_table_pdf": { },
-            "tolerance_pdf": {
-               # "mode":"markdown"
-            },
             "evaluation_replaces": { "value": "Delta" }
         }), md )
 
@@ -787,7 +754,7 @@ class ispBase(  ):
             else:
                 text += "**Berechnungen:**\n```javascript\n{}\n```\n".format( eval_str )
             try:
-                df.eval( eval_str, inplace=True)
+                df.eval( eval_str, inplace=True )
             except:
                 pass
 
@@ -836,18 +803,71 @@ class ispBase(  ):
         # Ergebnis in result merken
         #
         result.append( self.createResult( evaluation_df, _md, check,
-            _md.current.check_date,
+            _md.current.get("check_date", ""),
             len( result ), # bisherige Ergebnisse in result
             acceptance
         ) )
 
-        self.pdf.pandas( evaluation_df, **_md.evaluation_table_pdf )
-
-        # print text and replace all {<name>} for printout
         try:
             text = text.format( **_md["evaluation_replaces"] )
         except:
             pass
+
+
+        return evaluation_df, text, acceptance
+
+    def evaluationResult(self, df, md={}, result:list=[], field:str=None, printResultIcon:bool=True):
+        """Printout tolerance and result icon.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            DataFrame with Testfields.
+        md : DotMap, optional
+            needs::
+                - evaluations: list - additional calculated fields for the table
+                - evaluation_text: str - Display this text instead of autom. generated text from evaluations
+                - current: dict - current evaluation parameters
+                - table_sort_values_by
+                - table_sort_values_ascending
+                - evaluation_table_pdf: dict
+                    - fields
+                    - area
+                    - attr
+                - tolerance_pdf: dict
+                    - area
+                    - attr
+                    - mode
+                - evaluation_replaces: dict - text replaces with format
+
+        field: str, optional
+            simple evaluation of field
+        result : list, optional
+            List for results and error Messages.
+        printResultIcon: bool
+            print Result Icon at end of page
+
+        Returns
+        -------
+        acceptance: int
+            total acceptance of evaluation
+
+        """
+        _md = dict_merge( DotMap( {
+            "evaluation_table_pdf": { },
+            "tolerance_pdf": {},
+            "evaluation_replaces": { "value": "Delta" }
+        }), md )
+
+        evaluation_df, text, acceptance = self.evaluationCalculate( df, md, result, field )
+        
+        self.pdf.pandas( evaluation_df, **_md.evaluation_table_pdf )
+        # print text and replace all {<name>} for printout
+        try:
+            text = text.format( **_md.evaluation_replaces )
+        except:
+            pass
+
         self.pdf.text( text, **_md.tolerance_pdf )
 
         # Gesamt check - das schlechteste aus der tabelle
@@ -855,7 +875,7 @@ class ispBase(  ):
             self.pdf.resultIcon( acceptance )
 
         return acceptance
-
+    
     def createResult(self, df=None, md={}, check=[], date="", group=0, acceptance=999 ):
         '''
         Erstellt ein result dict
@@ -907,7 +927,6 @@ class ispBase(  ):
             # FIXME: nach umstellung aller auf evaluationResult nur noch md.evaluation_table_pdf.fields verwenden
             fields = []
             for field in md.evaluation_table_pdf.get("fields", md.get('table_fields', [] ) ):
-                #print( fields )
                 if not field["field"] in drops:
                     fields.append( field["field"] )
 

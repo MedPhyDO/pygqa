@@ -2,17 +2,14 @@
 
 """Aria Database connetion and querys for pyGqa
 
-
 """
 
 __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.5"
+__version__ = "0.2.1"
 __status__ = "Prototype"
-
-import pytds
 
 from pathlib import Path
 import re
@@ -23,100 +20,9 @@ logger = logging.getLogger( "MQTT" )
 from isp.mssql import ispMssql
 
 class ariaClass( ispMssql ):
-    '''Database querys on Aria Database
-
-    Attributes
-    ----------
-
-    name : str
-        database configuration name from config
-
-    connect : class
-         An instance of :class:`Connection`
-
-    engine : str
-         Databaseengine `pytds` or `pyodbc`
-
-    dbname : object
-        Names of dbname in connection. Default is `name`
-
-    lastExecuteSql: str
-        Holds last executed sql query
+    '''Database querys on Aria Database see ispMssql
 
     '''
-
-    def __init__( self, name:str=None, config=None):
-        '''initialise class
-
-        Parameters
-        ----------
-        name : str, optional
-            database configuration name from config. The default is None.
-        config : Dot, optional
-            An instance of ispConfig. The default is None.
-
-        Returns
-        -------
-        None.
-
-        '''
-
-        # initialise ispMssql
-        ispMssql.__init__( self, name, config )
-
-
-    def getMLC( self, RadiationSer ):
-        """DynMLCPlan hat mehrere ControlPoints, deshalb nur ControlPointIndex=0 verwenden
-        Nur die inneren 10 leafs verwenden um die Art zu bestimmen
-        """
-
-        sql = """
-SELECT TOP 1000 [ControlPointSer]
-      ,[RadiationSer]
-      ,[ControlPointIndex]
-      ,[ControlPointType]
-      ,[MetersetWeight]
-      ,[NominalEnergy]
-      ,[CollX1]
-      ,[CollX2]
-      ,[CollY1]
-      ,[CollY2]
-      ,[GantryRtn]
-      ,[CollRtn]
-      ,[OffPlaneAngle]
-      ,[PlanPosLeaf25A] AS [A-25]
-      ,[PlanPosLeaf26A] AS [A-26]
-      ,[PlanPosLeaf27A] AS [A-27]
-      ,[PlanPosLeaf28A] AS [A-29]
-      ,[PlanPosLeaf29A] AS [A-29]
-      ,[PlanPosLeaf30A] AS [A-30]
-      ,[PlanPosLeaf31A] AS [A-31]
-      ,[PlanPosLeaf32A] AS [A-32]
-      ,[PlanPosLeaf33A] AS [A-33]
-      ,[PlanPosLeaf34A] AS [A-34]
-      ,[PlanPosLeaf25B] AS [B-25]
-      ,[PlanPosLeaf26B] AS [B-26]
-      ,[PlanPosLeaf27B] AS [B-27]
-      ,[PlanPosLeaf28B] AS [B-28]
-      ,[PlanPosLeaf29B] AS [B-29]
-      ,[PlanPosLeaf30B] AS [B-30]
-      ,[PlanPosLeaf31B] AS [B-31]
-      ,[PlanPosLeaf32B] AS [B-32]
-      ,[PlanPosLeaf33B] AS [B-33]
-      ,[PlanPosLeaf34B] AS [B-34]
-      ,[PatientSupportAngle]
-      ,[IsoCenterPositionX]
-      ,[IsoCenterPositionY]
-      ,[IsoCenterPositionZ]
-  FROM [variansystem].[dbo].[ControlPoint]
-          WHERE [ControlPointIndex] = 0
-          AND RadiationSer = {rs:d}
-        """
-        mlc = self.execute( sql.format( rs=RadiationSer) )
-        if len(mlc) > 0:
-            return mlc[0]
-        else:
-            return None
 
     def getImages( self,
                   PatientId=None, CourseId=None,
@@ -125,11 +31,38 @@ SELECT TOP 1000 [ControlPointSer]
                   AcquisitionMonth=None,
                   AcquisitionDay=None,
                   testTags:list=None, addWhere:str="" ):
-        """Alle felder holen die für die Auswertungen benötigt werden.
+        """SQl Anweisung um alle Felder zu holen die für die Auswertungen benötigt werden.
 
-        Nicht SliceRTType: SliceDRR verwendet werden: SlicePI :
+        Parameters
+        ----------
+        PatientId : str, optional
+            zu suchende Patienten Id. default None
+        CourseId : str, optional
+            zu suchende CourseId, default None
+        PlanSetupId : str, optional
+            zu suchende PlanSetupId, default None
+        RadiationSer : str, optional
+            zu suchende RadiationSer, default None
+        AcquisitionYear : str, optional
+            zu suchendes Jahr im AcquisitionDateTime Feld, default None
+        AcquisitionMonth : str, optional
+            zu suchender Monat im AcquisitionDateTime Feld, default None
+        AcquisitionDay : str, optional
+            zu suchender Tag im AcquisitionDateTime Feld, default None
+        testTags : list, optional
+            im Comment Field vorkommende tags, default None
+        addWhere : str, optional
+            zusätzlicher sql where filter, default ""
 
+        Returns
+        -------
+        list
+            Ergebnis der sql Abfrage
+        str
+            Verwendete sql Abfrage
+        
         """
+
         if not PatientId and addWhere == "":
             return [], ""
 
@@ -193,13 +126,29 @@ SELECT TOP 1000 [ControlPointSer]
                   AcquisitionYear=None,
                   AcquisitionMonth=None,
                   AcquisitionDay=None,
-                  testTags:list=None, addWhere:str="" ):
-        """ Alle Felder für ein Gerät, einen testTag und das angegebene Jahr holen
+                  testTags:list=None ):
+        """Alle Felder für ein Gerät, einen testTag und das angegebene Jahr holen und aufbereiten
 
-        und data aufbereiten
-        """
+        Parameters
+        ----------
+        PatientId : str, optional
+            zu suchende Patienten Id. default None
+        AcquisitionYear : str, optional
+            zu suchendes Jahr im AcquisitionDateTime Feld, default None
+        AcquisitionMonth : str, optional
+            zu suchender Monat im AcquisitionDateTime Feld, default None
+        AcquisitionDay : str, optional
+            zu suchender Tag im AcquisitionDateTime Feld, default None
+        testTags : list, optional
+            im Comment Field vorkommende tags, default None
 
-        imagedatas, sql = self.getImages(
+        Returns
+        -------
+        dict
+            Imageinfos per energy und SliceUID
+        """          
+       
+        image_datas, sql = self.getImages(
             PatientId = PatientId,
             AcquisitionYear=AcquisitionYear,
             AcquisitionMonth=AcquisitionMonth,
@@ -209,9 +158,9 @@ SELECT TOP 1000 [ControlPointSer]
 
         data = {}
 
-        for imagedata in imagedatas:
+        for image_data in image_datas:
             # bereitetet die Datenbank Informationen auf
-            info = self.getImageInfos( imagedata )
+            info = self.getImageInfos( image_data )
             # test auf testTag um ungültige auszuschließen z.B.suche nach 10.3 findet auch 10.3.1
             # da in der SQL mit CHARINDEX gesucht wird werden auch Teile gefunden
             ok = False
@@ -230,15 +179,30 @@ SELECT TOP 1000 [ControlPointSer]
         return data
 
     def getTags(self, PatientId=None, split=True ):
-        """Holt alle in Comment verwendeten Tags
+        """Holt alle in Comment verwendeten Tags 
+        für einen oder mehrere angegebene Patienten
 
         Parameters
         ----------
         PatientId : str|list
 
         split: bool
-            True - content bei mehreren zeilen aufteilen (default)
-            False - content komplett zurückgeben
+            True - Comment in mehrere zeilen aufteilen (default)
+            False - Comment komplett zurückgeben
+
+        Returns
+        -------
+        list
+            with dictonarys of the following fields
+                - PatientId
+                - CourseId
+                - PlanSetupId
+                - RadiationId
+                - Energy
+                - DoseRate
+                - nummer
+                - Comment
+
         """
         if not PatientId:
             return []
@@ -265,7 +229,6 @@ SELECT TOP 1000 [ControlPointSer]
             sql = sql + " AND (1=2 "
             for _id in PatientId:
                 sql = sql + " OR [Patient].[PatientId] = '{}'".format(_id)
-                #print(_id)
             sql = sql + ")"
         else:
             sql = sql + " AND [Patient].[PatientId] = '{}'".format(PatientId)
@@ -330,35 +293,38 @@ SELECT TOP 1000 [ControlPointSer]
         ----------
         imageRow : dict
 
+        Returns
+        -------
+        dict
+            Imageinfos 
 
         {
-          gerät - <string>
-          studyID - <string>
-          filename - <string>
-          filepath - <string>
-          id - <string>
-          energy - <string>
-          gantry - <float %1.1f>
-          collimator - <float %1.1f>
-          type - <string> - (offen, kamm, x1zu, x2zu, tips)
+            gerät - <string>
+            studyID - <string>
+            filename - <string>
+            filepath - <string>
+            id - <string>
+            energy - <string>
+            gantry - <float %1.1f>
+            collimator - <float %1.1f>
+            type - <string> - (offen, kamm, x1zu, x2zu, tips)
         }
 
         dateinamen z.B.
 
-
         {
-        'PatientId': '_xxxQA VB',
-        'CourseId': 'Jahrestest',
-        'PlanSetupId': '4Quadrant',
-        'RadiationId': 'X6 Q1',
-        'Energy': 6000,
-        'GantryAngle': 0.01990341513203,
-        'CollRtn': 359.999840036008,
-        'AcquisitionDateTime': datetime.datetime(2019, 3, 20, 19, 7, 9, 510000),
-        'SliceUID': '1.2.246.352.62.1.5343640968774208147.13210826594556886954',
-        'ResourceSer': 1301,
-        'PatientSupportAngle': 0.03125,
-        'FileName': '%%imagedir1\\Patients\\_716\\SliceRT\\1820744_id1432516'
+            'PatientId': '_xxxQA VB',
+            'CourseId': 'Jahrestest',
+            'PlanSetupId': '4Quadrant',
+            'RadiationId': 'X6 Q1',
+            'Energy': 6000,
+            'GantryAngle': 0.01990341513203,
+            'CollRtn': 359.999840036008,
+            'AcquisitionDateTime': datetime.datetime(2019, 3, 20, 19, 7, 9, 510000),
+            'SliceUID': '1.2.246.352.62.1.5343640968774208147.13210826594556886954',
+            'ResourceSer': 1301,
+            'PatientSupportAngle': 0.03125,
+            'FileName': '%%imagedir1\\Patients\\_716\\SliceRT\\1820744_id1432516'
         }
 
         Energy aus SliceRT.Energy, Doserate -> SliceRT.MetersetExposure
@@ -389,6 +355,7 @@ SELECT TOP 1000 [ControlPointSer]
         desc = re.split("[\r\n|,]", imageRow["AcqNote"])
         energy = ""
         doserate = 0
+        is_FFF = False
         if len(desc) <= 2:
             logger.warning( "aria.getImageInfos:AcqNote: {}".format( imageRow["FileName"] ) )
         else:
@@ -397,6 +364,9 @@ SELECT TOP 1000 [ControlPointSer]
                 doserate = int( desc[1].replace( " [MU/min]", "" ).strip() )
             except:
                 pass
+        
+        if energy.find("FFF") > -1:
+            is_FFF = True
 
         # type zuerst nach neuer zeile oder leerzeichen Splitten
         comment = (lambda v: v.split() if v else [] )( imageRow["Comment"] )
@@ -411,13 +381,6 @@ SELECT TOP 1000 [ControlPointSer]
             if len( tags ) > 1:
                 # mit subtag verwenden
                 _sub = tags[1]
-            '''
-            else:
-                # ohne subtag versuchen ihn für MLC plan zu bestimmen
-                logger.warning( "ariaClass.get_SubTag_from_MLCPlanType: {} ".format(comment ) )
-                _sub = self.get_SubTag_from_MLCPlanType( imageRow )
-                logger.warning( "ariaClass.get_SubTag_from_MLCPlanType: {} ".format(_sub ) )
-            '''
 
             # testTag und subTag merken
             testTags.append( _tag )
@@ -457,6 +420,7 @@ SELECT TOP 1000 [ControlPointSer]
              'Tag' : imageRow["AcquisitionDateTime"].strftime("%d.%m.%Y"),
              'unit':  imageRow["RadiationMachineName"],
              'energy': energy,
+             'is_FFF': is_FFF,
              'doserate': doserate,
              'MetersetExposure' : imageRow["MetersetExposure"],
              'ME': int( round( imageRow["MetersetExposure"] ) ),
@@ -485,39 +449,4 @@ SELECT TOP 1000 [ControlPointSer]
              'varianten': varianten
 
         })
-
         return infos
-    '''
-    def get_SubTag_from_MLCPlanType(self, imageRow):
-        """ Versucht bei MLCPlanType den subTag über die geplanten MLC Position zu bestimmen
-
-        Parameters
-        ----------
-        imageRow : dict
-
-        """
-        subTag = ""
-        if imageRow["MLCPlanType"] != None:
-            mlc = self.getMLC( imageRow["RadiationSer"] )
-            if mlc:
-            #    print( mlc )
-                if mlc["A-30"]==4000 and mlc["B-30"]==4000 and mlc["B-31"]==-4000 and mlc["B-31"]==-4000:
-                    subTag = 'int.dig.'
-                elif mlc["A-30"]==-9000 and mlc["B-30"]==-9000 and mlc["B-31"]==-9000 and mlc["B-31"]==-9000:
-                    subTag = 'X2'
-                elif mlc["A-30"]==9000 and mlc["B-30"]==9000 and mlc["B-31"]==9000 and mlc["B-31"]==9000:
-                    subTag = 'X1'
-                elif mlc["A-30"]==0 and mlc["B-30"]==0 and mlc["B-31"]==0 and mlc["B-31"]==0:
-                    subTag = 'tips'
-                elif mlc["A-30"]==4000 and mlc["B-30"]==4000 and mlc["B-31"]==4000 and mlc["B-31"]==4000:
-                    subTag = 'tipsX1'
-                elif mlc["A-30"]==-4000 and mlc["B-30"]==-4000 and mlc["B-31"]==-4000 and mlc["B-31"]==-4000:
-                    subTag = 'tipsX2'
-                elif mlc["A-30"]==-6000 and mlc["B-30"]==-7500 and mlc["B-31"]==-7500 and mlc["B-31"]==-7500:
-                    subTag = 'MLC'
-                else:
-                    #st.append('tipsX2')
-                    #print("aria.getImageInfos:MLCPlan", infos["PlanSetupId"], mlc["A-30"], mlc["B-30"] , mlc["B-31"], mlc["B-31"] )
-                    pass
-            return subTag
-        '''

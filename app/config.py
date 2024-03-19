@@ -4,7 +4,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.2"
+__version__ = "0.2.1"
 __status__ = "Prototype"
 
 import os.path as osp
@@ -66,22 +66,29 @@ infoFields = {
 
 
 class gqa_config():
-    
-    
+    """ 
+
+    Attributes
+    ----------
+    _basedir : str 
+        Absolutepfad Angabe zum parent dir
+    configs: dict
+        Eingelesene Configdateien
+
+    """ 
     def __init__( self ):
-        
-        # BASE_DIR festlegen
+        """_basedir festlegen
+
+        """        
         self._basedir = osp.abspath( osp.join( osp.dirname( osp.abspath( __file__ ) ) , "../" ) )
         
-        
     def read(self):
-        """
+        """Configdateien einlesen und in configs ablegen
         
-
         Returns
         -------
-        TYPE
-            DESCRIPTION.
+        class
+            self
 
         """
         self.configs = {}
@@ -117,8 +124,8 @@ class gqa_config():
         
         Returns
         -------
-        TYPE
-            DESCRIPTION.
+        pandas.dataframe
+            Rückgabe der Configdateien als sortiertes dataframe
 
         """
         tags = {}
@@ -127,7 +134,7 @@ class gqa_config():
             
             if not config_name in cross:
                 cross[config_name] = { 
-                    " Version" : config.get("version", "")
+                    "Version" : config.get("version", "")
                 }
                                 
             gqa = {}

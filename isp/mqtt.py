@@ -810,6 +810,8 @@ class MQTTclass( logging.Handler ):
 
         ts = time.strftime("%Y%m%d %H:%M:%S", time.localtime(time.time()) )
 
+        # print("{} - MQTT(file) - logging.emit:".format(ts), record )
+
         # gibt es einen MQTT Handler dann über ihn loggen
         if self._mqttc:
             msg = {
@@ -832,4 +834,5 @@ class MQTTclass( logging.Handler ):
                 self.publish( msg )
             except:  # pragma: no cover
                 print( "logging.emit: Error bei publish", msg )
-
+        else:
+            print("{} - MQTT(file) - logging.emit:".format(ts), record )

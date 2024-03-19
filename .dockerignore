@@ -1,0 +1,44 @@
+# python based
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env
+pip-log.txt
+pip-delete-this-directory.txt
+.tox
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git
+.mypy_cache
+.pytest_cache
+.hypothesis
+
+# mixed 
+.git
+.gitignore
+.github
+.gitattributes
+.spyproject 
+.vscode
+.htmlcov
+
+# nodejs based
+**/node_modules/
+**/dist
+.git
+npm-debug.log
+.coverage
+.coverage.*
+.env
+.aws
+
+# project based
+.docs
+data/

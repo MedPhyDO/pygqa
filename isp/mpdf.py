@@ -65,11 +65,15 @@ Configuration in config.json
 CHANGELOG
 =========
 
-0.1.3 / 2002-06-01
+0.1.5 / 2024-03-06
+------------------
+- mathtext() and pandas() changes for Python 3.11
+
+0.1.4 / 2022-06-01
 ------------------
 - change render_pdf() add check write access
 
-0.1.3 / 2002-05-23
+0.1.3 / 2022-05-23
 ------------------
 - remove render_png() and render_pdf_and_png() only used in unittests
 - change finish() remove unittest switch
@@ -97,7 +101,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R. Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.2"
+__version__ = "0.1.5"
 __status__ = "Prototype"
 
 from weasyprint import HTML, CSS
@@ -393,10 +397,8 @@ class PdfGenerator:
 
         Returns
         -------
-        filepath : str
-            Name and path for the new file
-        filename : str
-            Name only for the new file
+        content : str
+ 
         """
         
         filename = self._config.render_template(name, self._variables )
@@ -407,7 +409,7 @@ class PdfGenerator:
                 content = myfile.read()
 
         if not content:
-            content = "<!-- missig:'{}' -->".format( filename )
+            content = "<!-- missing template:'{}' -->".format( filename )
             
         return content        
 
@@ -1115,7 +1117,7 @@ class PdfGenerator:
 
             return self._text( text, area, attrs, render, replaceNewLine )
         else:
-            return "<!-- missig:'{}' -->".format( filename )
+            return "<!-- missing file:'{}' -->".format( filename )
 
     def mathtext(self, text, area:dict={}, attrs:dict={}, render=None, fontsize=12, dpi=300):
         r"""Rendert Text und TeX Formel nach SVG mit mathtext.
@@ -1151,13 +1153,13 @@ class PdfGenerator:
 
         output = io.BytesIO()
         fig.savefig(output, dpi=dpi, transparent=True, format='svg',
-                    bbox_inches='tight', pad_inches=0.0, frameon=False)
+                    bbox_inches='tight', pad_inches=0.0)
         plt.close(fig)
 
         return self.image( output, area, attrs, render, 'svg+xml' )
 
 
-    def image(self, image: [str, io.BytesIO], area:dict={}, attrs:dict={}, render=None, imageType="png"):
+    def image(self, image: str|io.BytesIO, area:dict={}, attrs:dict={}, render=None, imageType="png"):
         """Bild an der aktuellen Cursor Position oder wenn angegeben bei x, y einfügen.
 
         Internen Cursor auf die neuen x,y Positionen setzen
@@ -1224,30 +1226,13 @@ class PdfGenerator:
             else:
                 # aus resources
                 filepath = osp.join( self._variables["resources"], image )
-
             element_html = '\n\t<img class="image {_class}" style="{_style} {_area}" src="{filepath}" />'.format(
                 _class = _class,
                 _style = _style,
                 _area=_area,
                 filepath=filepath
             )
-            # gibt es die Datei dann einbinden
-            '''
-            if osp.exists( filepath ):
-                element_html = '\n\t<img class="image {_class}" style="{_style} {_area}" src="{filepath}" />'.format(
-                    _class = _class,
-                    _style = _style,
-                    _area=_area,
-                    filepath=filepath
-                )
-            else:
-                element_html = '\n\t<img class="image {_class}" style="{_style} {_area}" src="{filepath}" />'.format(
-                    _class = _class,
-                    _style = _style,
-                    _area=_area,
-                    filepath=filepath
-                )
-            '''
+            
         if render:
             self._html(element_html)
         return element_html
@@ -1348,10 +1333,10 @@ class PdfGenerator:
                 .set_table_attributes('class="layout-fill-width"')
                 .format( pf["field_format"] )
                 .set_table_styles( pf["table_styles"] )
-                .hide_index()
                 .set_uuid( uuid )
-                .render().replace('nan','')
-
+                .hide( axis="index")
+                .to_html( )
+                    .replace('nan','')
             , area=area
             , attrs=attrs
             , render=render
@@ -1359,9 +1344,10 @@ class PdfGenerator:
         else:
             html = self.html( df.style
                 .set_table_attributes('class="layout-fill-width"')
-                .hide_index()
                 .set_uuid( uuid )
-                .render().replace('nan','')
+                .hide( axis="index")
+                .to_html( )
+                    .replace('nan','')
             , area=area
             , attrs=attrs,
             render=render

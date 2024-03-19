@@ -2,9 +2,9 @@
 
 __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
-__credits__ = ["R.Bauer", "K.Loot"]
+__credits__ = ["R.Bauer", "K.Loot", "J.Wüller"]
 __license__ = "MIT"
-__version__ = "0.1.2"
+__version__ = "0.2.1"
 __status__ = "Prototype"
 
 from sortedcontainers import SortedDict
@@ -40,7 +40,7 @@ from app.base import ispBase
 from app.qa.field import qa_field
 
 from isp.config import dict_merge
- 
+from isp.plot import plotClass
 
 # logging
 import logging
@@ -165,7 +165,7 @@ class qa_wl( ispCheckClass ):
         for key, f in self.colFields.items(): 
             # isoCal Kugelpositionen bestimmen
             wlField = qa_field( f )
-            imageArray = wlField.image.cropField( self.roi ) 
+            imageArray = wlField.image.getRoi( self.roi )
             isoCal, isoCalDot = self._findIsoCalCenter( wlField, True )
             
             # summenfeld erstellen um dies evt. zu verwenden
@@ -278,12 +278,14 @@ class qa_wl( ispCheckClass ):
             gefundenes Zentrum in pixel
         """
         # imageArray invertieren
-        img_inv = -imageArray + imageArray.max() + imageArray.min()
-                
+        img_inv = -imageArray + imageArray.max() + imageArray.min()        # eine Bildmaske des großen kreises erstellen
+
         # eine Bildmaske des großen kreises erstellen
         labeled_foreground = (img_inv > filters.threshold_otsu( img_inv ) ).astype(int)
+        
         # eine Auswertung der Bildmaske vornehmen
-        properties = measure.regionprops( labeled_foreground )
+        properties = measure.regionprops( labeled_foreground)
+        
         # es könnten mehrere objekte vorhanden sein
         # in unseren Bildern ist aber nur eins deshalb das erste verwenden
         
@@ -329,8 +331,8 @@ class qa_wl( ispCheckClass ):
         """
 
         # das image auf den wichtigen Bereich beschneiden
-        imageArray = field.image.cropField( self.roi ) 
-        
+        imageArray = field.image.getRoi( self.roi )
+
         # das gefundene Zentrum des ISO Cal Phantomstiftes in dots
         isoCalDot = self._findArrayIsoCalCenter( imageArray, debug )
         # das gefundene Zentrum des ISO Cal Phantomstiftes in mm
@@ -371,7 +373,7 @@ class qa_wl( ispCheckClass ):
         
         field = qa_field( info )
         # das image auf den wichtigen Bereich beschneiden
-        imageArray = field.image.cropField( self.roi ) 
+        imageArray = field.image.getRoi( self.roi )
         
         # imageArray invertieren
         img_inv = -imageArray + imageArray.max() + imageArray.min()
@@ -470,7 +472,6 @@ class qa_wl( ispCheckClass ):
         yCenterBall = []
         rms = []
         rmsAngles = []
-        #print("axisChart", self.centers[ axisId ] )
          
         for k, p in self.centers[ axisId ].items():
             angles.append( k )
@@ -497,7 +498,6 @@ class qa_wl( ispCheckClass ):
             ax.set_xticks(np.arange(-180, 185, 45))          
             
         # wenn die maximalen y Werte kleiner 1 sind immer limit +-1 verwenden 
-        #print("ylimit", ax.get_ylim(), max(ax.set_ylim()) )
         if max(ax.set_ylim()) < 1:
             ax.set_ylim([-1, 1])
                
@@ -514,20 +514,17 @@ class qa_wl( ispCheckClass ):
     def plotChart(self, chartSize={}, text=""):
         """Alle Achsen charts ausgeben
         """
-        
-        fig, ax = self.initPlot( chartSize, True, nrows=2, ncols=2 )
-          
-        #print( self.centers )
+        plot = plotClass( )
+        fig, ax = plot.initPlot( chartSize, True, nrows=2, ncols=2 )
+
         rms = {}
         for mpl_axis, wl_axis, title, color in zip_longest(
                 ax.flatten(), ["G", "C", "T"], ["Gantry", "Kollimator", "Tisch"], ["g", "m", "c"]
                 ):
-            #print( mpl_axis, wl_axis)
             if wl_axis in ["G", "C", "T"]:
                 try:
                     rms[ wl_axis ] = self._axisChart( mpl_axis, wl_axis, title, color )
                 except:
-                    # print( "plotChart", mpl_axis, wl_axis, title, color )
                     pass
             else:
                 # jetzt sind in rms alle achsen
@@ -540,7 +537,6 @@ class qa_wl( ispCheckClass ):
                 
                 #ax = plt.subplot(2,2,4, polar=True, )
                
-                #print("WL.plotChart", gs )
                 ax.set_title( "RMS", position=(0.5, 1.1) )
                 # If you want the first axis to be on top:
                 ax.set_theta_offset(pi / 2)
@@ -557,7 +553,6 @@ class qa_wl( ispCheckClass ):
                 # Achsenlimit
                 # wenn die maximalen y Werte kleiner 1 sind immer limit 0/1 verwenden 
                 ylimit = ax.get_ylim()
-                #print("ylimit-RMS", ax.get_ylim() )
                 if max(ax.get_ylim()) < 1:
                     ylimit =  [0, 1]
                     ax.set_ylim( ylimit )
@@ -598,16 +593,11 @@ class qa_wl( ispCheckClass ):
                         )
                 
                 ft = re.sub('[ \t]+' , ' ', ft)
-                #print( ft.splitlines() )
-                #t = ""
-                #for line in ft.splitlines():
-                    #print("line", line.trim() )
-                    #t += line.trim()
                 ax.text(0, 0, ft, fontsize=20, bbox=dict(facecolor='yellow', alpha=0.3))
             
         plt.tight_layout(pad=0.4, w_pad=0.1, h_pad=1.0)
         plt.subplots_adjust( hspace=0.4, wspace=0.2)
-        return self.getPlot()
+        return plot.getPlot()
     
     def _axisImage(self, ax=None, axisId="", title="" ):
         """Ein Achsen Bild mit markern ausgeben
@@ -624,31 +614,16 @@ class qa_wl( ispCheckClass ):
 
         ax.set_title( title )
         ax.axis('off')
-        
-        #print(self.roi )
-        
-        # Achsenbeschriftung in mm
-        # x-Achse
-        #xlim = ax.get_xlim()
-        
-        #width = xlim[0] + xlim[1] 
-        #print(width)
-        #x = np.arange(0, len( transmission["profile"] ), width / 4 )
-        #ax.get_xaxis().set_ticklabels([ -20, -10, 0, 10, 20])
-        #ax.get_xaxis().set_ticks( x )
-        
-        #ax.set_xlim( [ self.roi["X1"], self.roi["X2"] ] )
-        #ax.set_ylim( [ self.roi["Y1"], self.roi["Y2"] ] )
-        #ax.plot( len(self.mergeArray[axisId])/2, len(self.mergeArray[axisId])/2, 'y+', ms=100, markeredgewidth=1 ) 
+
         ax.plot( self.virtualCenterDots.x, self.virtualCenterDots.y, 'y+', ms=200, markeredgewidth=1 ) 
-        
            
     def plotMergeImage(self, imageSize={} ):
         """Alle Achsen Bilder ausgeben
         
         """
         # plotbereiche festlegen
-        fig, ax = self.initPlot( imageSize, nrows=1, ncols=3)
+        plot = plotClass( )
+        fig, ax = plot.initPlot( imageSize, nrows=1, ncols=3 )
         
         for mpl_axis, wl_axis, title in zip_longest(
                 ax.flatten(), ["G", "C", "T"], ["Gantry", "Kollimator", "Tisch"]
@@ -656,33 +631,32 @@ class qa_wl( ispCheckClass ):
             try:
                 self._axisImage( mpl_axis, wl_axis, title )
             except:
-                #print( "plotMergeImage", mpl_axis, wl_axis, title )
                 pass
             
         plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
-        return self.getPlot()
+        return plot.getPlot()
         
     
 class checkWL( ispBase ):
         
     def doMT_WL(self, fileData ):  
-        """
+        """STX - Radius der Isozentrumskugel (Winston Lutz)
                     
         Parameters
         ----------
         fileData : pandas.DataFrame
-        
-            
+
         Returns
         -------
         pdfFilename : str
             Name der erzeugten Pdfdatei
         result : list
-            list mit dicts der Testergebnisse 
-            
+            list mit dicts der Testergebnisse
+
         See Also
         --------
         isp.results : Aufbau von result
+
         """
         
         result = [] 
@@ -692,30 +666,29 @@ class checkWL( ispBase ):
         self.fileCount = 0
         
         # metadata vorbereiten
-
-        #print( fileData['SeriesUID'] )
         md = dict_merge( DotMap( {
            # "Titel": "Auswertung",
            # "Betreff": "Monatstest WL",
             "manual": {
-                "filename": self.metadata.info["anleitung"],
                 "attrs": {"class":"layout-fill-width"},
             },
             "imageSize" : {"width" : 181, "height" : 45},
             "chartSize" : {"width" : 181, "height" : 95},
             
             "fieldSize" : { "X1":-10, "X2": 10, "Y1": -10, "Y2": 10, "xStep":10, "yStep":10 },
-            
-            "_image" : { "height": "45mm"  },
+            "plotImage_pdf": {
+                "attrs": { "height": "45mm" }
+            },
+
             "_chart": { "height" : "90mm" },
             
             "table_fields" : [
                 {'field': 'Kennung', 'label':'Kennung', 'format':'{0}', 'style': [('text-align', 'left')] },
-                {'field': 'gantry', 'label':'Gantry', 'format':'{0:1.1f}'},
-                {'field': 'collimator', 'label':'Kollimator', 'format':'{0:1.1f}'},
-                {'field': 'table', 'label':'Tisch', 'format':'{0:1.1f}'},
-                {'field': 'centerBall_X', 'label':'X-Abweichung', 'format':'{0:1.3f}'},
-                {'field': 'centerBall_Y', 'label':'Y-Abweichung', 'format':'{0:1.3f}'},
+                {'field': 'gantry', 'label':'Gantry', 'format':'{0:.0f}'},
+                {'field': 'collimator', 'label':'Kollimator', 'format':'{0:.0f}'},
+                {'field': 'table', 'label':'Tisch', 'format':'{0:.0f}'},
+                {'field': 'centerBall_X', 'label':'X-Abweichung<br>[mm]', 'format':'{0:1.3f}'},
+                {'field': 'centerBall_Y', 'label':'Y-Abweichung<br>[mm]', 'format':'{0:1.3f}'},
                 {'field': 'maxCenter_passed', 'label':'Passed' }
             ]
         } ), self.metadata )
@@ -742,7 +715,6 @@ class checkWL( ispBase ):
             cb_result = []
             # in jedem Feld die Kugel bestimmen
             for key, info in wl.fields.items():
-                #print( key )
                 centerBall = wl.findCenterBall( key )
                 if centerBall:
                     
@@ -775,14 +747,10 @@ class checkWL( ispBase ):
             data_frame = pd.DataFrame( data )
             # zeilen und spalten tauschen, und nach Art, Doserate, Speed sortieren
             data_frame = data_frame.transpose().sort_values(by=[ "table", "collimator", "gantry" ], ascending=True)
-            
-            # Anzahl der Bilder pro Achse ohne 0,0,0
-            #len_T = len( data_frame[ data_frame["Tisch"] > 0 ] )
-            #print(len_T)
-                        
-            # die achsen Bilder ausgeben
+                                    
+            # die Achsen Bilder ausgeben
             g = wl.plotMergeImage( md["imageSize"] )
-            self.pdf.image( g, attrs=md["_image"] )
+            self.pdf.image( g, **md.plotImage_pdf )
               
             text_values = {
                 "f_warning": md.current.tolerance.default.warning.get("f",""),
@@ -813,7 +781,6 @@ class checkWL( ispBase ):
                 # zu wenig Felder ist hier nicht OK -> warning
                 acceptance = 3
             
-            # print( df[ ["table", "collimator", "gantry"] ] )
             #
             # Ergebnis in result merken
             #
@@ -822,7 +789,6 @@ class checkWL( ispBase ):
                 len( result ), # bisherige Ergebnisse in result
                 acceptance
             ) )
-            
             
             #
             # Tabelle erzeugen
@@ -843,5 +809,4 @@ class checkWL( ispBase ):
         
         # abschließen pdfdaten und result zurückgeben
         return self.pdf.finish(), result 
-    
     

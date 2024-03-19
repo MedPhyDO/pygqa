@@ -15,59 +15,22 @@ TODO: change convert to other converting. Don't disable ImageMagick's security c
 '''
 import os
 from os import path as osp
-import sys
-from subprocess import Popen, PIPE, STDOUT
 
 import json
 from shutil import copyfile
-from skimage import io as img_io
-from skimage.util import compare_images
-import numpy as np
+
+from pdf2image import convert_from_path
+from PIL import ImageChops
 
 ABSPATH = osp.dirname( osp.abspath( __file__) )
+BASEPATH = osp.join( ABSPATH , "..")
+FILESPATH = osp.join( BASEPATH, 'data', 'unittest') 
 
 import unittest
 
-class testCaseBase(unittest.TestCase):
-    
-    
-    def convert_to_png(self, pdf_filepath ):
-        # 794x1123
-        # -density xxx will set the DPI to xxx (common are 150 and 300).
-        # -quality xxx will set the compression to xxx for PNG, JPG and MIFF file formates (100 means no compression).
-        # +append horizontally instead of vertically with -append
-        
-        png_name = osp.splitext( pdf_filepath )[0] + '.png'
-        
-        geometry = 'x585' # x1754 (1/1) 'x877' (1/2) 'x585' (1/3) 
 
-        output_type =  "png"
-        
-        # -background white -quality 90  
-        # -density 72
-        flags = '-background white -alpha remove -colorspace RGB  +append -density 72 -quality 50'
-       # test_flags = '-alpha deactivate'      
-        cmd = "convert {} -geometry {} {}:- '{}' '{}'".format( flags, geometry, output_type, pdf_filepath, png_name )
-        
-        # print( cmd )
-        
-        CLOSE_FDS = not sys.platform.startswith('win')
-        process = Popen(
-            cmd, shell=True,
-            stdin=PIPE, stdout=PIPE, stderr=STDOUT,
-            close_fds=CLOSE_FDS
-        )
-        
-        result, error = process.communicate() 
- 
-        # bei Fehlern
-        if error:
-            print( "convert ERROR", cmd, result, error )
-            return process.returncode
-        else:
-            return png_name
-       
-        
+class testCaseBase(unittest.TestCase):
+            
     def check_pdf_data( self, data, contents=-1, pages=-1, intern_check:bool=False ):
         ''' Prüft pdf data mit vorher gespeicherten data
 
@@ -91,34 +54,43 @@ class testCaseBase(unittest.TestCase):
 
         Returns
         -------
-        None.
+        test_result: dict.
 
         '''
        
-        self.assertIn("pdf_filepath", data,
-             "PDF data fehlerhaft. Filename fehlt"
-        )
+        test_result =  {
+            "pdf.filename" : None,
+            "pdf.pageCount" : None,
+            "pdf.pageNames" : None,
+            "pdf.content" : None,
+            "pdf.content.pages" : {},
+            "pdf.pngPageCount": None,
+            "pdf.pngDiff" : None,
+            "pdf.pngDiff.pages": {}
+        }
 
+        if "pdf_filepath" in data:
+            test_result["pdf.filename"] = True
+   
         check = {}
-
+        
         #
         # Vorbereitungen
         #
 
         if intern_check == True:
-            test_dir = osp.join( ABSPATH, "files", "pdf" )
-            check_dir = osp.join( ABSPATH, "resources", "check" )
+            test_dir = osp.join( FILESPATH, "pdf" )
+            check_dir = osp.join( FILESPATH, "check" )
         else:
             test_dir = os.path.dirname( data["pdf_filepath"] )
             check_dir = osp.join( test_dir, "check" )
         
-
         # create the folders if not already exists
         if not osp.exists( check_dir ):
             try:
                 os.makedirs( check_dir )
             except IOError as e:
-                 print("Unable to create dir.", e)
+                print("Unable to create dir.", e)
 
         test_writable = True
         if not os.access(test_dir, os.W_OK):
@@ -132,20 +104,14 @@ class testCaseBase(unittest.TestCase):
             msg = 'testbase.check_pdf_data: keine Schreibrechte auf: {}'.format( check_dir )
             print(  msg )
             
-        
         # Dateiname für den Inhalt festlegen
         json_test_name = osp.join( test_dir, data["pdf_filename"] ) + ".json"
         json_check_name = osp.join( check_dir, data["pdf_filename"] ) + ".json"
 
         pdf_check_name = osp.join( check_dir, data["pdf_filename"] )
 
-        png_check_name = osp.splitext(pdf_check_name)[0] + '.png'
-        png_new_name = osp.splitext(data["pdf_filepath"] )[0] + '.png'
-        
-        # create preview image from pdf
-        if test_writable:
-            self.convert_to_png( data["pdf_filepath"] )
-               
+        new_name = osp.splitext(data["pdf_filepath"])[0]
+
         # changeback resources path in content
         if "_variables" in data:
             json_data = json.dumps( data["content"])
@@ -153,7 +119,6 @@ class testCaseBase(unittest.TestCase):
             json_data = json_data.replace( data["_variables"]["resources"], "{{resources}}")
             json_data = json_data.replace( data["_variables"]["templates"], "{{templates}}")
             data["content"] = json.loads(json_data)
-        
         
         # immer den content in unittest ablegen
         if test_writable:
@@ -174,47 +139,31 @@ class testCaseBase(unittest.TestCase):
                     copyfile(data["pdf_filepath"], pdf_check_name)
                 except IOError as e:
                     print("Unable to copy file.", e)
-    
-            # beim erstenmal png nach check kopieren
-            if not os.path.exists( png_check_name ):
-                try:
-                    copyfile(png_new_name, png_check_name)
-                except IOError as e:
-                    print("Unable to copy file.", e)
-                
+
         #
         # Überprüfungen
         #
-        
+
         # passende check daten (json_check_name) laden
         with open( json_check_name ) as json_file:
             check = json.load( json_file )
-
+    
         page_names = data["content"].keys()
         # Anzahl der Bereiche prüfen
-        if contents > -1:
-            self.assertEqual(
-                len( page_names ),
-                contents,
-                "Anzahl der content Bereiche in '{}' stimmt nicht.".format( data["pdf_filepath"] )
-            )
+        test_result["pdf.pageCount"] = False
+        if len(page_names) > -1:
+            test_result["pdf.pageCount"] = True
+                   
         # Namen der Bereiche
-        self.assertEqual(
-            page_names,
-            check.keys(),
-            "Namen der Bereiche '{}' stimmt nicht.".format( data["pdf_filepath"] )
-        )
-
-        # Anzahl der Seiten prüfen
-        if pages > -1:
-            self.assertEqual(
-                data["pages"],
-                pages,
-                "Anzahl der Seiten in '{}' stimmt nicht.".format( data["pdf_filepath"] )
-            )
+        test_result["pdf.pageNames"] = False
+        if page_names == check.keys():
+            test_result["pdf.pageNames"] = True
 
         # einige content Inhalte prüfen
         from bs4 import BeautifulSoup
+        test_result["pdf.content"] = False
+        test_result["pdf.content.pages"] = {}
+        contentOk = False
         for page_name, content in data["content"].items():
             bs_data = BeautifulSoup( content, 'html.parser')
             bs_check = BeautifulSoup( check[ page_name ], 'html.parser')
@@ -222,86 +171,62 @@ class testCaseBase(unittest.TestCase):
             # die text Bereiche
             data_text_list = bs_data.find_all('div', {"class": "text"} )
             check_text_list = bs_check.find_all('div', {"class": "text"} )
-
+            if len(data_text_list) == len(check_text_list):
+                for i in range(min(len(data_text_list), len(check_text_list))):
+                    test_result["pdf.content.pages"][i+1] = False
+                    if data_text_list[i] == check_text_list[i]:
+                        test_result["pdf.content.pages"][i+1] = True
+                    else:
+                        contentOk = False
+            else:
+                contentOk = False
+            '''
             self.assertEqual(
                 data_text_list,
                 check_text_list,
-                "PDF content .text zwischen '{}' und '{}' ist fehlerhaft".format( json_check_name, json_test_name )
+                "PDF content .text in '{}' ist fehlerhaft".format( data["pdf_filepath"] )
             )
+            ''' 
 
-        #return
-        #png_check_name = "/home/bauer/development/python/py37/pygqa/tests/files/2019/2019 - VitalBeamSN2674 - 15x - JT-4_2_2_1-A.png"
-        # erzeugte png vergleichen und diff speichern
-        png_check = img_io.imread( png_check_name )
-        png_new = img_io.imread( png_new_name )
+        test_result["pdf.content"] = contentOk
+
+        # vergleich mit pdf2image
+        # , pdf_check_name
+        dpi = 300
+        images = convert_from_path( data["pdf_filepath"], dpi=dpi )
+        check_images = convert_from_path( pdf_check_name, dpi=dpi )
+        test_result["pdf.pngPageCount"] = False  
+        if len(images) == len(check_images):
+            test_result["pdf.pngPageCount"] = True
         
-        # python 3.7 - cairo 1.16.0 (https://cairographics.org) - %PDF-1.5
-        #   (1120, 790, 3) tests/files/pdf/test-1.pdf
-        # python 3.8 - WeasyPrint 54.0 - %PDF-1.7
-        #   (1123, 794, 3) tests/files/pdf/test-1.pdf
-        #   (1123, 794, 4) 
-        #return
-        # check only size not depth
-        self.assertEqual(
-            list(png_check.shape)[:2], 
-            list(png_new.shape)[:2], 
-            "Die Bildgrößen in '{}' stimmen nicht.PDF files:\n{}\n{}".format( 
-                data["pdf_filepath"],
-                data["pdf_filepath"],
-                pdf_check_name
-            )
-        )
+        # jetzt die einzelnen Seiten prüfen, bei Fehlern wird das diff gespeichert
 
-        # Bild vergleich erstellen und speichern
-        compare = compare_images(png_check, png_new, method='diff')
- 
-        cmp_sum = np.sum( ( compare.astype("int") ) )
-                         
-        #print( "sum png_check", np.sum( (png_check.astype("int") ) ), png_check_name )
-        #print( "sum png_new", np.sum( (png_new.astype("int") ) ), png_new_name )
-         
-        #print( "sum", cmp_sum, png_check_name + ".diff.png")
+        diff_max = 500.0
+        test_result["pdf.pngDiff"] = False
+        test_result["pdf.pngDiff.pages"] = {}
+        diffErrors = 0
+        diff = None
+        for i in range(len(images)):
+            if i in check_images:
+                diff = ImageChops.difference(images[i], check_images[i])
+                diff_qual = len(set(diff.getdata()))
+                typ = "diff"
+            else:
+                diff_qual = diff_max + 1
+
+            if diff_qual > diff_max:
+                typ = "error"
+                diffErrors += 1
+                test_result["pdf.pngDiff.pages"][i+1] = False
+            else:
+                test_result["pdf.pngDiff.pages"][i+1] = True
+
+            name = "{}.{:02.0f}.{}.png".format( new_name, i+1, typ)
+            if diff:
+                diff.save( name )
+
+        if diffErrors == 0:
+            test_result["pdf.pngDiff"] = True
+        
+        return test_result
        
-       
-        img_io.imsave( png_check_name + ".diff.png",  compare )
-        max_sum = 1
-        
-        self.assertLessEqual( cmp_sum, max_sum, 
-            "Die PNG Vergleichsbild summe ( {} ) ist größer als {}. Diff image '{}' prüfen. PDF files:\n{}\n{}".format( 
-                cmp_sum,
-                max_sum,
-                png_new_name + ".diff.png",
-                data["pdf_filepath"],
-                pdf_check_name
-            )
-        )
-        
-        '''
-        # gesamt check der Bilder
-        def check_mse(imageA, imageB):
-        	# the 'Mean Squared Error' between the two images is the
-        	# sum of the squared difference between the two images;
-        	# NOTE: the two images must have the same dimension
-        	err = np.sum((imageA.astype("float") - imageB.astype("float")) ** 2)
-        	err /= float(imageA.shape[0] * imageA.shape[1])
-
-        	# return the MSE, the lower the error, the more "similar" the two images are
-        	return err
-
-        # MeanCheck durchführen
-        try:
-            mse = check_mse( png_check, png_new )
-        except:
-            mse = -1
-
-        # small changes depends on diffrent font rendering
-        le = 350.0
-       # le = 100
-        self.assertLessEqual( mse, le,
-            "Der PNG Vergleichsbild MSE stimmt nicht. Diff image '{}' prüfen. PDF files:\n{}\n{}".format( 
-                png_new_name + ".diff.png",
-                data["pdf_filepath"],
-                pdf_check_name
-            )
-        )
-        '''

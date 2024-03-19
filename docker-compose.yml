@@ -1,0 +1,16 @@
+##
+## -- DIESE DATEI NICHT BEARBEITEN --
+##
+## Die Datei '.env' für die Konfiguration bearbeiten.
+## 
+##
+
+services:
+  pygqa_0.2.x:
+    container_name: pygqa_0.2.x
+    user: "${USE_UID}:${USE_GID}"
+    build: .
+    command: python ./pygqa.py
+    network_mode: "host"
+    volumes:
+      - .:/pygqa 

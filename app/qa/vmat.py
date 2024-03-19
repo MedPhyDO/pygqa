@@ -15,7 +15,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.2"
+__version__ = "0.2.1"
 __status__ = "Prototype"
 
 from pylinac.vmat import VMATBase
@@ -30,36 +30,14 @@ from app.image import DicomImage
 
 
 import matplotlib.pyplot as plt
+from isp.plot import plotClass
+from isp.config import dict_merge
 
+from dotmap import DotMap
 
 # logging
 import logging
 logger = logging.getLogger( "MQTT" )
-
-class FSImage( DicomImage ):
-    '''Erweitert PFDicomImage um die eigene DicomImage Klasse
-    
-    FIXME: ist dies noch notwendig?
-    
-    Attributes
-    ----------
-    base_path : str
-        
-    '''
-    
-    base_path = ""
-    
-    def __init__(self, pathOrData=None, **kwargs ):
-        """ Erweitert PFDicomImage um die eigene DicomImage Klasse
-        
-        """
-        #print("PFImage.__init__", path, kwargs)
-        
-        # das pylinacpicketfence Image
-        #FlatSym.__init__( self, path, **kwargs )
-        
-        # die eigene Erweiterung
-        DicomImage.__init__( self, pathOrData )
         
 class qa_vmat( VMATBase, ispCheckClass ):
     '''
@@ -71,12 +49,10 @@ class qa_vmat( VMATBase, ispCheckClass ):
     analysed : bool
     
     metadata : dict
-           
-    '''
-    
 
-    
-    def __init__( self, df:None, vmat_type:str="DRGS", tolerance:[float, int]=1, metadata:dict={} ):
+    '''
+
+    def __init__( self, df:None, vmat_type:str="DRGS", metadata:dict={} ):
         """
     
         Parameters
@@ -85,8 +61,6 @@ class qa_vmat( VMATBase, ispCheckClass ):
             Pandas dataframe mit den Bildern.
         vmat_type : TYPE, optional
             DRGS oder DRMLC. The default is "DRGS".
-        tolerance : [float, int], optional
-            DESCRIPTION. The default is 1.
         metadata : dict, optional
             - result_header:str
             The default is {}.
@@ -106,23 +80,39 @@ class qa_vmat( VMATBase, ispCheckClass ):
         if vmat_type=="DRGS":
             self._result_header = 'Dose Rate & Gantry Speed'
             self.SEGMENT_X_POSITIONS_MM = (-60, -40, -20, 0, 20, 40, 60)
+            roi_config = {
+                "ROI -60": {"offset_mm": -60},
+                "ROI -40": {"offset_mm": -40},
+                "ROI -20": {"offset_mm": -20},
+                "ROI 0": {"offset_mm": 0},
+                "ROI 20": {"offset_mm": 20},
+                "ROI 40": {"offset_mm": 40},
+                "ROI 60": {"offset_mm": 60},
+            }
+            # segment_size_mm=(10, 150)
         elif vmat_type=="DRMLC":
             self._result_header = 'Dose Rate & MLC Speed'
             self.SEGMENT_X_POSITIONS_MM = (-45, -15, 15, 45) 
+            roi_config = {
+                "ROI -45": {"offset_mm": -45},
+                "ROI -15": {"offset_mm": -15},
+                "ROI 15": {"offset_mm": 15},
+                "ROI 45": {"offset_mm": 45}
+            }
         else:
             return 
 
         images = df.to_dict('records') 
 
         # DicomBild laden und prüfen
-        self.image1, self.image2 = self._check_img_inversion(FSImage( images[0] ), FSImage( images[1] ))
+        self.image1, self.image2 = self._check_inversion(DicomImage( images[0] ), DicomImage( images[1] ))
         self._identify_images(self.image1, self.image2)
         self.segments = []
         
         # analyse mit default toleranz durchführen durchführen
         # Die toleranz prüfung wird in der Tabelle vorgenommen
         self._tolerance = 0
-        self.analyze(  )
+        self.analyze( roi_config=roi_config )
     
         self.analysed = True
         
@@ -157,13 +147,12 @@ class qa_vmat( VMATBase, ispCheckClass ):
         if not self.analysed:
             return {}
         
-        dmlc_prof, open_prof = self._median_profiles((self.dmlc_image, self.open_image))
+        dmlc_prof, open_prof = self._median_profiles( self.dmlc_image, self.open_image )
         
         segments = []
         lfd = 0
         
         for segment in self.segments:
-            #print( segment )
             lfd += 1
             # r_corr = Return the ratio of the mean pixel values of DMLC/OPEN images.
             # r_dev = The reading deviation (R_dev) from the average readings of all the segments
@@ -201,12 +190,15 @@ class qa_vmat( VMATBase, ispCheckClass ):
         """Median profiles plotten
         
         """
+        
         # plotbereiche festlegen
-        fig, ax = self.initPlot( chartSize )
-      
+ 
+        plot = plotClass( )
+        fig, ax = plot.initPlot( chartSize )
+
         # Daten holen (nur zentrums profil)
-        dmlc_prof, open_prof = self._median_profiles((self.dmlc_image.getFieldRoi(  ), self.open_image.getFieldRoi(  )))
-                 
+        [dmlc_prof, open_prof] = self._median_profiles(self.dmlc_image.cropField( ), self.open_image.cropField(  ) )
+                
         # Kurven plotten
         ax.plot(dmlc_prof.values, label='DMLC')
         #ax.plot(roi, label='ROI')
@@ -214,12 +206,16 @@ class qa_vmat( VMATBase, ispCheckClass ):
         
         # Achsenbeschriftung in mm
         # x-Achse
+        # border 20mm
         xlim = ax.get_xlim()  
         width = xlim[0] + xlim[1] 
-        x = np.arange(0, len( dmlc_prof.values ), width / 4 )
-        ax.get_xaxis().set_ticklabels([ -200, -100, 0, 100, 200])
-        ax.get_xaxis().set_ticks( x )
+        xt = np.arange(0, len( dmlc_prof.values ), width / 4 )
+        fs = self.dmlc_image.getFieldSize()
+        xl = np.arange(fs['X1'], fs['X2']+ fs['X'] / 4, fs['X'] / 4 )
 
+        ax.get_xaxis().set_ticks( xt )
+        ax.get_xaxis().set_ticklabels( xl )# [ -60, -30, 0, 30, 60 ]
+        
         ax.legend(loc=8, fontsize='large')
         ax.grid()
         
@@ -227,7 +223,9 @@ class qa_vmat( VMATBase, ispCheckClass ):
         plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
         
         # data der Grafik zurückgeben
-        return self.getPlot()
+        data = plot.getPlot()
+
+        return data
     
     def draw_segments(self, axis: plt.Axes, df:None):
         """Draw the segments onto a plot.
@@ -257,18 +255,18 @@ class checkVMAT( ispBase ):
         Parameters
         ----------
         fileData : pandas.DataFrame
-        
-            
+
         Returns
         -------
         pdfFilename : str
             Name der erzeugten Pdfdatei
         result : list
-            list mit dicts der Testergebnisse 
-            
+            list mit dicts der Testergebnisse
+
         See Also
         --------
         isp.results : Aufbau von result
+
         """
         
         result=[]
@@ -278,18 +276,20 @@ class checkVMAT( ispBase ):
         self.fileCount = 0
         
         # metadata ergänzen und lokal als md bereitstellen
-        md = self.metadata
-        md.update( {
+   
+        md = dict_merge( DotMap( {
             "field_count": 2,
-            "_imgSize" : {"width" : 90, "height" : 85},
+            "plotImage_pdf": {
+                "area" : { "width" : 90, "height" : 85 },
+                "attrs": {  }
+            },
+            
             "_imgField": {"border": 20 },
             "_chart": { "width" : 180, "height" : 60},
             "manual": {
-                "filename": self.metadata.info["anleitung"],
-                "attrs": {"class":"layout-fill-width", "margin-bottom": "5mm"},
-            },
-        } )
- 
+                 "attrs": {"class":"layout-fill-width", "margin-bottom": "5mm"},
+            }
+        } ), self.metadata )
 
         def groupBySeries( df_group ):
             """Datumsweise Auswertung und PDF Ausgabe 
@@ -302,6 +302,7 @@ class checkVMAT( ispBase ):
             #               
             # Anleitung
             #
+            
             self.pdf.textFile( **md.manual )  
             
             # auf genau 2 Felder prüfen (open, DMLC)
@@ -312,17 +313,6 @@ class checkVMAT( ispBase ):
                     errors=errors
                 ) )
                 return
-            '''
-            if not self.checkFields( md, fields=df_group, fieldLen=2 ):
-                result.append( 
-                    self.pdf_error_result( 
-                        md, group_len=len( result ),
-                        date=checkDate,
-                        msg="Die Feldanzahl ist nicht 2"
-                    )
-                )
-                return
-            '''
            
             # Analyse durchführen
             drgs = qa_vmat( df_group, str( md["vmat_type"]), metadata=md )
@@ -371,7 +361,7 @@ class checkVMAT( ispBase ):
             # segmente einzeichnen
             drgs.draw_segments( ax, df )
             # Bild anzeigen
-            self.pdf.image( img_cls.getPlot(), md["_imgSize"] )
+            self.pdf.image( img_cls.getPlot(), **md.plotImage_pdf )
             
             #
             # das vmat Feld
@@ -385,7 +375,7 @@ class checkVMAT( ispBase ):
             drgs.draw_segments(ax, df)
             
             # Bild anzeigen
-            self.pdf.image(img_cls.getPlot(), md["_imgSize"] )
+            self.pdf.image(img_cls.getPlot(), **md.plotImage_pdf )
             
             #
             # das chart
@@ -434,6 +424,22 @@ class checkVMAT( ispBase ):
     
     def doMT_VMAT_2( self, fileData ):
         """DRGS - Variationen von DoseRate und Gantry Speed
+
+        Parameters
+        ----------
+        fileData : pandas.DataFrame
+
+        Returns
+        -------
+        pdfFilename : str
+            Name der erzeugten Pdfdatei
+        result : list
+            list mit dicts der Testergebnisse
+
+        See Also
+        --------
+        isp.results : Aufbau von result
+
         """
         # metadata vorbereiten
 
@@ -465,6 +471,22 @@ class checkVMAT( ispBase ):
         
     def doMT_VMAT_3( self, fileData ):
         """DRMLC - MLC Speed
+
+        Parameters
+        ----------
+        fileData : pandas.DataFrame
+
+        Returns
+        -------
+        pdfFilename : str
+            Name der erzeugten Pdfdatei
+        result : list
+            list mit dicts der Testergebnisse
+
+        See Also
+        --------
+        isp.results : Aufbau von result
+
         """
         # metadata vorbereiten
         # Beschriftung für die Bild Achsen

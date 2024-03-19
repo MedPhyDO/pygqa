@@ -15,30 +15,32 @@ Dabei wird maximal bis zum aktuellem Tag eingelesen. Dies ermöglicht das Erstel
 
 Beispiel::
 
-    config.json enthält:
-    { "value": 0, "content": "test" }
+config.json enthält: 
+`{ "value": 0, "content": "test" }`
         
-    config-20180101.json enthält:
-    { "value": 1, "info": "info-20180101" }
+config-20180101.json enthält:
+`{ "value": 1, "info": "info-20180101" }`
     
-    config-20180501.json enthält:
-    { "value": 5, "content": "test-20180501" }
+config-20180501.json enthält:
+`{ "value": 5, "info": "test-20180501" }`
     
-    from isp import ispConfig
-    
-    config = ispConfig()
-    print( config.get("value"), config.get("content" ), config.get("info" ) )
-    > 5 test test-20180501
-    
-    config = ispConfig()
-    print( config.get("value" ) )
+```python
+from isp import ispConfig
+
+config = ispConfig()
+print( config.get("value"), config.get("content" ), config.get("info" ) )
+> 5 test test-20180501
+```    
      
 ## Optionen
-- `version:` Version der Configuration
-- `server:` Angaben für den Server und dessen Verbindungen
-- `database:` Angaben für die verwendete Datenbank
-- `pdf:` Angaben für die erstellung von PDF Dateien
-- `use_as_variables:` Benannte Liste von Optionen die in `variables` übernommen werden sollen
+- `version`: Version der Configuration
+- `server`: Angaben für den Server und dessen Verbindungen
+- `database`: Angaben für die verwendete Datenbank
+- `dicom`: Angaben für den verwendeten Dicomserver
+- `pdf`: Angaben für die Erstellung von PDF Dateien
+- `resultsPath`: Der Basispfad für alle Auswertungen
+- `units`: 
+- `use_as_variables`: Benannte Liste von Optionen die in `variables` übernommen werden sollen
 - `variables:` Angaben für die Verwendung in Templates
 
 ## Optionen `server`
@@ -75,29 +77,114 @@ Webserver und Api Parameter
   - `logging:` Aktiviert das logging über MQTT. Der Topic beginnt dabei immer mit `logging/`. Default: `false`
             
 - `logging:` logging level für die Module. 0 - NOTSET, 10 - DEBUG, 20 - INFO, 30 - WARNING, 40 - ERROR, 50 - CRITICAL
+  - `root:` Für den root logger. Default `40`
+  - `mqtt:` Für den MQTT logger. Default `40`
   - `safrs:` Für die Api Schnittstelle. Default `40`
   - `webapp:` Für den Webserver. Default `40`
   - `sqlalchemy:` Für das Datenbankmodul. Default `40`
-            
-## Optionen `pdf`
-
-- `pdf:`
-    - `page-style:` Default: mpdf_page.css
-    - `overlay-style:` Default: mpdf_overlay.css
-
-Bei diesen Angaben werden keine `variables` ersetzt.
- 
+             
 ## Optionen `database`
 
 Datenbank Parameter für verschiedene Datenbanken
 
-- `main:` Die als default verwendete Datenbank für safrs (<dbname>). Default None
-- `<dbname>:`
-    `connection`: Datenbank Connection string
+- `main`: Die als default verwendete Datenbank für safrs (<dbname>). Default None
+- `<dbname>`:
+  - `connection`: Datenbank Connection string
+  - `dbname`: Datenbankname
+  - `engine`: Die verwendete Datenbank engine `pytds` oder `pyodbc`
+  - `user:` Username für die Autentifizierung. Ausreichend ist ein `nur lese` Zugriff. 
+  - `password:` Passwort für die Autentifizierung. 
+
+Zusätzliche Parameter bei der Verwendung von `pytds`
+  - `host`:  dsn Angabe für `pytds.connect()` aus `/etc/odbc.ini`
+  - `login_timeout`: login_timeout Angabe für `pytds.connect()`
+
+Zusätzliche Parameter bei der Verwendung von `pyodbc`
+  - `driver`: z.B. `{ODBC Driver 17 for SQL Server}`
+  - `server_ip`: Datenbank Server IP
+
+Im `SQL Server Management Studio` auf dem Varian Server muss ein User mit nur lese Rechten `db_datareader, public` für die Database `VARIAN` Default Schema `dbo` angelegt werden.
+
+### Aria 13.x
+
+Für die Verbindung zur Datenbank wird `pytds` verwendet.
+
+### Aria 16.x
+
+Für die Verbindung zur Datenbank wird `pyodbc` verwendet.
+Eine zusätzliche notwendige Installation für ODBC ist unter [Datenbankverbindung mit ODBC](/docs/de/Installation.md) beschrieben.
+
+## Optionen `dicom`
+
+- `servername` : Der als default verwendete DICOM Server Eintrag (<dicomname>)
+- `<dicomserver>`: Name des DICOM Servereintrags
+  - `aec`: Aufzurufender AE Title. Default "VMSDBD"
+  - `server_ip`: IP des Varian DICOM Servers. Default ""
+  - `server_port`: Listen Port des Varian DICOM Servers. Default 105
+  - `aet`: Aufrufender AE title unter . Default "GQA"
+  - `listen_port`: Der verwendete lokale DICOM Port. Default 50300
+  - `local_dir`:er lokale Speicherort für die geladenen DICOM Dateien Default: **data/DICOM**
+
+### Aria 13.x
+Die DICOM Optionen müssen denen des `DB Daemon Configuration [DICOM Service Daemon Configuration Wizard]` (DicomController.exe) auf dem Varian Server entsprechen.
+
+* Im Bereich **General** befinden sich die Settings für `aec` - **AE Title** und `server_port` - **Listen Port**
+* Im Bereich **Security** muss eine neue **Trusted Application** mit `aet` - **AE Title** der eigenen **IP-Address** und `listen_port` - **Port** angelegt werden.
+
+### Aria 16.x
+Die DICOM Optionen müssen denen der `DICOM Services` (VMS.DICOMServices.Configuration.exe) auf dem Varian Server entsprechen.
+
+* Varian DB Service starten und die `Service Settings` mit dem `Werkzeug Symbol` öffnen.
+* Mit `Add New `eine neue **Trusted Application** mit `aet` - **AE Title** der eigenen **IP-Address** und `listen_port` - **Port** anlegen.
+* Für beide `Character Set` Angaben **Unicode (ISO_IR 192)** auswählen.
+
+## Optionen `resultsPath`
+
+Der Pfad in dem die erstellten Testauswertungen abgelegt werden.
+
+## Optionen `units`
+
+Eine Benannte Liste (PatientenID:Gerät) um eine Aria Patienten ID einem Gerät zuzuordnen.
+Wir Empfehlen pro Gerät einen Patienten im Aria anzulegen.
+
+```json
+"units": {
+  "_QA Linac1" : "Linac-1",
+  "_QA Linac2" : "Linac-2"
+}
+```
+
+Für einen Aufruf von tests/test_app.py werden zusätzich die zu Testenden unit keys in `units_TestsApp:` angegeben.
+
+```json
+"units_TestsApp": ["_QA Linac1","_QA Linac2"]
+```
+
+## Optionen `pdf`
+
+- `pdf:`
+  - `page-style:` Default: mpdf_page.css
+  - `overlay-style:` Default: mpdf_overlay.css
+
+## Optionen `templates`
+
+Zusätzliche Templates für die PDF Erstellung. Default:
+```json
+"templates": {
+    "PDF-JT-filename": "{{'%04d' % AcquisitionYear}} - {{unit}} - {{energy}} - {{testId}}.pdf",
+    "PDF-JT-Titel": "GQA Jahrestest - {{testTag}} - {{unit}} - {{energy}}",
+    "PDF-JT-Betreff": "für: {{'%04d' % AcquisitionYear}}",
+    "PDF-MT-filename": "{{'%04d' % AcquisitionYear}}{{ '%02d' % AcquisitionMonth}} - {{unit}} - {{energy}} - {{testId}}.pdf",
+    "PDF-MT-Titel": "GQA Monatstest - {{testTag}} - {{unit}} - {{energy}}",
+    "PDF-MT-Betreff": "für: {{'%04d' % AcquisitionYear}}/{{ '%02d' % AcquisitionMonth}}"
+}
+```
+
+Bei diesen Angaben werden keine `variables` ersetzt.
 
 # templates werden zuerst eingefügt und dann alle `variables` ersetzt
 
-Bei Änderungen von *.tmpl Dateien diese als include angeben: `"{% include \"<name>.tmpl\" %}'"`
+Bei Änderungen von *.tmpl Dateien diese als include angeben: `{% include \"<name>.tmpl\" %}'`
 
 - `templates:` 
   - `PDF-HEADER:` Default: Inhalt von mpdf_header.tmpl
@@ -109,17 +196,19 @@ Bei Änderungen von *.tmpl Dateien diese als include angeben: `"{% include \"<na
 
 Diese Angaben werden aus den angegebenen Pfaden als `variables` für die Nutzung in Templates abgelegt.
 
-Default::
-    
-    {
-        "webserver" : "server.webserver", 
-        "resources" : "server.api.resources",
-        "globals" : "server.api.globals",
-        "api" : "server.api",
-        "mqtt" : "server.mqtt",
-        "title" : "server.webserver.title"
-    }
-    
+Default:
+
+```json
+{
+    "webserver" : "server.webserver", 
+    "resources" : "server.api.resources",
+    "globals" : "server.api.globals",
+    "api" : "server.api",
+    "mqtt" : "server.mqtt",
+    "title" : "server.webserver.title"
+}
+```
+
 Beispiel: `server.webserver.name` steht über `{{webserver.name}}` in Templates zur Verfügung.
 
 ## `variables` Variablen für templates

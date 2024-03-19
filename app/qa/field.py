@@ -2,73 +2,41 @@
 
 __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
-__credits__ = ["R.Bauer", "K.Loot"]
+__credits__ = ["R.Bauer", "K.Loot", "J.Wüller"]
 __license__ = "MIT"
-__version__ = "0.1.2"
+__version__ = "0.2.1"
 __status__ = "Prototype"
 
-from pylinac import FlatSym
-from pylinac.core.profile import MultiProfile
-from pylinac.core.geometry import Point
+from pylinac.field_analysis import FieldAnalysis, Protocol
+from pylinac.core.profile import Interpolation, FWXMProfilePhysical, SingleProfile
 
 from app.base import ispBase
 from app.image import DicomImage
 from app.check import ispCheckClass
 
 from isp.config import dict_merge
+from isp.plot import plotClass
 
 import numpy as np
 import pandas as pd
 from dotmap import DotMap
 
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
 
 # logging
 import logging
 logger = logging.getLogger( "MQTT" )
 
-import math
-
-def pointRotate(origin, point, angle):
-    """
-    Rotate a point counterclockwise by a given angle around a given origin.
-    with the usual axis conventions:
-        x increasing from left to right, y increasing vertically upwards.
-
-        The angle should be given in dec.
-
-    """
-    ox = origin.x
-    oy = origin.y
-    px = point.x
-    py = point.y
-
-    angle = math.radians( angle )
-
-    qx = ox + math.cos(angle) * (px - ox) - math.sin(angle) * (py - oy)
-    qy = oy + math.sin(angle) * (px - ox) + math.cos(angle) * (py - oy)
-
-    return Point( qx, qy )
-
-class FSImage( FlatSym, DicomImage ):
-
-    def __init__(self, pathOrData=None, **kwargs ):
-        """ Erweitert PFDicomImage um die eigene DicomImage Klasse
-
-        """
-        # die eigene Erweiterung
-        DicomImage.__init__( self, pathOrData )
-
-
-class qa_field( ispCheckClass ):
-    """Erweitert die Klasse , um eine eigene DicomImage Erweiterung zu verwenden
+class qa_field( ispCheckClass, FieldAnalysis ):
+    """Erweitert die Klasse FieldAnalysis mit ispCheckClass
 
     """
     def __init__( self, checkField, baseField=None, normalize: str="none" ):
         """ checkField und ggf baseField laden und ispCheckClass initialisieren
 
         """
-
+        self._is_FFF = False
         self.checkField = checkField
         self.baseField = baseField
 
@@ -76,220 +44,164 @@ class qa_field( ispCheckClass ):
             # checkField und baseField wurden angegeben, normalize möglich
             # self.image und self.baseImage initialisieren und ggf normalisieren
             ispCheckClass.__init__( self,
-                image=FSImage( self.checkField ),
-                baseImage=FSImage( self.baseField ),
+                image=DicomImage( self.checkField ),
+                baseImage=DicomImage( self.baseField ),
                 normalize=normalize
             )
+           
         elif self.checkField:
             # nur checkfield wurde angegeben
             # self.image initialisieren
             ispCheckClass.__init__( self,
-                image=FSImage( self.checkField )
+                image=DicomImage( self.checkField )
             )
+            if "info" in checkField:
+                self._is_FFF = checkField["info"]["is_FFF"]
 
-
-    def getProfileData( self ):
-        """Profildaten aus image holen flatness='iec' symmetry='pdq iec'
-        DONE: flatness selbst berechnen - flatness = (dmax-dmin) / np.mean(m)
+        self._is_analyzed = False
+        self._from_device = False
+        self._path = ""    
+     
+    def _plot_field_edges(self, profile: SingleProfile, axis: plt.Axes) -> None:
+        """Overrides pylinac _plot_field_edges function
+        
+        - Add center line 
+        - Add field_ratio=0.8 Area and Lines
 
         """
-        def flatness_calculation(profile):
-            """IEC specification for calculating flatness
-            der CAX wird aus 5 benachbarten Werten gebildet
-            """
-            cax_idx = profile.fwxm_center()
+        data80 = profile.field_data(
+            in_field_ratio=0.8, slope_exclusion_ratio=self._slope_exclusion_ratio
+        )
+        axis.axvline( 
+            data80["beam center index (rounded)"], 
+            color="r", 
+            linewidth=2,
+            linestyle="-."
+        )
+        w = data80["right index (rounded)"] - data80["left index (rounded)"]
+        axis.add_patch(
+            Rectangle(
+                (data80["left index (rounded)"], 0), w, 1.1,
+                fill=True,
+                alpha=0.2,
+                in_layout=False,
+                clip_on=False
+            )
+        )        
+        axis.axvline( 
+            data80["left index (rounded)"], 
+            color="r", 
+            linewidth=2,
+            linestyle="-."
+        )
+        axis.axvline( 
+            data80["right index (rounded)"], 
+            color="r", 
+            linewidth=2,
+            linestyle="-."
+        )
+       
+        # pylinac original 
+        data = profile.field_data(
+            in_field_ratio=1.0, slope_exclusion_ratio=self._slope_exclusion_ratio
+        )
+        axis.plot(
+            data["left index (rounded)"],
+            data["left value (@rounded)"],
+            "x",
+            color="red",
+            label="Field edge",
+        )
+        axis.plot(
+            data["right index (rounded)"],
+            data["right value (@rounded)"],
+            "x",
+            color="red",
+        )
+    
+    def _plot_profile(self, axis: plt.Axes = None, profile:SingleProfile=None, grid: bool = True, metadata={} ) -> None:
+        """Inspired by pylinac _plot_horiz and _plot_vert
 
-            # cax von 5 benachbarten Werten bilden
-            cax5 = np.mean( profile[cax_idx-2:cax_idx+3] )
+        Args:
+            axis (plt.Axes, optional): Axis to plot. Defaults to None.
+            profile (SingleProfile, optional): profile to plot. Defaults to None.
+            grid (bool, optional): plot grid. Defaults to True.
+            metadata (dict, optional): _description_. Defaults to {}.
+        """
+        if axis is None:
+            fig, axis = plt.subplots()
 
-            #print( cax, profile, cax5 )
+        axis.grid(grid)
+        
+        if self._from_device:
+            axis.set_xlabel("detector")
+            if self._interpolation_method == Interpolation.NONE:
+                markers = "b+"
+            else:
+                markers = "b"
+        else:
+            axis.set_xlabel("mm")
+            markers = "b"
 
-            dmax = profile.field_calculation(field_width=0.8, calculation='max')
-            dmin = profile.field_calculation(field_width=0.8, calculation='min')
-            flatness = (dmax - dmin) / cax5 * 100
-            lt_edge, rt_edge = profile.field_edges()
-            return flatness, dmax, dmin, lt_edge, rt_edge
+        axis.plot(
+            profile.x_indices,
+            profile.values,
+            markers,
+            label="Profile",
+        )
 
-        from pylinac.core.profile import SingleProfile
-        vert_position = 0.5
-        horiz_position = 0.5
+        # plot basic parameters on profile
+        self._plot_penumbra(profile, axis)
+        self._plot_field_edges(profile, axis)
+        if self._is_FFF:
+            self._plot_top(profile, axis)
+            self._plot_infield_slope(profile, axis)
+            axis.set_ylabel("Inflection")
+        else:
+            axis.set_ylabel("Flatness")
 
-        vert_profile = SingleProfile(self.image.array[:, int(round(self.image.array.shape[1] * vert_position))])
-        horiz_profile = SingleProfile(self.image.array[int(round(self.image.array.shape[0] * horiz_position)), :])
+        for name, item in self._protocol.value.items():
+            if item.get("plot"):
+                item["plot"](self, profile, axis)
 
-        vert_flatness, vert_max, vert_min, vert_lt, vert_rt = flatness_calculation(vert_profile)
-        horiz_flatness, horiz_max, horiz_min, horiz_lt, horiz_rt = flatness_calculation(horiz_profile)
-        flatness =  {
-            'method': "IEC",
-            'horizontal': {
-                'value': horiz_flatness, 'profile': horiz_profile, 'profile max': horiz_max, 'profile min': horiz_min, 'profile left': horiz_lt, 'profile right': horiz_rt,
-            },
-            'vertical': {
-                'value': vert_flatness, 'profile': vert_profile, 'profile max': vert_max, 'profile min': vert_min, 'profile left': vert_lt, 'profile right': vert_rt,
-            },
-        }
+        self.image.axTicks(axis, metadata.fieldTicks)
 
-        return {
-                'filename': self.infos["filename"],
-                'Kennung': self.infos["Kennung"],
-                'type': self.infos['testTags'],
-                'unit':  self.infos['unit'],
-                'energy': self.infos['energy'],
-                'gantry' : self.infos['gantry'],
-                'collimator': self.infos['collimator'],
-                'flatness': flatness
-               }
-
-    def plotProfile(self, data, metadata={} ):
+    def plotProfile(self, metadata={} ):
         """Ein horizontale und vertikale Profilachse plotten
 
         Parameters
         ----------
-        data : dict
-
         metadata : dict
-                profileSize
-                profileTitle - format Ersetzungen aus self.infos sind möglich
+            - profileSize
+            - profileTitle - format Ersetzungen aus self.infos sind möglich
+            - fieldTicks
         """
+
         # plotbereiche festlegen und profileSize als imgSize übergeben
-        fig, ax = self.initPlot( imgSize=metadata["profileSize"], nrows=2 )
-
-        # axes coordinates are 0,0 is bottom left and 1,1 is upper right
-
+        plot = plotClass( )
+        fig, ax = plot.initPlot( imgSize=metadata["profileSize"], ncols=2 )
+    
         # Kurven Informationen
         if not "profileTitle" in metadata:
-            metadata["profileTitle"] = "{Kennung} - Energie:{energy} Gantry:{gantry:.1f} Kolli:{collimator:.1f}"
+            metadata["profileTitle"] = "{Kennung} - Energie:{energy} Gantry:{gantry:.0f} Kolli:{collimator:.0f}"
 
-        ax[0].set_title( metadata["profileTitle"].format( **self.infos ) )
-
-        #x= np.divide(data["horizontal"]['profile'].values, self.image.dpmm + self.image.cax.x)
-        #ax[0].get_xaxis().set_ticks( np.arange( self.mm2dots_X(-200), self.mm2dots_X(200), self.mm2dots_X(50) ) )
-        #ax[0].get_xaxis().set_ticklabels([-200,0,200])
-        #ax[0].set_xlim([ self.mm2dots_X(-210), self.mm2dots_X(210) ])
-
-        #ax[0].set_title( 'horizontal' )
-
-        # 2. Kurve horizontal
-
-        # x-Achse
-        ax[0].get_xaxis().set_ticklabels([])
-        ax[0].get_xaxis().set_ticks( [] )
-
-        # y-achse
-        ax[0].get_yaxis().set_ticklabels([])
-        ax[0].get_yaxis().set_ticks( [] )
-
-        # kurve plotten
-        ax[0].plot(data["horizontal"]['profile'].values , color='b')
-
-        # links rechts min max
-        ax[0].axhline(data["horizontal"]['profile max'], color='g', linewidth=1 )
-        ax[0].axhline(data["horizontal"]['profile min'], color='g', linewidth=1 )
-        ax[0].axvline(data["horizontal"]['profile left'], color='g', linewidth=1, linestyle='-.')
-        ax[0].axvline(data["horizontal"]['profile right'], color='g', linewidth=1, linestyle='-.')
-
-        cax_idx = data["horizontal"]['profile'].fwxm_center()
-        ax[0].axvline(cax_idx, color='g', linewidth=1, linestyle='-.')
-
-        # limits nach dem autom. setzen der Kurve
-        xlim = ax[0].get_xlim()
-        width = xlim[1] + xlim[0]
-
-        ylim = ax[0].get_ylim()
-        height = ylim[1] + ylim[0]
-
-        ax[0].text(
-              width / 2, height / 10,
-              #self.image.mm2dots_X(0), # x-Koordinate: 0 ganz links, 1 ganz rechts
-              #self.image.mm2dots_Y(500), # y-Koordinate: 0 ganz oben, 1 ganz unten
-              'crossline', # der Text der ausgegeben wird
-              ha='center', # horizontalalignment
-              va='center', # verticalalignment
-              fontsize=20, #  'font' ist äquivalent
-              alpha=.5 # Floatzahl von 0.0 transparent bis 1.0 opak
-        )
-        #ax[0].text(2.5, 2.5, 'horizontal', ha='center', va='center', size=20, alpha=.5)
-
-        #ax[0].set_title('Horizontal')
-
-        # 2. Kurve vertikal
-
-        # label und Ticks abschalten
-        # x-Achse
-        ax[1].get_xaxis().set_ticklabels([])
-        ax[1].get_xaxis().set_ticks( [] )
-        # y-achse
-        ax[1].get_yaxis().set_ticklabels([])
-        ax[1].get_yaxis().set_ticks( [] )
-
-        # Kurve plotten
-        ax[1].plot(data["vertical"]['profile'].values, color='r')
-
-        # links rechts min max
-        ax[1].axhline(data["vertical"]['profile max'], color='g', linewidth=1)
-        ax[1].axhline(data["vertical"]['profile min'], color='g', linewidth=1)
-        ax[1].axvline(data["vertical"]['profile left'], color='g', linewidth=1, linestyle='-.')
-        ax[1].axvline(data["vertical"]['profile right'], color='g', linewidth=1, linestyle='-.')
-
-        cax_idx = data["vertical"]['profile'].fwxm_center()
-        ax[1].axvline(cax_idx, color='g', linewidth=1, linestyle='-.')
-        #ax[1].set_title('Vertikal')
-
-        # limits nach dem autom. setzen der Kurve
-        xlim = ax[0].get_xlim()
-        width = xlim[1] + xlim[0]
-
-        ylim = ax[0].get_ylim()
-        height = ylim[1] + ylim[0]
-        ax[1].text(
-                width / 2, height / 10,
-                #self.image.mm2dots_X(0),
-                #self.image.mm2dots_Y(500),
-                'inline',
-                ha='center',
-                va='center',
-                size=20,
-                alpha=.5
-        )
-
-        import matplotlib.pyplot as plt
+        # x-Achse (crossline)           
+        self._plot_profile( ax[0], profile=self.horiz_profile, grid=True, metadata=metadata)
+        ax[0].set_title( metadata["profileTitle"].format( **self.infos ) + " - crossline" )
+        
+        # y-Achse (inline)
+        self._plot_profile( ax[1], profile=self.vert_profile, grid=True, metadata=metadata)
+        ax[1].set_title( metadata["profileTitle"].format( **self.infos ) + " - inline" )
+      
         # Layout optimieren
-        plt.tight_layout(pad=0.4, w_pad=1.0, h_pad=1.0)
+        plt.tight_layout(pad=0.4, w_pad=2.0, h_pad=1.0)
         # data der Grafik zurückgeben
-        return self.getPlot()
-
+        return plot.getPlot()
 
     def find4Qdata( self, field=None ):
         """ Die transmissions eines 4 Quadranten Feldes im angegebenem Bereich ermitteln
 
         Reihenfolge in result 'Q2Q1','Q2Q3','Q3Q4','Q1Q4'
-
-        [start:stop:step, start:stop:step ]
-
-        roi = np.array([
-            [11, 12, 13, 14, 15],
-            [21, 22, 23, 24, 25],
-            [31, 32, 33, 34, 35],
-            [41, 42, 43, 44, 45],
-            [51, 52, 53, 54, 55]])
-        print( roi[ : , 0:1 ] )
-            [[11] [21] [31] [41] [51]] -  ( 1 Line2D gezeichnet LU-RO)
-        print( roi[ 0 ] )
-            [11 12 13 14 15] -  ( 1 Line2D gezeichnet LU-RO)
-        print( roi[ 0:1, ] )
-            [[11 12 13 14 15]] - ( 5 Line2D nicht gezeichnet)
-        print( roi[ 0:1, ][0] )
-            [11 12 13 14 15] - ( 1 Line2D gezeichnet LU-RO)
-        print( roi[ :, -1: ] )
-            [[15] [25] [35] [45] [55]] -  ( 1 Line2D gezeichnet LU-RO)
-        print( roi[ -1 ] )
-            [51 52 53 54 55] -  ( 1 Line2D gezeichnet LU-RO)
-        print( roi[ -1:, : ][0] )
-            [51 52 53 54 55] -  ( 1 Line2D gezeichnet LU-RO)
-
-        # richtungsumkehr
-        print( roi[ ::-1, -1: ] )
-            [[55] [45] [35] [25] [15]] -  ( 1 Line2D gezeichnet LO-RU)
 
         """
         if not field:
@@ -297,41 +209,49 @@ class qa_field( ispCheckClass ):
 
         roi = self.image.getRoi( field ).copy()
 
-
         result = {}
 
         result['Q2Q1'] = {
             'name' : 'Q2 - Q1',
-            'profile' : MultiProfile( roi[:, 0:1] ),
+            'profile' : FWXMProfilePhysical( 
+                roi[ : , 0 ],
+                dpmm=self.image.dpmm 
+            ),
             'field' : field
+
         }
         result['Q2Q3'] = {
             'name' : 'Q2 - Q3',
-            'profile' : MultiProfile( roi[ 0:1, ][0] ),
+            'profile' : FWXMProfilePhysical( 
+                roi[ 0 ],
+                dpmm=self.image.dpmm 
+            ),
             'field' : field
         }
         result['Q3Q4'] = {
             'name' : 'Q3 - Q4',
-            'profile' : MultiProfile( roi[ :, -1: ] ),
+            'profile' : FWXMProfilePhysical( 
+                roi[ : , -1 ],
+                dpmm=self.image.dpmm 
+            ),
             'field' : field
         }
         result['Q1Q4'] = {
             'name' : 'Q1 - Q4',
-            'profile' : MultiProfile( roi[ -1:, : ][0] ),
+            'profile' : FWXMProfilePhysical( 
+                roi[ -1 ],
+                dpmm=self.image.dpmm 
+            ),
             'field' : field
         }
 
-        #print( result )
-
         for k in result:
-            #print(k)
             p_min = np.min( result[k]["profile"] )
             p_max = np.max( result[k]["profile"] )
 
             result[k]["min"] = p_min
             result[k]["max"] = p_max
             result[k]["value"] = (lambda x: p_min if x < 0.9 else p_max )(p_min)
-
 
         return {
                 'filename': self.infos["filename"],
@@ -355,8 +275,9 @@ class qa_field( ispCheckClass ):
         """
 
         # plotbereiche festlegen
-        fig, ax = self.initPlot( metadata["profileSize"] )
-        #print("plot4Qprofile", data)
+        plot = plotClass( )
+        fig, ax = plot.initPlot(  metadata["profileSize"] )
+
         ax.set_title(data["name"])
 
         # kurve plotten
@@ -364,22 +285,21 @@ class qa_field( ispCheckClass ):
 
         # y Achsenlimit
         ax.set_ylim(0.5, 1.5)
-
+        
         # x-Achse
-        ax.get_xaxis().set_ticklabels([ data["name"][0:2], data["name"][-2:] ])
         ax.get_xaxis().set_ticks( [0, len(data["profile"].values) ] )
-
+        ax.get_xaxis().set_ticklabels([ data["name"][0:2], data["name"][-2:] ])
+        
         # y-achse anzeigen
-        ax.get_yaxis().set_ticklabels( [0.75, 1, 1.25] )
-        ax.get_yaxis().set_ticks( [0.75, 1, 1.25] )
-
+        ax.get_yaxis().set_ticks( [0.75, 1.0, 1.25] )
+        ax.get_yaxis().set_ticklabels( [0.75, 1.0, 1.25] )
+        
         # grid anzeigen
         ax.grid( True )
 
         plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
         # data der Grafik zurückgeben
-        return self.getPlot()
-
+        return plot.getPlot()
 
 class checkField( ispBase ):
 
@@ -392,21 +312,21 @@ class checkField( ispBase ):
 
         Parameters
         ----------
-        fileData : TYPE
-            DESCRIPTION.
-        overrideMD : TYPE, optional
-            DESCRIPTION. The default is {}.
-        passedOn : TYPE, optional
-            DESCRIPTION. The default is True.
-        withOffsets : TYPE, optional
-            DESCRIPTION. The default is False.
+        fileData : pandas.DataFrame
+
+        md : dict, optional
+            metadata
 
         Returns
         -------
-        TYPE
-            DESCRIPTION.
-        result : TYPE
-            DESCRIPTION.
+        pdfFilename : str
+            Name der erzeugten Pdfdatei
+        result : list
+            list mit dicts der Testergebnisse
+
+        See Also
+        --------
+        isp.results : Aufbau von result
 
         """
         # used on progress
@@ -417,8 +337,6 @@ class checkField( ispBase ):
 
         # prepare metadata
         md = dict_merge( DotMap( md ), self.metadata )
-
-        #md.pprint(pformat='json')
 
         def evaluate( df_group ):
             """Evaluate grouped Fields.
@@ -488,7 +406,6 @@ class checkField( ispBase ):
         # call evaluate with sorted and grouped fields
         fileData.sort_values(md["series_sort_values"]).groupby( md["series_groupby"] ).apply( evaluate )
 
-        #print("one2n", result)
         return self.pdf.finish(), result
 
 
@@ -527,14 +444,11 @@ class checkField( ispBase ):
 
         } ), self.metadata )
 
-        #md.pprint(pformat='json')
-
         def groupBySeries( df_group ):
             """Datumsweise Auswertung und PDF Ausgabe
             Die Daten kommen nach doserate und ME sortiert
             """
-            #print("doMT_7_2", df_group[ ["energy", "doserate", "ME"] ] )
-
+           
             # get base and fields check number of data
             ok, df_base, df_fields = self.evaluationPrepare(df_group, md, result)
             if not ok:
@@ -542,12 +456,11 @@ class checkField( ispBase ):
 
             result_doserate = []
 
-            def groupByDoserate( df_doserate ):
+            def groupByDoserate( df_doserate ):                
                 text = ""
                 # in den Toleranzangaben der config steht die default query
                 openFieldQuery = md.current.tolerance.default.check.query
                 fieldQuery = openFieldQuery.replace("==", "!=")
-                #print( openFieldQuery, fieldQuery )
 
                 # das offene Feld bestimmen
                 df_base = df_doserate.query( openFieldQuery )
@@ -561,12 +474,9 @@ class checkField( ispBase ):
                     'Kennung': baseField.infos["RadiationId"],
                     'doserate': baseField.infos["doserate"],
                     'ME': baseField.infos["ME"],
-                 #   'baseMeanDose': baseMeanDose,
                     'fieldMeanDose': baseMeanDose,
-                    'diff': (baseMeanDose - 1.0) * 100
-
+                    'diff': np.nan # (baseMeanDose - 1.0) * 100
                 }]
-
                 # alle anderen filtern
                 df_fields = df_doserate.query( fieldQuery )
 
@@ -596,16 +506,13 @@ class checkField( ispBase ):
 
                 # aus den daten ein DataFrame machen
                 evaluation_df = pd.DataFrame( data )
-
                 # check tolerance - printout tolerance, evaluation_df -  md["tolerance_field"],
                 acceptance = self.evaluationResult( evaluation_df, md, result_doserate, printResultIcon=False )
-
                 # acceptance dieser Gruppe zurückgeben
                 return acceptance
 
             #
             # Gruppiert nach doserate abarbeiten und min zurückgeben
-            #
             acceptance = df_group.groupby( [ "doserate" ] ).apply( groupByDoserate ).min()
 
             #
@@ -630,11 +537,27 @@ class checkField( ispBase ):
     def doJT_7_2(self, fileData):
         """Jahrestest: 7.2.  ()
         Abhängigkeit der Kalibrierfaktoren von der Monitorrate
+
+        Parameters
+        ----------
+        fileData : pandas.DataFrame
+
+        Returns
+        -------
+        pdfFilename : str
+            Name der erzeugten Pdfdatei
+        result : list
+            list mit dicts der Testergebnisse
+
+        See Also
+        --------
+        isp.results : Aufbau von result
+        
         """
 
         # place for testing parameters
         md = dict_merge( DotMap( {
-
+            
         } ), self.metadata )
 
         return self._doField_one2n(fileData, md=md )
@@ -643,10 +566,26 @@ class checkField( ispBase ):
     def doJT_7_3(self, fileData):
         """Jahrestest: 7.3.  ()
         Abhängigkeit der Kalibrierfaktoren vom Dosismonitorwert
+
+        Parameters
+        ----------
+        fileData : pandas.DataFrame
+
+        Returns
+        -------
+        pdfFilename : str
+            Name der erzeugten Pdfdatei
+        result : list
+            list mit dicts der Testergebnisse
+
+        See Also
+        --------
+        isp.results : Aufbau von result
+
         """
         # place for testing parameters
         md = dict_merge( DotMap( {
-
+            
         } ), self.metadata )
 
         return self._doField_one2n(fileData, md=md )
@@ -690,7 +629,6 @@ class checkField( ispBase ):
             },
             # "field_count": 3,
             "manual": {
-                "filename": self.metadata.info["anleitung"],
                 "attrs": {"class":"layout-fill-width"},
             },
             "tolerance_pdf" : {
@@ -699,14 +637,17 @@ class checkField( ispBase ):
             },
 
             "doseArea" : { "X1":-5, "X2": 5, "Y1": -5, "Y2": 5 },
-            "_imgSize" : { "width" : 80, "height" : 80},
+            "plotImage_pdf": {
+                "area" : { "width" : 80, "height" : 80 },
+                "attrs": {"margin-left":"5mm"} ,
+            },
             "plotImage_field" : 10,
             "evaluation_table_pdf" : {
                 "attrs": { "class":"layout-fill-width", "margin-top": "5mm" },
                 "fields": [
                     {'field': 'Kennung', 'label':'Kennung', 'format':'{0}', 'style': [('text-align', 'left')] },
-                    {'field': 'gantry', 'label':'Gantry', 'format':'{0:1.1f}' },
-                    {'field': 'collimator','label':'Kollimator', 'format':'{0:1.1f}' },
+                    {'field': 'gantry', 'label':'Gantry', 'format':'{0:.0f}' },
+                    {'field': 'collimator','label':'Kollimator', 'format':'{0:.0f}' },
                     {'field': 'baseMeanDose', 'label':'Dosis', 'format':'{0:.5f}' },
                     {'field': 'fieldMeanDose', 'label':'Prüf Dosis', 'format':'{0:.5f}' },
                     {'field': 'diff', 'label':'Abweichung [%]', 'format':'{0:.2f}' },
@@ -750,12 +691,12 @@ class checkField( ispBase ):
 
             # Bild anzeigen
             img = baseField.image.plotImage( original=False
-                        , plotTitle="{Kennung} - G:{gantry:01.1f} K:{collimator:01.1f}"
+                        , plotTitle="{Kennung} - G:{gantry:.0f} K:{collimator:.0f}"
                         , field=md["plotImage_field"]
                         , invert=False # , cmap="jet"
                         , plotCax=True, plotField=True
                     )
-            self.pdf.image(img, md["_imgSize"], attrs={"margin-left":"5mm"} )
+            self.pdf.image(img, **md.plotImage_pdf )
 
             # alle anderen durchgehen
             for info in df_fields.itertuples():
@@ -772,13 +713,15 @@ class checkField( ispBase ):
                       'diff': (fieldDose-baseMeanDose) / baseMeanDose * 100,
                 } )
                 # Bild anzeigen
-                img = checkField.image.plotImage( original=False
-                            , plotTitle="{Kennung} - G:{gantry:01.1f} K:{collimator:01.1f}"
-                            , field=md["plotImage_field"]
-                            , invert=False # , cmap="jet"
-                            , plotCax=True, plotField=True
-                        )
-                self.pdf.image(img, md["_imgSize"], attrs={"margin-left":"5mm"} )
+                img = checkField.image.plotImage( 
+                    original=False,
+                    plotTitle="{Kennung} - G:{gantry:.0f} K:{collimator:.0f}",
+                    field=md["plotImage_field"],
+                    invert=False, # cmap="jet",
+                    plotCax=True, 
+                    plotField=True
+                )
+                self.pdf.image(img, **md.plotImage_pdf )
 
                 # progress pro file stimmt nicht immer genau (baseimage)
                 # 40% für die dicom daten 40% für die Auswertung 20 % für das pdf
@@ -798,8 +741,14 @@ class checkField( ispBase ):
         # abschließen pdfdaten und result zurückgeben
         return self.pdf.finish(), result
 
-    def doJT_7_5(self, fileData):
+    def doJT_7_5_pre2020(self, fileData):
         """Jahrestest: 7.5.  ()
+        Der Test überprüft die Konstanz des Outputs unter Rotation in vier Winkelsegmenten.
+        Überprüft wird jeweils ein 10x10 Feld.
+        Die 45°-Segmente erhalten für den maximal bzw. minimal möglichen winkelbezogenen 
+        Dosismonitorwert bei 6MV bspw. 900MU mit DR600 bzw. 3MU mit DR20.
+
+        Energie: alle
 
         Parameters
         ----------
@@ -822,7 +771,7 @@ class checkField( ispBase ):
         # holds evaluation results
         result=[]
 
-        # prepare metadata
+        # prepare metadata werden von den Angaben in der config überschrieben
         md = dict_merge( DotMap( {
             "series_sort_values": ["gantry", "StopAngle"],
             "series_groupby": ["day"],
@@ -834,7 +783,6 @@ class checkField( ispBase ):
                 "sub_fields" : "GantryRtnDirection != 'NONE'",
             },
             "manual": {
-                "filename": self.metadata.info["anleitung"],
                 "attrs": {"class":"layout-fill-width", "margin-bottom": "5mm"},
             },
             "doseArea" : { "X1":-5, "X2": 5, "Y1": -5, "Y2": 5 },
@@ -848,8 +796,174 @@ class checkField( ispBase ):
                 "plotField": True
             },
             "plotImage_pdf": {
-                "area" : { "width" : 90, "height" : 90 },
-                #"attrs": "",
+                "area" : { "width" : 75, "height" : 75 },
+                "attrs": { "margin-left": "10mm" }
+            },
+            "evaluation_text": True,
+            "tolerance_field": "diff",
+            "tolerance_pdf": {
+                "mode": "text"
+            },
+            "evaluation_table_pdf" : {
+                "attrs": { "class":"layout-fill-width", "margin-top": "5mm" },
+                "fields": [
+                    {'field': 'Kennung', 'label':'Kennung', 'format':'{0}', 'style': [('text-align', 'left')] },
+                 #   {'field': 'ME', 'label':'MU' },
+                    {'field': 'von_nach', 'label':'Gantry' },
+                    {'field': 'baseMeanDose', 'label':'Dosis', 'format':'{0:.5f}' },
+                    {'field': 'fieldMeanDose', 'label':'Prüf Dosis', 'format':'{0:.5f}' },
+                    {'field': 'diff', 'label':'Abweichung [%]', 'format':'{0:.2f}' },
+                    {'field': 'diff_passed', 'label':'Passed' }
+                ],
+            },
+
+            "table_sort_values_by": ["ME"],
+            "table_sort_values_ascending": [True],
+
+        } ), self.metadata )
+ 
+        def evaluate( df_group ):
+            """Evaluate grouped Fields
+
+            create PDF output and fills result
+
+            Parameters
+            ----------
+            df_group : pandas Dataframe
+
+
+            felder unter 0° sind basis für die winkel felder
+            Auswertung je doserate
+            """
+            # get base and fields, check number of data
+            ok, df_base, df_fields = self.evaluationPrepare(df_group, md, result)
+            if not ok:
+                return
+
+            data = []
+            # gruppiert nach gantry und kollimator
+            def sub_evaluate( df ):
+                # get base and fields, check number of data
+                df_base = df.query( md.querys[ "sub_base"] )
+                df_fields = df.query( md.querys[ "sub_fields"] )
+
+                # base Field und dosis bereitstellen
+                baseField = qa_field( self.getFullData( df_base.loc[df_base.index[0]] ) )
+                baseMeanDose = baseField.getMeanDose( md["doseArea"] )
+
+                # zusätzliche Spalte in fields anlegen
+                df_fields["von_nach"] = df_group[['gantry','StopAngle']].apply(lambda x : '{:.1f} -> {:.1f}'.format(x[0],x[1]), axis=1)
+
+                data.append({
+                    'Kennung': baseField.infos["Kennung"],
+                    'von_nach': "{:01.1f}".format( baseField.infos["gantry"] ),
+                    'ME': baseField.infos["ME"],
+                    'baseMeanDose': baseMeanDose,
+                    'fieldMeanDose': np.nan,
+                    'diff': np.nan,
+                })
+
+                # alle Felder durchgehen
+                for info in df_fields.itertuples():
+                    # prüf Field und dosis bereitstellen
+                    checkField = qa_field( self.getFullData(info), normalize="none" )
+                    fieldDose = checkField.getMeanDose( md["doseArea"] )
+                    #
+                    data.append({
+                            'Kennung': checkField.infos["Kennung"],
+                            'von_nach': checkField.infos["von_nach"],
+                            'ME': checkField.infos["ME"],
+                            'baseMeanDose': np.nan,
+                            'fieldMeanDose': fieldDose,
+                            'diff': (fieldDose-baseMeanDose) / baseMeanDose * 100,
+                    })
+                    
+                    # Bild anzeigen
+                    img = checkField.image.plotImage( **md["plotImage"] )
+                    self.pdf.image(img, **md["plotImage_pdf"] )
+
+                    # progress pro file stimmt nicht immer genau (baseimage)
+                    # 40% für die dicom daten 40% für die Auswertung 20 % für das pdf
+                    self.fileCount += 1
+                    if hasattr( logger, "progress"):
+                        logger.progress( md["testId"],  40 + ( 40 / filesMax * self.fileCount ) )
+
+            # sub evaluate
+            #
+            df_group.groupby( md["sub_series_groupby"] ).apply( sub_evaluate )
+
+            evaluation_df = pd.DataFrame( data )
+
+            # check tolerance - printout tolerance, evaluation_df and result icon
+            acceptance = self.evaluationResult( evaluation_df, md, result, md["tolerance_field"] )
+
+        # call evaluate with sorted and grouped fields
+        fileData.sort_values(md["series_sort_values"]).groupby( md["series_groupby"] ).apply( evaluate )
+
+        # abschließen pdfdaten und result zurückgeben
+        return self.pdf.finish(), result
+
+    def doJT_7_5(self, fileData):
+        """Jahrestest: 7.5.  ()
+        Der Test überprüft die Konstanz des Outputs unter Rotation in vier Winkelsegmenten.
+        Überprüft wird jeweils ein 10x10 Feld.
+        Die 45°-Segmente erhalten für den maximal bzw. minimal möglichen winkelbezogenen 
+        Dosismonitorwert bei 6MV bspw. 900MU mit DR600 bzw. 3MU mit DR20.
+
+        Energie: alle
+
+        Parameters
+        ----------
+        fileData : pandas.DataFrame
+
+        Returns
+        -------
+        pdfFilename : str
+            Name der erzeugten Pdfdatei
+        result : list
+            list mit dicts der Testergebnisse
+
+        See Also
+        --------
+        isp.results : Aufbau von result
+        """
+
+        if self.metadata.get("AcquisitionYear", 0) < 2020:
+            return self.doJT_7_5_pre2020( fileData )
+        
+        # used on progress
+        filesMax=len( fileData )
+        self.fileCount = 0
+        # holds evaluation results
+        result=[]
+
+        # prepare metadata werden von den Angaben in der config überschrieben
+        md = dict_merge( DotMap( {
+            "series_sort_values": ["gantry", "StopAngle"],
+            "series_groupby": ["day"],
+            "sub_series_groupby": ["energy"],
+            "querys" : {
+                "base" : "GantryRtnDirection == 'NONE'",
+                "fields" : "GantryRtnDirection != 'NONE'",
+                "sub_base" : "GantryRtnDirection == 'NONE'",
+                "sub_fields" : "GantryRtnDirection != 'NONE'",
+            },
+            "manual": {
+                "attrs": {"class":"layout-fill-width", "margin-bottom": "5mm"},
+            },
+            "doseArea" : { "X1":-5, "X2": 5, "Y1": -5, "Y2": 5 },
+            "plotImage": {
+                "original": False,
+                "plotTitle": "{Kennung} - G:{von_nach}",
+                "field": 10,
+                "invert": True,
+                "cmap": "gray_r", # gray_r twilight jet
+                "plotCax": True,
+                "plotField": True
+            },
+            "plotImage_pdf": {
+                "area" : { "width" : 45, "height" : 45 },
+                "attrs": { },
             },
 
             "evaluation_table_pdf" : {
@@ -869,14 +983,6 @@ class checkField( ispBase ):
             "table_sort_values_ascending": [True],
 
         } ), self.metadata )
-        # alte Auswertung
-        pre2020 = False
-        if md.get("AcquisitionYear", 0) < 2020:
-            md.evaluation_text = ""
-            md.tolerance_pdf.mode = "text"
-            pre2020 = True
-
-        #md.pprint(pformat='json')
 
         def evaluate( df_group ):
             """Evaluate grouped Fields
@@ -900,7 +1006,6 @@ class checkField( ispBase ):
             # gruppiert nach gantry und kollimator
             def sub_evaluate( df ):
                 # get base and fields, check number of data
-              #  print("doJT_7_5", df[ [ "RadiationId", "gantry", "StopAngle", "collimator", "ME", "doserate", "check_subtag" ] ])
                 df_base = df.query( md.querys[ "sub_base"] )
                 df_fields = df.query( md.querys[ "sub_fields"] )
 
@@ -911,38 +1016,19 @@ class checkField( ispBase ):
                 # zusätzliche Spalte in fields anlegen
                 df_fields["von_nach"] = df_group[['gantry','StopAngle']].apply(lambda x : '{:.1f} -> {:.1f}'.format(x[0],x[1]), axis=1)
 
-                if pre2020 == True:
-                    data.append({
-                        'Kennung': baseField.infos["Kennung"],
-                        'von_nach': "{:01.1f}".format( baseField.infos["gantry"] ),
-                        'ME': baseField.infos["ME"],
-                        'baseMeanDose': baseMeanDose,
-                        'fieldMeanDose': np.nan,
-                        'diff': np.nan,
-                    })
                 # alle Felder durchgehen
                 for info in df_fields.itertuples():
                     # prüf Field und dosis bereitstellen
                     checkField = qa_field( self.getFullData(info), normalize="none" )
                     fieldDose = checkField.getMeanDose( md["doseArea"] )
                     #
-                    if pre2020 == True:
-                        data.append({
-                              'Kennung': checkField.infos["Kennung"],
-                              'von_nach': checkField.infos["von_nach"],
-                              'ME': checkField.infos["ME"],
-                              'baseMeanDose': np.nan,
-                              'fieldMeanDose': fieldDose,
-                              'diff': (fieldDose-baseMeanDose) / baseMeanDose * 100,
-                        })
-                    else:
-                        data.append({
-                              'Kennung': checkField.infos["Kennung"],
-                              'von_nach': checkField.infos["von_nach"],
-                              'ME': checkField.infos["ME"],
-                              'baseMeanDose': baseMeanDose,
-                              'fieldMeanDose': fieldDose,
-                        })
+                    data.append({
+                        'Kennung': checkField.infos["Kennung"],
+                        'von_nach': checkField.infos["von_nach"],
+                        'ME': checkField.infos["ME"],
+                        'baseMeanDose': baseMeanDose,
+                        'fieldMeanDose': fieldDose,
+                    })
                     # Bild anzeigen
                     img = checkField.image.plotImage( **md["plotImage"] )
                     self.pdf.image(img, **md["plotImage_pdf"] )
@@ -960,7 +1046,7 @@ class checkField( ispBase ):
             evaluation_df = pd.DataFrame( data )
 
             # check tolerance - printout tolerance, evaluation_df and result icon
-            acceptance = self.evaluationResult( evaluation_df, md, result, 'diff' )
+            acceptance = self.evaluationResult( evaluation_df, md, result, md["tolerance_field"] )
 
         # call evaluate with sorted and grouped fields
         fileData.sort_values(md["series_sort_values"]).groupby( md["series_groupby"] ).apply( evaluate )
@@ -1004,27 +1090,66 @@ class checkField( ispBase ):
               #  "field_count": self.metadata.current.get("fields", 0), # 4
             },
             "manual": {
-                "filename": self.metadata.info["anleitung"],
-                "attrs": {"class":"layout-fill-width", "margin-bottom": "5mm"},
+                "attrs": { "class":"layout-fill-width" },
             },
-            "_clip" : { "width":"50mm", "height":"45mm" },
-            "_formel": { "margin-top":"15mm", "width":"21mm", "height":"11mm"},
-            "_table": { "width":105, "height": 45, "left":75, "top":215 },
-            "_chart" : {"width" : 90, "height" : 70},
-            "profileSize" : { "width" : 90, "height" : 70 },
-            "profileTitle" : "Gantry: {gantry}°",
+            "fieldTicks" : { "X1":-200, "X2": 200, "xStep":50, "Y": "auto" },
+            "analyze" :{
+                "edge_detection_method": "FWHM", # Edge.FWHM
+                "in_field_ratio": 0.8,
+            },
+            "analyze_FFF" :{
+                "edge_detection_method": "Inflection Hill", # Edge.INFLECTION_HILL
+                "in_field_ratio": 0.8,
+            },
+            "_clip" : { "width":"35mm", "height":"50mm" },
+            "mathtext_flatness": { 
+                "text" : "",
+                "area": { 
+                    "left":40, "top": 210, 
+                    "width":21, "height": 20
+                }            
+            },
+            "mathtext_inflection": { 
+                "text" : "",
+                "area": { 
+                    "left":40, "top": 210, 
+                    "width":21, "height": 20
+                }            
+            },
+            "mathtext_symmetry": { 
+                "text" : "",
+                "area": { 
+                    "left":40, "top": 230, 
+                    "width":21, "height" : 22
+                }
+            },
+            "_table": { "width" :105, "height": 45, "left":65, "top":210 },
+            "_chart" : {"width" :180, "height" : 35 },
+            "_info" : { "left":65, "top":240 },
+            "profileSize" : { "width" : 180, "height" : 35 },
+            "profileTitle" : "Gantry: {gantry:.0f}°",
             "table_fields" : [
-                {'field': 'gantry', 'label':'Gantry', 'format':'{0:.1f}' },
-                {'field': 'crossline', 'label':'crossline [%]', 'format':'{0:.1f}' },
-               # {'field': 'crossline_soll', 'label':'c-soll [%]', 'format':'{0:.1f}' },
-                {'field': 'c_soll', 'label':'c-soll [%]', 'format':'{0:.1f}' },
+                {'field': 'gantry', 'label':'Gantry', 'format':'{0:.0f}' },
+                {'field': 'c_flat', 'label':'c-flat [%]', 'format':'{0:.1f}' },
+                {'field': 'c_flat_passed', 'label':'c-flat'},
+                {'field': 'i_flat', 'label':'i-flat [%]', 'format':'{0:.1f}' },
+                {'field': 'i_flat_passed', 'label':'i-flat'},
+                {'field': 'c_sym', 'label':'c-sym [%]', 'format':'{0:.1f}' },
+                {'field': 'c_sym_passed', 'label':'c-sym'},
+                {'field': 'i_sym', 'label':'i-sym [%]', 'format':'{0:.1f}' },
+                {'field': 'i_sym_passed', 'label':'i-sym'},
 
-                {'field': 'crossline_acceptance', 'label':'c-abw.[%]', 'format':'{0:.3f}' },
-                {'field': 'inline', 'label':'inline [%]', 'format':'{0:.1f}' },
-               # {'field': 'inline_soll', 'label':'i-soll [%]', 'format':'{0:.1f}' },
-                {'field': 'i_soll', 'label':'i-soll [%]', 'format':'{0:.1f}' },
-                {'field': 'inline_acceptance', 'label':'i-abw.[%]', 'format':'{0:.3f}' },
-               # {'field': 'i_diff', 'label':'i-abw.[%]', 'format':'{0:.3f}' }
+            ],
+            "table_fields_FFF" : [
+                {'field': 'gantry', 'label':'Gantry', 'format':'{0:.0f}' },
+                {'field': 'c_flat', 'label':'Inf [%]', 'format':'{0:.1f}' },
+                {'field': 'c_flat_passed', 'label':'c-Inf'},
+                {'field': 'i_flat', 'label':'i-Inf [%]', 'format':'{0:.1f}' },
+                {'field': 'i_flat_passed', 'label':'i-Inf'},
+                {'field': 'c_sym', 'label':'c-sym [%]', 'format':'{0:.1f}' },
+                {'field': 'c_sym_passed', 'label':'c-sym'},
+                {'field': 'i_sym', 'label':'i-sym [%]', 'format':'{0:.1f}' },
+                {'field': 'i_sym_passed', 'label':'i-sym'},
 
             ]
         } ), self.metadata )
@@ -1046,33 +1171,44 @@ class checkField( ispBase ):
                 return
 
             data = []
+            isFFF = False
             # alle Felder durchgehen
             for info in df_group.itertuples():
+                checkField = qa_field( self.getFullData( info ), normalize="none" )         
 
-                checkField = qa_field( self.getFullData( info ), normalize="none" )
-
-                # Analyse nach DIN (max-min)/center rückgabe in valueiec
-                profile = checkField.getProfileData()
-                # crossplane und inplane
-                c = profile["flatness"]["horizontal"]
-                i = profile["flatness"]["vertical"]
-                # key für tolerance
-                #sollKeyC = "{gantry:1.0f}-cl".format( **checkField.infos )
-                #sollKeyI = "{gantry:1.0f}-il".format( **checkField.infos )
-                #sollKey = "{gantry:1.0f}-cl".format( **checkField.infos )
-
+                # Protocol.VARIAN
+                #
+                # flatness = 100*|Dmax - Dmin|/(Dmax + Dmin)
+                # symetrie = 100*max(|Lpt - Rpt|/Dcax
+                if checkField._is_FFF:
+                    isFFF = True
+                    checkField.analyze( 
+                        protocol=Protocol.VARIAN, 
+                        edge_detection_method=md["analyze_FFF"]["edge_detection_method"], # Edge.INFLECTION_HILL,
+                        in_field_ratio=md["analyze_FFF"]["in_field_ratio"],
+                        is_FFF = checkField._is_FFF,
+                        # penumbra = (20, 80),
+                    )
+                else: 
+                    checkField.analyze( 
+                        protocol=Protocol.VARIAN, 
+                        edge_detection_method=md["analyze"]["edge_detection_method"], # Edge.FWHM,
+                        in_field_ratio=md["analyze"]["in_field_ratio"],
+                        is_FFF = checkField._is_FFF,
+                        # penumbra = (20, 80),
+                    )
+                results = checkField.results_data()
+                
                 # Bild anzeigen
-                img =  checkField.plotProfile( profile["flatness"], metadata=md )
+                img =  checkField.plotProfile( metadata=md )
                 self.pdf.image(img, md["_chart"], {"padding":"2mm 0 2mm 0"} )
 
                 data.append( {
                     'gantry' : checkField.infos["gantry"],
-                    'crossline': c["value"],
-                    'c_soll'  : 5,
-                    #'c_soll' : toleranz.get( sollKeyC, np.nan ),
-                    'inline': i["value"],
-                    'i_soll' :  5,
-                    #'i_soll' : toleranz.get( sollKeyI, np.nan ),
+                    'c_flat': results.protocol_results["flatness_horizontal"],
+                    'c_sym': results.protocol_results["symmetry_horizontal"],
+                    'i_flat': results.protocol_results["flatness_vertical"],
+                    'i_sym': results.protocol_results["symmetry_vertical"],
                 } )
 
                 # progress pro file stimmt nicht immer genau (baseimage)
@@ -1083,48 +1219,70 @@ class checkField( ispBase ):
 
             # Grafik und Formel anzeigen
             self.pdf.image( "qa/Profile.svg", attrs=md["_clip"])
-            self.pdf.mathtext( r"$\frac{D_{max} - D_{min}} {D_{CAX}}$", attrs=md["_formel"]  )
-
-
+            if isFFF == True:
+                label = md.current.tolerance.flatness.get("label", "")
+                self.pdf.mathtext( label + " =\n" + r"$A+\frac{B-A} {1+\frac{C^D}{x}}$", area=md["mathtext_flatness"]["area"]  )
+            else:
+                label = md.current.tolerance.flatness.get("label", "")
+                #self.pdf.mathtext( label + " =\n" + r"$\frac{\vert D_{max} - D_{min}\vert} {D_{CAX}}$", area=md["mathtext_flatness"]["area"]  )
+                self.pdf.mathtext( label + " =\n" + r"100 * $\frac{\vert D_{max} - D_{min}\vert} {(D_{max} + D_{min})}$", area=md["mathtext_flatness"]["area"]  )
+                
+            label = md.current.tolerance.symmetry.get("label", "")
+            self.pdf.mathtext( label + " =\n" + r"$100 * \frac{\vert L_{pt} - R_{pt}\vert} {D_{CAX}}$", area=md["mathtext_symmetry"]["area"]  )
+            
             # dataframe erstellen
             df = pd.DataFrame( data )
-            # berechnete Splaten einfügen
-            #df['c_diff'] = (df.crossline - df.c_soll ) / df.c_soll * 100
-            #df['i_diff'] = (df.inline - df.i_soll ) / df.i_soll * 100
-
 
             #
             # Abweichung ausrechnen und Passed setzen
             #
+            # 
             check = [
-                { "field": 'crossline', 'tolerance':'default' },
-                { "field": 'inline', 'tolerance':'default' }
+                { "field": 'c_flat', 'tolerance': 'flatness' },
+                { "field": 'i_flat', 'tolerance': 'flatness' },
+                { "field": 'c_sym', 'tolerance': 'symmetry' },
+                { "field": 'i_sym', 'tolerance': 'symmetry' }
             ]
             acceptance = self.check_acceptance( df, md, check, withSoll=True )
 
-            #print( df.columns )
-            # 'gantry', 'crossline', 'inline', 'crossline_soll',
-            # 'crossline_acceptance', 'crossline_passed', 'inline_soll',
-            # 'inline_acceptance', 'inline_passed'
-
+            tolerance_format = '<b>{}</b> <span style="position:absolute;left:75mm;">{}</span> <span style="position:absolute;left:125mm;">{}</span> <br>'
+            infoText = tolerance_format.format("<br>", "<b>Warnung [%]</b>", "<b>Fehler [%]</b>")
+            infos = []
+            for tolerance_name, tolerance in md.current.tolerance.items():
+                tolerance_check = tolerance.check
+                infos.append({
+                    "Prüfung" : tolerance.get("label", ""),
+                    "Warnung" : tolerance.warning.f,
+                    "Fehler" :  tolerance.error.f 
+                })
+                tolerance_check["tolerance"] = tolerance_name
+                check.append( tolerance_check )
+                infoText += tolerance_format.format( tolerance_name, tolerance.warning.f, tolerance.error.f )
+    
+            df_info = pd.DataFrame(infos)
+            
             #
             # Ergebnis in result merken
             #
             result.append( self.createResult( df, md, check,
-                    df_group['AcquisitionDateTime'].iloc[0].strftime("%Y%m%d"),
-                    len( result ), # bisherige Ergebnisse in result
-                    acceptance
+                df_group['AcquisitionDateTime'].iloc[0].strftime("%Y%m%d"),
+                len( result ), # bisherige Ergebnisse in result
+                acceptance
             ) )
-
 
             #
             # Tabelle erzeugen
             #
+            table_fields = md["table_fields"]
+            if isFFF == True:
+                table_fields = md["table_fields_FFF"]
             self.pdf.pandas( df,
                 area=md["_table"],
                 attrs={"class":"layout-fill-width", "margin-top": "5mm"},
-                fields=md["table_fields"]
+                fields=table_fields
             )
+
+            self.pdf.pandas( df_info, area=md["_info"] )
 
             # Gesamt check - das schlechteste aus der tabelle
             self.pdf.resultIcon( acceptance )
@@ -1177,13 +1335,13 @@ class checkField( ispBase ):
               #  "field_count": self.metadata.current.get("fields", 0), # 5
             },
             "manual": {
-                "filename": self.metadata.info["anleitung"],
                 "attrs": {"class":"layout-fill-width", "margin-bottom": "5mm"},
             },
             "_chart" : {"width" : 90, "height" : 50},
-            "_imgSize" : {"width" : 120, "height" : 120},
-            "_image_attrs" : { "margin-top": "5mm" },
-
+            "plotImage_pdf": {
+                "area" : { "width" : 120, "height" : 120 },
+                "attrs": { "margin-top": "5mm" },
+            },
             "field" : { "X1":-110, "X2": 110, "Y1": -110, "Y2": 110 },
             "evaluation_table_pdf" : {
                 "fields": [
@@ -1202,8 +1360,6 @@ class checkField( ispBase ):
             },
             "tolerance_field": "value"
         } ), self.metadata )
-
-        #print("doJT_10_3-current", md.current )
 
         def evaluate( df_group ):
             """Evaluate grouped Fields.
@@ -1258,7 +1414,6 @@ class checkField( ispBase ):
 
                 self = args["self"]
                 ax = args["ax"]
-                # print( args["field"] )
                 da = self.getFieldDots( {
                     "X1": args["field"]["X1"] - 20,
                     "X2": args["field"]["X2"] + 20,
@@ -1284,9 +1439,8 @@ class checkField( ispBase ):
                     , metadata=md
                     , arg_function=addToPlot, arg_dict=data4q
                 )
-            self.pdf.image(img, md["_imgSize"], attrs=md["_image_attrs"]  )
+            self.pdf.image(img, **md.plotImage_pdf  )
 
-           # print("doJT_10_3", md.current, evaluation_df )
             # check tolerance - printout tolerance, evaluation_df and result icon
             acceptance = self.evaluationResult( evaluation_df, md, result, md["tolerance_field"] )
 
@@ -1340,17 +1494,19 @@ class checkField( ispBase ):
                 "fields" : 'MLCPlanType=="DynMLCPlan"', # "check_subtag != 'base'",
             },
             "manual": {
-                "filename": self.metadata.info["anleitung"],
                 "attrs": {"class":"layout-fill-width", "margin-bottom": "5mm"},
             },
 
             "doseArea" : { "X1":-0.75, "X2": 0.75, "Y1": -4, "Y2": 4 },
-            "_imgSize" : {"width" : 36, "height" : 70},
+            "plotImage_pdf": {
+                "area" : { "width" : 36, "height" : 70 },
+                "attrs": {  },
+            },
             "_imgField": {"border": 10 },
             "_chart": { "width" : 180, "height" : 60},
             "table_fields" : [
                 {'field': 'Kennung', 'label':'Kennung', 'format':'{0}', 'style': [('text-align', 'left')] },
-                {'field': 'gantry', 'label':'Gantry', 'format':'{0:1.1f}' },
+                {'field': 'gantry', 'label':'Gantry', 'format':'{0:1.0f}' },
              #   {'field': 'Mof', 'label':'M<sub>OF</sub>', 'format':'{0:.5f}' },
                 {'field': 'Mcorr', 'label':'M<sub>corr</sub>', 'format':'{0:.4f}' },
                 {'field': 'Mdev', 'label':'M<sub>dev</sub> [%]', 'format':'{0:.2f}' },
@@ -1371,8 +1527,7 @@ class checkField( ispBase ):
             # base Field und dosis bereitstellen
             baseField = qa_field( self.getFullData( df_base.loc[df_base.index[0]] ) )
 
-            Mof = baseField.image.getRoi( md["doseArea"] ).copy()
-
+            
             data = [{
                     'Kennung': baseField.infos["Kennung"],
                     'gantry': baseField.infos["gantry"],
@@ -1386,12 +1541,23 @@ class checkField( ispBase ):
                         , plotTitle = "{Kennung}"
                         , invert=False, plotCax=False, plotField=True )
             # Bild anzeigen
-            self.pdf.image( img, md["_imgSize"] )
+            self.pdf.image( img, **md.plotImage_pdf )
+
+            Mof = baseField.image.getRoi( md["doseArea"] ).copy()
 
             # alle felder durchgehen
             for info in df_fields.itertuples():
 
                 field = qa_field( self.getFullData( info ) )
+
+                img = field.image.plotImage( original=False
+                            , field = md["_imgField"]
+                            , metadata = md
+                            , plotTitle = "{Kennung}"
+                            , invert=False, plotCax=False, plotField=True )
+                # Bild anzeigen
+                self.pdf.image( img, **md.plotImage_pdf )
+
                 #Mdmlc = field.getMeanDose( md["doseArea"] )
                 Mdmlc = field.image.getRoi( md["doseArea"] ).copy()
                 Mcorr = (Mdmlc / Mof).mean()
@@ -1403,14 +1569,6 @@ class checkField( ispBase ):
                     'Mdev': np.nan,
                     'Pass' : np.nan
                 } )
-
-                img = field.image.plotImage( original=False
-                            , field = md["_imgField"]
-                            , metadata = md
-                            , plotTitle = "{Kennung}"
-                            , invert=False, plotCax=False, plotField=True )
-                # Bild anzeigen
-                self.pdf.image( img, md["_imgSize"] )
 
                 # progress pro file stimmt nicht immer genau (baseimage)
                 # 40% für die dicom daten 40% für die Auswertung 20 % für das pdf
@@ -1476,13 +1634,6 @@ class checkField( ispBase ):
         """
         Die jeweilig gleichen Gantry und Kolliwinkel übereinanderlegen und mit dem offenem Feld vergleichen
 
-            # Anzahl der Felder gesamt - MLCPlanType nicht None
-            count_0 = len(df) - df["MLCPlanType"].count()
-            count_other = len( df ) - count_0
-            if count_0 != 1 and count_other != 4:
-                print( "Falsche Anzahl der Felder offen:{} other:{}".format( count_0, count_other) )
-                return
-
         Parameters
         ----------
         fileData : pandas.DataFrame
@@ -1508,15 +1659,17 @@ class checkField( ispBase ):
         # prepare metadata
         md = dict_merge( DotMap( {
             "manual": {
-                "filename": self.metadata.info["anleitung"],
                 "attrs": {"class":"layout-fill-width"},
             },
-            "_imgSize" : {"width" : 45, "height" : 45},
+            "plotImage_pdf": {
+                "area" : { "width" : 45, "height" : 45},
+                "attrs": { "margin-top": "5mm" },
+            },
             "fieldArea" : { "X1":-80, "X2":80, "Y1": -80, "Y2":80, "xStep":20, "yStep":20 },
             "doseArea" : { "X1": -60, "X2": 60, "Y1": -60, "Y2": 60 },
             "table_fields": [
-                {'field': 'gantry', 'label':'Gantry', 'format':'{0:1.1f}' },
-                {'field': 'collimator', 'label':'Kollimator', 'format':'{0:1.1f}' },
+                {'field': 'gantry', 'label':'Gantry', 'format':'{0:.0f}' },
+                {'field': 'collimator', 'label':'Kollimator', 'format':'{0:.0f}' },
                 {'field': 'basedose', 'label':'Ref. Dosis', 'format':'{0:1.4f}' },
                 {'field': 'fielddose', 'label':'Feld Dosis', 'format':'{0:1.4f}' },
                 {'field': 'diff', 'label':'Diff [%]', 'format':'{0:1.2f}' },
@@ -1538,7 +1691,6 @@ class checkField( ispBase ):
             #
             self.pdf.textFile( **md.manual )
 
-            #print( df.query("CollMode == 'Symmetry'") )
             # es muss ein symetrisches basis Feld geben
             df_sym = df_group.query("CollMode == 'Symmetry'")
 
@@ -1577,11 +1729,11 @@ class checkField( ispBase ):
                 img = field[0].image.plotImage( original=False
                         , metadata=md
                         , field = md["fieldArea"]
-                        , plotTitle="G:{gantry:01.1f} K:{collimator:01.1f}"
+                        , plotTitle="G:{gantry:1.0f} K:{collimator:.0f}"
                         , cmap='twilight'
                         #, cmap='gray_r'
                         , invert=False, plotCax=True, plotField=False )
-                self.pdf.image( img, md["_imgSize"], attrs={"margin-top": "5mm"} )
+                self.pdf.image( img, **md.plotImage_pdf )
                 # die sumendosis ermitteln
                 fieldDose = field[0].getMeanDose( md["doseArea"] )
                 # Ergebnisse merken
@@ -1597,10 +1749,8 @@ class checkField( ispBase ):
                 # 40% für die dicom daten 40% für die Auswertung 20 % für das pdf
                 # progress hier immer 2 Felder
                 self.fileCount += 2
-                #print( md["variante"], filesMax, self.fileCount,  50 + ( 50 / filesMax *  self.fileCount ) )
                 if hasattr( logger, "progress"):
                     logger.progress( md["testId"],  40 + ( 40 / filesMax * self.fileCount ) )
-
 
             # Gruppiert nach Gantry und Kollimator auswerten
             ( df_group
@@ -1663,7 +1813,3 @@ class checkField( ispBase ):
         )
         # abschließen pdfdaten und result zurückgeben
         return self.pdf.finish(), result
-
-
-
-

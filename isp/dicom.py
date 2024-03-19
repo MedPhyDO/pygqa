@@ -10,7 +10,7 @@ There are two types of AEs:
 CHANGELOG
 =========
 
-0.1.4 / 2002-06-01
+0.1.3 / 2022-06-01
 ------------------
 - change __init__() remove app.Error() call
 
@@ -33,7 +33,7 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R.Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 __status__ = "Prototype"
 
 import os
@@ -83,11 +83,9 @@ from pynetdicom.sop_class import (
 
 from pynetdicom import sop_class
 
-#debug_logger()
-
 import logging
 logger = logging.getLogger( "MQTT" )
-#logger.level = 10 # 0 - NOTSET, 10 - DEBUG, 20 - INFO, 30 - WARNING, 40 - ERROR, 50 - CRITICAL
+# logger.level = 10 # 0 - NOTSET, 10 - DEBUG, 20 - INFO, 30 - WARNING, 40 - ERROR, 50 - CRITICAL
 
 # defaults für die query Rückgaben diese sind gestaffelt IMAGE beinhaltet alle davor
 #
@@ -199,7 +197,10 @@ class ispDicom(  ):
         # konfiguration verwenden oder einlesen liegt in self.config
         if config:
             self.config = config
-
+            
+        if self.config.get( ["dicom", "debug_logger"], False ) == True:
+            debug_logger()
+            
         self.server=server
 
         self.initialized = False
@@ -343,7 +344,7 @@ class ispDicom(  ):
             status = self.initAE()
             # und testen
             if not self.assoc: # pragma: no cover
-                logger.warning("dicomClass._retrieve: Verbindung fehlgeschlagen")
+                logger.warning("dicomClass._start_server: Verbindung fehlgeschlagen")
                 signal( 'dicom.{}'.format( evt_name ) ).send( {
                     "name": evt_name,
                     '_is_cancelled': True,
@@ -357,29 +358,41 @@ class ispDicom(  ):
         if not self.scp:
             # message id zurpcksetzen
             self.messageId = 0
-            #print( self.scp )
 
             # handler zum empfang der Daten bereitstellen
             handlers = [
-                 ( evt.EVT_C_STORE, self.handle_STORE),
+                ( evt.EVT_C_STORE, self.handle_STORE),     # Received C-STORE request
 
-                 ( evt.EVT_ACCEPTED, self.handle_EVENT),
-                 ( evt.EVT_ABORTED, self.handle_EVENT),
+                ( evt.EVT_ACCEPTED, self.handle_EVENT),    # Association accepted
+                ( evt.EVT_ABORTED, self.handle_EVENT),     # Association aborted
 
-                 ( evt.EVT_REJECTED, self.handle_EVENT),
-                 ( evt.EVT_RELEASED, self.handle_EVENT),
-                 ( evt.EVT_REQUESTED, self.handle_EVENT),
+                ( evt.EVT_REJECTED, self.handle_EVENT),    # Association rejected
+                ( evt.EVT_RELEASED, self.handle_EVENT),    # Association released
+                ( evt.EVT_REQUESTED, self.handle_EVENT),   # Association requested
 
-                 ( evt.EVT_DIMSE_SENT, self.handle_EVENT),
-                 ( evt.EVT_DIMSE_RECV, self.handle_EVENT),
+                ( evt.EVT_DIMSE_SENT, self.handle_EVENT),  # DIMSE service received and decoded a message
+                ( evt.EVT_DIMSE_RECV, self.handle_EVENT),  # DIMSE service encoded and sent a message
+                ( evt.EVT_N_EVENT_REPORT, self.handle_EVENT),  # Received N-EVENT-REPORT request
+                
+                #( evt.EVT_DATA_RECV, self.handle_EVENT),  # Data received from the peer AE
+                ( evt.EVT_ASYNC_OPS, self.handle_EVENT),
+                ( evt.EVT_SOP_COMMON, self.handle_EVENT),
+                ( evt.EVT_SOP_EXTENDED, self.handle_EVENT),
 
+                ( evt.EVT_C_ECHO, self.handle_EVENT),
+                ( evt.EVT_C_FIND, self.handle_EVENT),
+                ( evt.EVT_C_GET, self.handle_EVENT),
+                ( evt.EVT_C_MOVE, self.handle_EVENT),
+      
+
+                ( evt.EVT_ESTABLISHED, self.handle_EVENT),  # Association established
             ]
 
             # Server starten um die Daten zu empfangen storage SCP on port listen_port
             self.ae.ae_title = self.config.dicom[self.server]['aet']
             sig_msg = None
             try:
-                logger.debug( "dicomClass._start_server:  start server" )
+                logger.debug( "dicomClass._start_server: DO START" )
                 # If set to non-blocking then a running ``ThreadedAssociationServer``
                 # instance will be returned. This can be stopped using ``shutdown()``.
                 self.scp = self.ae.start_server(
@@ -388,7 +401,6 @@ class ispDicom(  ):
                     evt_handlers=handlers
                 )
             except OSError as e: # pragma: no cover
-                #print( "dicomClass.retrieve: 0xC515 - {}".format( str(e) )  )
                 logger.error( "dicomClass._start_server: 0xC515 - {}".format( str(e) ) )
                 sig_msg = {
                     "name": evt_name,
@@ -397,7 +409,7 @@ class ispDicom(  ):
                     "msg" : "{}".format( str(e) )
                 }
             except: # pragma: no cover
-                logger.error( "dicomClass._retrieve: ERROR start listen server" )
+                logger.error( "dicomClass._start_server: ERROR start listen server" )
                 sig_msg = {
                     "name": evt_name,
                     "_is_cancelled": True,
@@ -410,6 +422,7 @@ class ispDicom(  ):
                 signal( 'dicom.{}'.format( evt_name ) ).send( sig_msg )
                 return 0xC515
 
+        logger.debug( "dicomClass._start_server: STARTED" )
         return 0x0000
 
     def closeAE( self, status=0x0000 ):
@@ -488,7 +501,6 @@ class ispDicom(  ):
                     "accepted_contexts" : []
                 }
                 for cx in assoc.accepted_contexts:
-                    #print( "cx", cx )
                     associations["accepted_contexts"].append( {
                        "Context" : cx.abstract_syntax,
                        "SCP_role" : cx.as_scp,
@@ -513,7 +525,6 @@ class ispDicom(  ):
 
         """
         logger.info('dicomClass.handle_EVENT: {}'.format( event.event.name ) )
-
         signal( 'dicom.{}'.format( event.event.name ) ).send( {
             "name": event.event.name,
             "event": event,
@@ -544,7 +555,7 @@ class ispDicom(  ):
 
         """
 
-        logger.debug('dicomClass.handle_STORE')
+        logger.debug('dicomClass.handle_STORE - START: {}'.format( event.event.name ) )
 
         ds = event.dataset
         context = event.context
@@ -590,7 +601,7 @@ class ispDicom(  ):
             logger.debug( "Datei vorhanden: {}".format( filename ) )
             msg = "Datei vorhanden: {}".format( filename )
 
-        logger.debug( "dicomClass.handle_STORE: {}".format( ds.SOPInstanceUID + ".dcm" ) )
+        logger.debug( "dicomClass.handle_STORE [{}]: {} - {}".format( status, ds.SOPInstanceUID + ".dcm", msg ) )
 
         signal( 'dicom.EVT_C_STORE' ).send( {
             "name": event.event.name,
@@ -628,11 +639,11 @@ class ispDicom(  ):
         if assoc.is_established:
             status = assoc.send_c_echo()
 
-            print( "status", status )
+            print( "dicomClass.echo: assoc.status=", status )
 
             assoc.release()
         else:
-            print( "not established")
+            print( "dicomClass.echo: assoc not assocestablished")
 
 
     def query( self, ds=None ):
@@ -669,7 +680,6 @@ class ispDicom(  ):
             status = self.initAE()
             # und testen
             if not self.assoc: # pragma: no cover
-                #print("dicomClass.query: Verbindung fehlgeschlagen")
                 logger.warning("dicomClass.query: Verbindung fehlgeschlagen")
                 return results, status
 
@@ -693,11 +703,8 @@ class ispDicom(  ):
                results.append( rds )
             elif status == 0x0000:
                 # abfrage wurde komplett durchgeführt
-                # print("identifier:", identifier)
                 pass
             else: # pragma: no cover
-                #print('dicomClass.query: Connection timed out, was aborted or received invalid response: 0x{0:04x}'.format( status ))
-
                 logger.warning('dicomClass.query: Connection timed out, was aborted or received invalid response: 0x{0:04x}'.format( status ) )
 
         return results, status
@@ -907,8 +914,6 @@ class ispDicom(  ):
 
             ds.Modality = 'RTIMAGE'
 
-        # print( "do - retreive ds:\n", ds)
-
         # info QueryRetrieveLevel ausgeben
         logger.debug( "dicomClass._retrieve: QueryRetrieveLevel {}".format( ds.QueryRetrieveLevel ) )
 
@@ -945,8 +950,6 @@ class ispDicom(  ):
         if not status == 0x000:
             return status
 
-        # print( "dicomClass.assoc.send_c_xxx", self.assoc.is_established, self.scp, self.assoc )
-
         # ohne try
 
         '''
@@ -978,7 +981,7 @@ class ispDicom(  ):
                     msg_id = self.messageId
                 )
             else:
-                print( "dicomClass._retrieve send_c_get():  assoc is not established" )
+                logger.warn( "dicomClass._retrieve send_c_get():  assoc is not established" )
 
         else:
             query_model = StudyRootQueryRetrieveInformationModelMove
@@ -995,60 +998,65 @@ class ispDicom(  ):
                     msg_id = self.messageId
                 )
             else:
-                print( "dicomClass._retrieve send_c_move():  assoc is not established" )
+                logger.warn( "dicomClass._retrieve send_c_move():  assoc is not established" )
+            
 
-
+        i = 0
         if responses:
-            i = 0
+            logger.debug( "dicomClass._retrieve has responses: request_mode={}".format( self.request_mode ) ) 
             for (status, identifier) in responses:
                 i += 1
                 if status:
                     result = status.Status
-                    logger.debug( 'dicomClass._retrieve: {} - C-MOVE query status: {}'.format( i, hex(result) ) )
 
+                logger.debug( "dicomClass._retrieve for responses: i={} status={} identifier={}".format( i, hex(result), identifier) ) 
+                if status:
                     # If the status is 'Pending' then the identifier is the C-MOVE response
-
+                    # 
                     # Pending
                     #   | ``0xFF00`` - Sub-operations are continuing
                     #   Der weitere Ablauf wird über retrieve_thread abgewickelt
-                    if status.Status in (0xFF00, 0xFF01):
-                        if identifier:
-                            print( "dicomClass._retrieve:  0xFF00, 0xFF01",  identifier )
-                            pass
-                    elif status.Status == 0x0000:
-                        if identifier:
-                            print( "dicomClass._retrieve:  0x0000",  identifier)
+                    #
+                    # 
+                    if result in (0xFF00, 0xFF01):
+                        #if identifier:
+                        #    print( "dicomClass._retrieve: 0xFF00, 0xFF01",  identifier )
                         pass
-                    elif status.Status == 0xc002:
+                    elif result == 0x0000:
+                        #if identifier:
+                        #    print( "dicomClass._retrieve: 0x0000",  identifier)
+                        pass
+                    elif result == 0xc002:
                         # User’s callback implementation returned an invalid status object (not a pydicom Dataset or an int)
                         if identifier:
-                            print( "dicomClass._retrieve:  0xc002",  identifier)
-
-                    elif status.Status  in (0xC511, 0xC512):
-                        logger.error( "dicomClass._retrieve: Fehler beim speichern der DICOM Daten" )
-                        if identifier:
-                            print( "dicomClass._retrieve 0xC511",  identifier)
-                    # 0xB000 -Warning - Sub-operations complete, one or more or warnings
-
+                            print( "dicomClass._retrieve: 0xc002",  identifier)
+                        pass
+                    elif result in (0xC511, 0xC512):
+                        logger.error( "dicomClass._retrieve: {} ERROR {} beim speichern der DICOM Daten identifier={}".format( self.request_mode, hex(result), identifier ) )
+                        #if identifier:
+                        # 0xB000 -Warning - Sub-operations complete, one or more or warnings
+                    else: # 0xC001
+                        logger.error( "dicomClass._retrieve: {} STATUS {} beim speichern der DICOM Daten identifier={}".format( self.request_mode, hex(result), identifier ) )
+                    
                 else:
-                    # Association._wrap_get_move_responses
-                    # print("Connection timed out", responses )
+                    # Association._wrap_get_move_responses 
                     logger.warning('dicomClass._retrieve - Connection timed out, was aborted or received invalid response')
         else:
+            logger.warning('dicomClass._retrieve - no responses')
             pass
-
-        logger.debug("dicomClass._retrieve: DICOM Daten holen: {} - {}".format( hex(result), SOPInstanceUID ) )
+        
+        logger.debug("dicomClass._retrieve: {} DICOM Daten holen: {} - {} i={} messageId:{}".format( self.request_mode,  hex(result), SOPInstanceUID, i, self.messageId ) )
 
         # wenn nicht pending (retrieve_thread übernimmt) EVT_C_STORE mit _is_cancelled senden
         # 0xff00 - Pending
         # 0x0000 - Success
         if not result in ( 0x0000, 0xff00):
             signal( 'dicom.EVT_C_STORE').send( {
-                    "name": "EVT_C_STORE",
-                    "_is_cancelled": True,
-                    "status": result,
-                    "hex": hex(result),
-                    "msg": "run EVT_C_STORE"
+                "name": "EVT_C_STORE",
+                "_is_cancelled": True,
+                "status": result,
+                "hex": hex(result),
+                "msg": "run EVT_C_STORE"
             } )
 
         return result

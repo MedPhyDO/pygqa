@@ -1,5 +1,5 @@
 /*
-    Allgemeine styles für ui und mpdf
+    Allgemeine styles fÃ¼r ui und mpdf
 
 */
 
@@ -37,7 +37,7 @@
 
 /*
 	in materialdesignicons ist font-family: "Material Design Icons"
-	für die Klasse .mdi:before, .mdi-set gesetzt
+	fÃ¼r die Klasse .mdi:before, .mdi-set gesetzt
 */
 .mdi,
 .md-icons,
@@ -66,11 +66,11 @@
   /* Support for IE. */
   font-feature-settings: 'liga';
 
-  /* zusätzlich */
+  /* zusÃ¤tzlich */
   cursor:pointer;
 }
 
-/* eigene fontawesome Ähnliche einstellungen */
+/* eigene fontawesome Ã¤hnliche einstellungen */
 .x2 {
   font-size: 2em;
 }

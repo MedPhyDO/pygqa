@@ -22,8 +22,11 @@ import site
 
 # alle Module auch von der Konsole erreichbar machen 
 ABSPATH = osp.dirname( osp.abspath( __file__) )
-base_path =  osp.join( ABSPATH , "..")
-site.addsitedir(base_path)
+BASEPATH = osp.join( ABSPATH , "..")
+FILESPATH = osp.join( BASEPATH, 'data', 'tests') 
+
+site.addsitedir(BASEPATH)
+
 
 # Coverage am Anfang initialisieren damit alles berücksichtigt wird
 all_cov = None
@@ -52,7 +55,7 @@ if runCoverage:
        "if __name__ == .__main__.:"
     ]
     all_cov.config.set_option("report:exclude_lines", options)
-    all_cov.config.set_option("html:directory", osp.join( base_path, ".htmlcov" ) )
+    all_cov.config.set_option("html:directory", osp.join( BASEPATH, ".htmlcov" ) )
     all_cov.config.set_option("html:extra_css", osp.join( ABSPATH, "resources", "coverage.css" ) )
 
     all_cov.start()
@@ -70,7 +73,7 @@ if __name__ == '__main__':
     '''
  
     loader = unittest.TestLoader()
-    test_suite = loader.discover( '.', pattern='test_*.py' )
+    test_suite = loader.discover( ABSPATH, pattern='test_*.py' )
     
     testRunner = unittest.runner.TextTestRunner()
     testRunner.run(test_suite)

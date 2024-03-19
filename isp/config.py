@@ -31,6 +31,15 @@ logging level:
 CHANGELOG
 =========
 
+0.1.4 / 2024-03-05
+------------------
+- change __init__() test for config=None 
+
+0.1.3 / 2023-04-17
+------------------
+- use merge.mergedeep instead function with colletions
+- change _configLoad() for better error handling 
+
 0.1.2 / 2022-05-16
 ------------------
 - add scheme parameter to server.webserver 
@@ -51,13 +60,14 @@ __author__ = "R. Bauer"
 __copyright__ = "MedPhyDO - Machbarkeitsstudien des Instituts für Medizinische Strahlenphysik und Strahlenschutz am Klinikum Dortmund im Rahmen von Bachelor und Masterarbeiten an der TU-Dortmund / FH-Dortmund"
 __credits__ = ["R. Bauer", "K.Loot"]
 __license__ = "MIT"
-__version__ = "0.1.1"
+__version__ = "0.1.3"
 __status__ = "Prototype"
 
 import sys
 import json
 import os.path as osp
 from dotmap import DotMap
+from mergedeep import merge
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -71,6 +81,8 @@ import secrets
 import logging
 
 from isp.mqtt import MQTTclass
+
+from version import __version__ as project_version
 
 default_config = {
     "server" : {
@@ -98,12 +110,12 @@ default_config = {
         }
     },
     "use_as_variables":{
-     #   "webserver" : "server.webserver",
         "api" : "server.api",
         "mqtt" : "server.mqtt",
         "title" : "server.webserver.title",
         "resources" : "server.webserver.resources"
-    }
+    },
+    "version": project_version
 }
 
 class ispConfig( object ):
@@ -157,9 +169,9 @@ class ispConfig( object ):
     def __init__( self, lastOverlay:int=None, development:bool=True,
                  rootlevel:int=logging.ERROR,
                  mqttlevel:int=logging.NOTSET,
-                 cleanup:bool=False,
-                 config:dict=None
-                 ):
+                 config:dict=None,
+                 basedir:str=None
+                ):
         """Konfiguration initialisieren und laden.
 
         Zuerst wird die Konfiguration config.json eingelesen
@@ -168,7 +180,8 @@ class ispConfig( object ):
         Parameters
         ----------
         lastOverlay : int
-            Gibt an bis zu welcher config Datei eingelesen wird.Default = 99999999 (config-99999999.json).
+            Gibt an bis zu welcher config Datei eingelesen wird. 
+            Default = aktuelles Datum als Zahlenwert z.B. 20230514. 
 
         development : bool
             Entwicklungszweig verwenden oder nicht. Default is True.
@@ -181,16 +194,19 @@ class ispConfig( object ):
         mqttlevel: int - logging.NOTSET
             NOTSET=0, DEBUG=10, INFO=20, WARN=30, ERROR=40, and CRITICAL=50. Default: NOTSET
 
-        cleanup: bool
-            MQTT Cleanup vor dem initialisieren durchführen. Default = False
-
         config: dict
             mit dieser Angabe wird keine Konfiguration geladen, sondern die angegebenen Daten verwendet
 
+        basedir: str
+            ein anderes basedir statt des autm. ermittelten verwenden
         """
         
         # _basedir festlegen mit __file__ damit ein testaufruf von hier funktioniert
-        self._basedir = osp.abspath( osp.join( osp.dirname( osp.abspath( __file__ ) ) , "../" ) )
+        if basedir:
+            self._basedir = basedir
+        else:
+            self._basedir = osp.abspath( osp.join( osp.dirname( osp.abspath( __file__ ) ) , "../" ) )
+        
         # name des startenden programms
         self._name = osp.basename( sys.argv[0] )
 
@@ -212,8 +228,7 @@ class ispConfig( object ):
         # default werte setzen
         self._config = DotMap( default_config )
         self._configs = ["default"]
-
-        if config:
+        if config != None:
             # config in self._config merken
             self.update( config )
             self._configs.append( "init" )
@@ -227,13 +242,13 @@ class ispConfig( object ):
         self._config[ "BASE_DIR" ] = self._basedir
 
         # default logger
-        self.rootInitLogger( rootlevel )
+        self.rootInitLogger( self._config.server.logging.get("root", rootlevel ) )
 
         # logger für mqtt zugriff über self._mqtthdlr
         self._mqtthdlr = None
 
         # mqtt Logger bereitstellen oder initialisieren
-        self.mqttInitLogger( mqttlevel, cleanup )
+        self.mqttInitLogger( self._config.server.logging.get("mqtt", mqttlevel ) )
 
         # variables vorbelegen
         self.setVariables()
@@ -293,21 +308,48 @@ class ispConfig( object ):
             Default is 99999999
 
         """
+        
         def readConfig( filename:str ):
+            """
+            Read config from filename
+
+            Parameters
+            ----------
+            filename : str
+                Config filename to read.
+
+            Returns
+            -------
+            loadOK : bool
+                true if config loaded
+
+            """
+            loadOK = True
             if osp.isfile( filename ):
                 # zuerst die normale config Datei einlesen
                 with open( filename, 'r') as f:
                     try:
                         config = json.load( f )
-                        self._config = dict_merge(self._config, DotMap( config ) )
-                        self._configs.append( osp.basename( filename ) )
                     except:
                         # Fehler auch hier anzeigen, da noch kein logger bereitsteht
                         self._loadErrors.append( filename )
                         self._configs.append( osp.basename( filename ) + " - ERROR" )
                         print( "CONFIG: Fehler bei json.load", filename )
+                        loadOK = False
                         pass
-
+                    if loadOK:
+                        try:
+                            self._config = dict_merge(self._config, DotMap( config ) )
+                            self._configs.append( osp.basename( filename ) )
+                        except:
+                            # Fehler auch hier anzeigen, da noch kein logger bereitsteht
+                            self._loadErrors.append( filename )
+                            self._configs.append( osp.basename( filename ) + " - ERROR" )
+                            print( "CONFIG: Fehler bei DotMap( config )", self._config )
+                            loadOK = False
+                            pass
+            return loadOK
+        
         # den pfad zur konfiguration festlegen
         configPath = osp.join( self._basedir, "config")
 
@@ -349,7 +391,7 @@ class ispConfig( object ):
         use_as_variables = self._config.get("use_as_variables", DotMap() ).toDict()
 
         variables["BASE_DIR"] = self._basedir
-        variables["version"] = self.get( "version", __version__)
+        variables["Version"] = self.get( "version", __version__)
         variables["serverHost"] = "{}://{}:{}".format(
             self.get("server.webserver.scheme", ""),
             self.get("server.webserver.host", ""),
@@ -806,43 +848,22 @@ class ispConfig( object ):
             self._mqtthdlr = None
 
 # ----  
-import collections
-def dict_merge(dct, merge_dct, add_keys=True):
+
+def dict_merge(dct, merge_dct):
     """Recursive dict merge.
 
-    Inspired by ``dict.update()``, instead of
-    updating only top-level keys, dict_merge recurses down into dicts nested
-    to an arbitrary depth, updating keys. The ``merge_dct`` is merged into
-    ``dct``.
-
-    This version will return a copy of the dictionary and leave the original
-    arguments untouched.
-
-    The optional argument ``add_keys``, determines whether keys which are
-    present in ``merge_dict`` but not ``dct`` should be included in the
-    new dict.
-
-    https://gist.github.com/angstwad/bf22d1822c38a92ec0a9
+    The ``merge_dct`` is merged into ``dct``.
+    Return a copy of the dct and leave the original untouched.
 
     Args:
         dct (dict): onto which the merge is executed
-        merge_dct (dict): dct merged into dct
-        add_keys (bool): whether to add new keys
+        merge_dct (dict): dct merged into dcts
 
     Returns:
         dict: updated dict
     """
+    
     dct = dct.copy()
-    if not add_keys:
-        merge_dct = {
-            k: merge_dct[k]
-            for k in set(dct).intersection(set(merge_dct))
-        }
-
-    for k, v in merge_dct.items():
-        if isinstance(dct.get(k), dict) and isinstance(v, collections.Mapping):
-            dct[k] = dict_merge(dct[k], v, add_keys=add_keys)
-        else:
-            dct[k] = v
+    merge( dct, merge_dct )
     return dct
-
+    
