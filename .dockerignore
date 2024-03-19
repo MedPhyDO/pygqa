@@ -27,6 +27,7 @@ coverage.xml
 .gitattributes
 .spyproject 
 .vscode
+.htmlcov
 
 # nodejs based
 **/node_modules/
@@ -39,15 +40,5 @@ npm-debug.log
 .aws
 
 # project based
-.env
-.intern
-.htmlcov
-data
-config/odbc.ini
-config/config-099*
-config/config-20*
-**/vendor/
-resources/Klinikum_Dortmund_Logo.svg
-tests/files
-tests/resources/check
-TODO.md
+.docs
+data/
