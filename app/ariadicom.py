@@ -563,7 +563,7 @@ class ariaDicomClass( ariaClass, ispDicom ):
                 chips.append( { "class": "badge badge-pill badge-success", "content": 'benötigt: ' + need  } )
 
             # Anleitung
-            anleitung_filename = info.get("anleitung", "")
+            anleitung_filename = content.manual.get("filename", "")
             data["anleitung"] = '<p class="badge badge-pill badge-primary">Anleitung fehlt!</p>'
             if anleitung_filename != "":
                 anleitung = pdf.textFile(anleitung_filename, render = False)

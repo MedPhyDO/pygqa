@@ -33,7 +33,7 @@ cd <Name_des_repository>
 
 Alternativ zum Klonen kann das repository auch unter dem Button "Code" als zip-Ordner gedownloadet werden. Dieser zip-Ordner muss dann noch im neu erstellten Ordner entpackt werden.
 
-## Python-Installation
+## Variante A - lokale Python-Installation
 
 Hierzu wird Miniconda installiert. Dafür wird folgender Befehl in die Konsole eingegeben.
 
@@ -319,3 +319,105 @@ Alles aus **requirements_upgrade.txt** auf die neuste Version bringen:
 ```
 
 Sollte ein Problem mit einem bestimmten Paket auftreten, wodurch das Upgrade verzögert wird, kann im entsprechenden Ordner der Name auskommentiert werden, indem ein # vor den Namen geschrieben wird. Dann kann das Upgrade erneut durchgeführt und die Auskommentierung später rückgängig gemacht werden. Das kann auch bei dem Kopieren von globalen Python-Umgebungen hilfreich sein.
+
+## Variante B - Installation im Dockercontainer
+
+### Docker über snap installieren (Ubuntu)
+
+```bash
+sudo snap install docker 
+```
+
+Wird docker hinter einem Proxy verwendet, muss ein entsprechender Eintrag in der Docker Datei `~/snap/docker/current/.docker/config.json` gemacht werden.
+
+```json
+{ 
+  "proxies":
+  {
+   "default":
+   {
+    "httpProxy": "http://<ip>:<port>",
+    "httpsProxy": "https://<ip>:<port>"
+   }
+  }
+}
+```
+
+### Docker verwenden
+
+Die Datei `Dockerfile` enthält alle notwendigen Befehle und Konfigurationen, um einen Container zu erstellen.
+
+In der Datei `docker-compose.yml` stehen alle Befehle und Konfigurationen um einen Container mit `docker compose up` zu erstellen und zu starten.
+
+Zu ändernde Parameter stehen in der Datei `.env`.  Hier werden einfache Schlüssel-Wert-Paare definiert, die dann in `docker-compose.yml` verwendet werden.
+
+Einige Nützliche docker compose Befehle
+
+| Befehl                                                   | Beschreibung                                                                                                 | 
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | 
+| `docker compose build`                                   | Container erstellen, ein build oder rebuild durchführen (bei Änderungen in Dockerfile)                       |
+| `docker compose up`                                      | Container starten                                                                                            |
+| `docker compose up -d`                                   | Container im Hintergrund starten                                                                             |
+| `docker compose --file ./docker-compose.unittest.yml up` | ein anderes composefile ausführen                                                                            |
+| `docker compose ps -a`                                   | Container auflisten                                                                                          |
+| `docker inspect <container-name>`                        | Container überprüfen                                                                                         |
+| `docker rm <container_name>`                             | Container löschen                                                                                            |
+| `docker stop <container_name>`                           | Container stoppen                                                                                            |
+| `docker restart <container_name>`                        | laufenden Container erneut starten                                                                           |
+| `docker start <container_name>`                          | einen gestoppten Container starten                                                                           |
+| `docker system df`                                       | verwendeten Speicherplatz anzeigen (Images, Containern, lokalen Volumes, Build-Cache, inaktiven Containern ) |
+| `docker system prune`                                    | gestoppte Container, unbenutzte Netzwerke, Images und den Build-Cache löschen                                |
+| `docker compose down --remove-orphans`                   | Entferne Verweiste                                                                                           |
+| `docker compose run <service> <befehl>`                  | Befehle im container ausführen - `<service>` enstpricht der Angabe in `docker-compose.yml`                   |
+| `docker compose run app python --version`                | Python Version im conatiner abrufen                                                                          |
+| `sudo netstat -tulpen`                                   | belegte Ports ansehen                                                                                        |
+
+### Anpassungen vor dem Start
+
+#### Rechte für den aktuellen Nutzer setzen 
+Dies ist nur notwendig, wenn Daten aus dem Container in das lokale Dateisystem geschrieben werden sollen.
+
+Nutzer id und Gruppen id bestimmen
+
+```bash
+id
+```
+
+env-example nach .env kopieren und die Ids in `.env` eintragen 
+
+```env
+USE_UID=<user_id>
+USE_GID=<gruppen_id>
+```
+
+#### Configdatei anpassen
+In dem Ordner, der beim Klonen des Repositorys erstellt wird, befindet sich ein Ordner `config`. Darin befindet sich die Datei **config.json**. In dieser Datei müssen die unter [Konfiguration](/docs/de/Konfiguration.md) beschriebenen Einstellungen vorgenommen werden.
+
+Wichtige Abschnitte für die Anpassungen in der `config.json` Datei.
+- server
+  - webserver
+  - mqtt
+- database
+  - servername
+  - VMSCOM 
+- dicom
+  - VMSDBD
+- units
+- variables 
+  
+  
+### Container erstellen und starten
+
+1. Docker container erzeugen
+```bash
+docker compose build
+```
+
+2. Docker container starten
+```bash
+docker compose run --rm pygqa_0.2.x python ./pygqa.py
+```
+
+Die [GQA - Geräte-QA](http://127.0.0.1:5000/) Seite im Web-Browser öffnen.
+
+Auf der pyGQA-Seite können unter dem Reiter **Systeminfo** einige Teile der erfolgreichen Installation kontrolliert werden. Siehe auch weiter oben unter **Erster Testlauf**.
