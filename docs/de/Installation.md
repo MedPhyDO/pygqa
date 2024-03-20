@@ -220,9 +220,9 @@ Die letzte in "Systeminfo" vorhandene Kontrolle ist der MQTT Zugriff, welcher eb
 Zum Schluss ist noch eine Liste der installierten Module mit der jeweiligen Version und Lizenz aufgeführt.
 
 
-# Zusätzliche Informationen
+## Zusätzliche Informationen
 
-## Als service unter linux ubuntu ausführen
+### Als service unter linux ubuntu ausführen
 
 Ein neuer service für pyGQA kann mit
 
@@ -263,7 +263,7 @@ gestartet, neugestartet oder beendet werden. Um den service beim Systemstart zu 
 sudo systemctl enable pygqa.service
 ```
 
-## Installation zusätzlicher Pakete
+### Installation zusätzlicher Pakete
 
 Vor der Installation neuer Pakete sollte sichergestellt werden, dass die neuen Pakete mit dem Programm kompatibel sind.
 
@@ -292,7 +292,7 @@ Um **requirements_upgrade.txt** zu aktualisieren wird diese beim `pigar` Aufruf 
 ```
 
 
-## Update
+### Update
 
 Vor dem Update sollte sichergestellt werden, dass die neuste Version mit dem Programm kompatibel ist.
 

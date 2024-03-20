@@ -2065,11 +2065,11 @@ def suite( testClass:None ):
         
         #suite.addTest( testClass('test_webapp_db_tests_filter') )
         
-        
+        suite.addTest( testClass('test_isp_mpdf_test_1') )
         #suite.addTest( testClass('test_webapp_dummy_test') )
         #suite.addTest( testClass('test_isp_mpdf_test_4'),  )
         #suite.addTest( testClass('test_webapp_db_groupsplit') )
-        #return suite
+        return suite
     
         for m in dir( testClass ):
             if m.startswith('test_config_'):

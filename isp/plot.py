@@ -35,7 +35,7 @@ pica = 12.0
 
 # default für die Erstellung von plots - plt.rcParams.update( rcParams )
 rcParams =  {
-    'figure.max_open_warning': 0, # Warnung unterdrücken: RuntimeWarning: More than 20 figures have been opened.
+    # 'figure.max_open_warning': 0, # Warnung unterdrücken: RuntimeWarning: More than 20 figures have been opened.
     'font.size': 20,
     'legend.fontsize': 'medium',
     'figure.titlesize': 'large',
@@ -100,17 +100,21 @@ class plotClass():
         return self.fig, self.ax
 
 
-    def getPlot(self):
+    def getPlot(self, close:bool=True):
         """Plot als Bytecode zurückgeben.
 
         Returns
         -------
         data : BytesIO
             Bytecode des Plots
+        close : bool
+            plot nach dem holen schließen
 
         """
         data = io.BytesIO()
         plt.savefig( data )
+        if close:
+            plt.close("all")
 
         return data
 

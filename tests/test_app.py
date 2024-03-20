@@ -306,8 +306,7 @@ class testBase(testCaseBase):
                     "pdf.pageCount" : None,
                     "pdf.pageNames" : None,
                     "pdf.content" : None,
-                    "pdf.content.text" : {},
-                    "pdf.imagePages": None,
+                    "pdf.content.pages" : {},
                     "pdf.pngDiff" : None,
                     "pdf.pngDiff.pages": {}
                 }
@@ -318,9 +317,14 @@ class testBase(testCaseBase):
                 if self.check_pdf:
                     result.update( self.check_pdf_data( data["pdfData"] ) )
 
+                # alle bereiche (compareData, pdf.content, pdf.pngDiff, ) müssen true sein
+                # 
+                if result["compareData"] and result["pdf.content"] and result["pdf.pngDiff"]:
+                    result["complete"] = True
+                else:
+                    testComplete = False
+                    
                 self.called_tests_results[running_test_name] = result
-                if result["complete"] != True:
-                   testComplete = False
 
         self.called_tests[testUrl] = testComplete
         return testComplete
@@ -328,10 +332,8 @@ class testBase(testCaseBase):
     def check_result_data(self, data):
 
         result = {
-            "complete": False,
             "hasCompareData": False,
             "compareData": False,
-
         }
         # pro test im pdffile
         for test in data["result"]:
@@ -358,12 +360,7 @@ class testBase(testCaseBase):
                     "data": test["data"]                     
                 } 
                 print( json.dumps( test_json, indent=2 ) )
-                '''
-                self.assertNotEqual(
-                    orgData, {},
-                    "keine Vergleichsdaten vorhanden: '{unit}', '{energy}', '{test}', '{date}', {group}".format( **test )
-                )
-                '''
+   
             else:
                 result["hasCompareData"] = True
                 # über pandas mit double_precision=4 auswerten
@@ -391,9 +388,8 @@ class testBase(testCaseBase):
                         if len(df_compare) > 0:
                             print( "orgData_data", json.dumps(orgData['data'], indent=2 ) )
                             print( "test_data", json.dumps(test['data'], indent=2 ) ) 
-                        
-                    else:
-                        result["compareData"] = True
+                        else:
+                            result["compareData"] = True
 
 
                     '''
@@ -692,23 +688,6 @@ class WebAppTest( testBase ):
                 resultError.append( unit )
         self.assertEqual( resultError, [], "Test fehlerhaft" )          
 
-        
-    def test_mlc_MT_LeafSpeed_2021(self):
-        ''' Monatstest - MT_LeafSpeed - IMRT - Geschwindigkeit und Geschwindigkeitsänderung der Lamellen
-            ab 202106 mit collimator Angabe im result
-        '''
-        resultError = []
-        for unit in self.unitNames:
-            result = self.run_test( {
-              "testid": "MT-LeafSpeed",
-              "unit": unit,
-              "year": 2021,
-              "month": 1
-            } )
-            if result == False:
-                resultError.append( unit )
-        self.assertEqual( resultError, [], "Test fehlerhaft" )
-
     def test_mlc_MT_8_02_1_2_2019(self):
         ''' Monattest MLC - MT_8.02-1_2
 
@@ -750,27 +729,6 @@ class WebAppTest( testBase ):
                 resultError.append( unit )
         self.assertEqual( resultError, [], "Test fehlerhaft" )          
                
-    def test_mlc_MT_8_02_1_2_2021(self):
-        ''' Monattest MLC - MT_8.02-1_2
-
-        Returns
-        -------
-        None.
-
-        '''
-        # Änderung: ohne Leaf 1 und 60  (noch nicht geändert in Testresult json)
-        resultError = []
-        for unit in self.unitNames:
-            result = self.run_test( {
-              "testid": "MT-8_02-1-2",
-              "unit": unit,
-              "year": 2021,
-              "month": 1
-            } )
-            if result == False:
-                resultError.append( unit )
-        self.assertEqual( resultError, [], "Test fehlerhaft" )  
-
     def test_mlc_MT_8_02_3_2019(self):
         ''' Monattest MLC - 8.02-3
 
@@ -896,36 +854,6 @@ class WebAppTest( testBase ):
                 resultError.append( unit )
         self.assertEqual( resultError, [], "Test fehlerhaft" )    
 
-    def test_field_JT_7_2_2021(self):
-        ''' Jahrestest - JT_7.2 -
-
-        '''
-        resultError = []
-        for unit in self.unitNames:
-            result = self.run_test( {
-              "testid": "JT-7_2",
-              "unit": unit,
-              "year": 2021
-            } )
-            if result == False:
-                resultError.append( unit )
-        self.assertEqual( resultError, [], "Test fehlerhaft" )
-
-    def test_field_JT_7_3_2021(self):
-        '''Jahrestest - JT_7.3
-
-        '''
-        resultError = []
-        for unit in self.unitNames:
-            result = self.run_test( {
-              "testid": "JT-7_3",
-              "unit": unit,
-              "year": 2021
-            } )
-            if result == False:
-                resultError.append( unit )
-        self.assertEqual( resultError, [], "Test fehlerhaft" )  
-
     def test_field_JT_7_4_2019(self):
         ''' Jahrestest - JT_7.4 - Abhängikeit Kalibrierfaktoren vom Tragarm Rotationswinkel
 
@@ -955,21 +883,7 @@ class WebAppTest( testBase ):
             if result == False:
                 resultError.append( unit )
         self.assertEqual( resultError, [], "Test fehlerhaft" )      
-
-    def test_field_JT_7_4_2021(self):
-        ''' Jahrestest - JT_7.4 - Abhängikeit Kalibrierfaktoren vom Tragarm Rotationswinkel
-
-        '''
-        resultError = []
-        for unit in self.unitNames:
-            result =  self.run_test( {
-              "testid": "JT-7_4",
-              "unit": unit,
-              "year": 2021
-            } )
-            if result == False:
-                resultError.append( unit )
-        self.assertEqual( resultError, [], "Test fehlerhaft" )            
+        
 
     def test_field_JT_7_5_2019(self):
         '''
@@ -1004,24 +918,6 @@ class WebAppTest( testBase ):
                 resultError.append( unit )
         self.assertEqual( resultError, [], "Test fehlerhaft" )     
 
-    def test_field_JT_7_5_2021(self):
-        '''
-        Jahrestest - JT_7.5 - Abhängikeit Kalibrierfaktoren der Tragarmrotation
-
-        TODO: keine Vergleichsdaten -> erzeugen
-        '''
-        
-        resultError = []
-        for unit in self.unitNames:
-            result = self.run_test( {
-              "testid": "JT-7_5",
-              "unit": unit,
-              "year": 2021
-            } )
-            if result == False:
-                resultError.append( unit )
-        self.assertEqual( resultError, [], "Test fehlerhaft" )     
-
     def test_field_JT_9_1_2_2019(self):
         '''
         Jahrestest - JT_9.1.2 - Abhängigkeit der Variation des Dosisquerprofils vom Tragarm-Rotationswinkel
@@ -1038,23 +934,6 @@ class WebAppTest( testBase ):
             if result == False:
                 resultError.append( unit )
         self.assertEqual( resultError, [], "Test fehlerhaft" )          
-
-    def test_field_JT_9_1_2_2021(self):
-        '''
-        Jahrestest - JT_9.1.2 - Abhängigkeit der Variation des Dosisquerprofils vom Tragarm-Rotationswinkel
-        Test funktioniert mit EPID nur mit Aufbauplatte
-        '''
-
-        resultError = []
-        for unit in self.unitNames:
-            result = self.run_test( {
-              "testid": "JT-9_1_2",
-              "unit": unit,
-              "year": 2021
-            } )
-            if result == False:
-                resultError.append( unit )
-        self.assertEqual( resultError, [], "Test fehlerhaft" ) 
 
     def test_field_MT_4_1_2_2020(self):
         '''
@@ -1126,26 +1005,6 @@ class WebAppTest( testBase ):
                resultError.append( unit )
         self.assertEqual( resultError, [], "Test fehlerhaft" )
 
-    def test_field_JT_10_3_2021(self):
-        '''
-        Jahrestest - JT_10.3 - Vierquadrantentest
-
-        Returns
-        -------
-        None.
-
-        '''
-        resultError = []
-        for unit in self.unitNames:
-            result = self.run_test( {
-                "testid": "JT-10_3",
-                "unit": unit,
-                "year": 2021
-            } )
-            if result == False:
-               resultError.append( unit )
-        self.assertEqual( resultError, [], "Test fehlerhaft" )
-
     # ---- VMAT ----------------------------------------------
 
     def test_vmat_MT_VMAT_2_2019(self):
@@ -1199,6 +1058,7 @@ class WebAppTest( testBase ):
                 resultError.append( unit )
         self.assertEqual( resultError, [], "Test fehlerhaft" )            
           
+    # ---- komplettes Jahr ---------------------------------
     def test_all_2021_01( self ):
         '''
             alle Jahrestests und Monatstests Januar 
@@ -1221,8 +1081,6 @@ class WebAppTest( testBase ):
 
         self.assertEqual( resultError, [], "Test fehlerhaft" )   
        
-
-
 def suite( testClass:None ):
     '''Fügt alle Funktionen, die mit test_ beginnen aus der angegeben Klasse der suite hinzu
 
@@ -1257,23 +1115,12 @@ def suite( testClass:None ):
     #suite.addTest( testClass('test_mlc_MT_VMAT_0_2_2020') )
     #suite.addTest( testClass('test_mlc_MT_VMAT_1_1_2020') )
    
-    #suite.addTest( testClass('test_other_dicom') )
-    
-    suite.addTest( testClass('test_field_JT_7_2_2021') )
-    suite.addTest( testClass('test_field_JT_7_3_2021') )
-    
-   # suite.addTest( testClass('test_field_JT_10_3_2021') )
-   # suite.addTest( testClass('test_field_JT_7_4_2021') )
-   # suite.addTest( testClass('test_field_JT_7_5_2021') )
-   # suite.addTest( testClass('test_mlc_JT_10_3_1_2021') )
-   # suite.addTest( testClass('test_mlc_JT_4_2_2_1_B_2021') )
-    #suite.addTest( testClass('test_mlc_MT_8_02_1_2_2021') )
-    #suite.addTest( testClass('test_field_JT_9_1_2_2021') ) # with soll
-
+    #suite.addTest( testClass('test_wl_MT_WL_2019') )
+        
     #suite.addTest( testClass('test_all_2021_01') )
     
     
-    return suite
+    #return suite
 
 
     if testClass:

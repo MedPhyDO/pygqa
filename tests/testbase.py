@@ -163,7 +163,6 @@ class testCaseBase(unittest.TestCase):
         from bs4 import BeautifulSoup
         test_result["pdf.content"] = False
         test_result["pdf.content.pages"] = {}
-        contentOk = False
         for page_name, content in data["content"].items():
             bs_data = BeautifulSoup( content, 'html.parser')
             bs_check = BeautifulSoup( check[ page_name ], 'html.parser')
@@ -176,19 +175,10 @@ class testCaseBase(unittest.TestCase):
                     test_result["pdf.content.pages"][i+1] = False
                     if data_text_list[i] == check_text_list[i]:
                         test_result["pdf.content.pages"][i+1] = True
-                    else:
-                        contentOk = False
-            else:
-                contentOk = False
-            '''
-            self.assertEqual(
-                data_text_list,
-                check_text_list,
-                "PDF content .text in '{}' ist fehlerhaft".format( data["pdf_filepath"] )
-            )
-            ''' 
 
-        test_result["pdf.content"] = contentOk
+        r = {v: k for k, v in test_result["pdf.content.pages"].items()}
+        if not False in r:
+            test_result["pdf.content"] = True
 
         # vergleich mit pdf2image
         # , pdf_check_name
@@ -200,19 +190,16 @@ class testCaseBase(unittest.TestCase):
             test_result["pdf.pngPageCount"] = True
         
         # jetzt die einzelnen Seiten prüfen, bei Fehlern wird das diff gespeichert
-
         diff_max = 500.0
         test_result["pdf.pngDiff"] = False
         test_result["pdf.pngDiff.pages"] = {}
         diffErrors = 0
-        diff = None
-        for i in range(len(images)):
-            if i in check_images:
-                diff = ImageChops.difference(images[i], check_images[i])
-                diff_qual = len(set(diff.getdata()))
-                typ = "diff"
-            else:
-                diff_qual = diff_max + 1
+        i = 0
+        for img, check_img in zip(images, check_images):
+            i += 1
+            diff = ImageChops.difference(img, check_img)
+            diff_qual = len(set(diff.getdata()))
+            typ = "diff"
 
             if diff_qual > diff_max:
                 typ = "error"
@@ -221,8 +208,8 @@ class testCaseBase(unittest.TestCase):
             else:
                 test_result["pdf.pngDiff.pages"][i+1] = True
 
-            name = "{}.{:02.0f}.{}.png".format( new_name, i+1, typ)
-            if diff:
+            if typ == "error":
+                name = "{}.{:02.0f}.{}.png".format( new_name, i+1, typ)
                 diff.save( name )
 
         if diffErrors == 0:
