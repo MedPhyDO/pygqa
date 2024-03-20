@@ -10,7 +10,7 @@ Flask_Admin==1.6.1
 Flask_Cors==4.0.0
 flask_restful_swagger_2==0.35
 flask_sqlalchemy==3.0.5
-Jinja2==3.1.2
+Jinja2==3.1.3
 jinja_markdown==1.210911
 jsonschema==4.19.0
 m2r2==0.3.2
@@ -22,7 +22,7 @@ paho_mqtt==1.6.1
 pandas==2.0.3
 pdf2image==1.16.3
 pigar==2.1.1
-Pillow==10.0.0
+Pillow==10.2.0
 pipreqs==0.4.13
 psutil==5.9.5
 py_linq==1.4.0
@@ -48,4 +48,4 @@ sphinx==7.1.1
 sphinx-rtd-theme==1.3.0
 SQLAlchemy==2.0.20
 tinycss2==1.2.1
-weasyprint==61.1
+weasyprint==61.2

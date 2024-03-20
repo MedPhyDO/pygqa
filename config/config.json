@@ -22,7 +22,7 @@
         }
     },
     "database": {
-        "servername" : "variansystem", 
+        "servername" : "VMSCOM", 
         "variansystem" : {
             "host": "",
             "dbname": "variansystem",
@@ -52,7 +52,8 @@
             "aet": "GQA",
             "listen_port": 50300,
             "local_dir": "data/DICOM"
-        }
+        },
+        "debug_logger": false
     },
     "resultsPath" : "data/results",
     "units": {

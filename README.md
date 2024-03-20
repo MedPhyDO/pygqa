@@ -31,8 +31,8 @@ Wir starten mit zwei fertig konzipierten Tests aus unserer monatlichen Qualität
 - Geschwindigkeit und Geschwindigkeitsänderung der Lamellen
 
 Derzeit ist **pyGQA** auf unsere eigene Hard- und Softwarekonstellation abgestimmt:
-- Varian TrueBeam und VitalBeam v.2.5, beide mit 120er MLC
-- Varian ARIA/Eclipse v.13.6
+- Varian TrueBeam und VitalBeam v.2.7, beide mit 120er MLC
+- Varian ARIA/Eclipse v.16.1
 - Linux Server für den Auswertungssoftware und Webserver im Intranet
 
 Noch keine Erfahrung mit Python?
