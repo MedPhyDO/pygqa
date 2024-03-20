@@ -7,7 +7,7 @@ RUN env
 ## ----------------------------------------------------------------
 ## Install Packages 
 ## ----------------------------------------------------------------
-RUN apt update && apt install -y curl locales-all build-essential mc nano libpango-1.0-0 libpangoft2-1.0-0 tk gsfonts fonts-noto poppler-utils libpoppler-cpp-dev pkg-config cmake && rm -rf /var/lib/apt/lists/*
+RUN apt update && apt install -y curl locales-all build-essential mc nano libpango-1.0-0 libpangoft2-1.0-0 tk gsfonts fonts-noto poppler-utils libpoppler-cpp-dev pkg-config cmake time && rm -rf /var/lib/apt/lists/*
 
 ## ----------------------------------------------------------------
 ## Add custom Microsoft repository and install database driver 
