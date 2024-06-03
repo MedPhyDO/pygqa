@@ -14,7 +14,11 @@
     <script type="text/javascript" src="resources/vendor/bootstrap/bootstrap-dialog-1.33.4.min.js"></script>
     
     <script type="text/javascript" src="resources/vendor/paho-mqtt/paho-mqtt-1.1.0.min.js"></script>
-     
+    <script type="module" >
+      import { io } from "/resources/vendor/socketio/socket.io.4.7.x.esm.min.js";
+      window.io = io;
+    </script>
+    
     <script type="text/javascript" src="resources/vendor/d3/d3-5.7.0.min.js"></script>
     <script type="text/javascript" src="app.js"></script>
     
@@ -72,7 +76,6 @@
         });
         // preload active nav-link
         $("#dynamic").load( $(".nav").find(".active").attr('data-href') );
-        
     });
     </script>
 </body>

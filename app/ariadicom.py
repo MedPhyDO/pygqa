@@ -23,13 +23,14 @@ from app.config import infoFields
 from app.aria import ariaClass
 from app.results import ispResults
 
+
 from app.qa.mlc import checkMlc
 from app.qa.field import checkField
 from app.qa.wl import checkWL
 from app.qa.vmat import checkVMAT
 
 import logging
-logger = logging.getLogger( "MQTT" )
+logger = logging.getLogger( "ISP" )
 
 class ariaDicomClass( ariaClass, ispDicom ):
     '''Zentrale Klasse
@@ -74,10 +75,9 @@ class ariaDicomClass( ariaClass, ispDicom ):
 
         # dicomClass initialisieren. Der Erfolg kann über dicomClass.initialized abgefragt werden
         ispDicom.__init__( self, server, self.config )
+        
+        self.pd_results = ispResults( self.config )
 
-        # Datei mit Ergebnissen als pandas laden
-        self.resultfile = osp.join( self.config.get("resultsPath", ".."), self.config.get("database.gqa.name", "gqa.json") )
-        self.pd_results = ispResults( self.config, self.resultfile )
 
     def initResultsPath(self, AcquisitionYear=None ):
         '''Den Ablegeort zu den PDF Dateien bestimmen
@@ -169,6 +169,9 @@ class ariaDicomClass( ariaClass, ispDicom ):
 
         if not pids or len(pids) == 0:
             return {}
+        
+        if testTags and not type(testTags) == list:
+            testTags = [testTags]
 
         # filter zusammenstellen
         where = "LEN([Radiation].[Comment]) > 0  "
@@ -191,7 +194,7 @@ class ariaDicomClass( ariaClass, ispDicom ):
 
         # Pfad für die PDF Dateien
         self.initResultsPath( year )
-
+     
         return self.prepareGQA( images, year=year, withResult=withResult )
 
     def prepareGQA(self, imagedatas=[], year:int=0, withResult=False, withDicomData:bool=False ):
@@ -257,8 +260,8 @@ class ariaDicomClass( ariaClass, ispDicom ):
         }
 
         # nur das gesuchte Jahr, ohne index
-        df_results = self.pd_results.gqa[ self.pd_results.gqa['year'] == year ].reset_index()
-
+        df_results = self.pd_results.getYearData( year )
+        
         result_fields = [ "acceptance", "group" ]
         if withResult:
             result_fields.append("data")
@@ -281,17 +284,17 @@ class ariaDicomClass( ariaClass, ispDicom ):
             if "tag" in item:
                 data["testTags"][ item["tag"] ] = testid
                 data["testIds"][ testid ] = item["tag"]
-
+ 
         tagNotFound = {}
 
         inactiv = []
         testNotFound = []
-
+        
         for imagedata in imagedatas:
 
             # bereitetet die Datenbank Informationen auf
             info = self.getImageInfos( imagedata )
-
+            #print(info["day"], info["testTags"], info["subTags"], info["varianten"] )
             unit = info["unit"]
             energy =  info["energy"]
 
@@ -798,7 +801,6 @@ class ariaDicomClass( ariaClass, ispDicom ):
                 tags[ item["tag"] ] = key
 
         testTag = test.tag
-        
         # getTestData sucht in der datenbank nach dem tag des tests
         data = self.getTestData(
             PatientId=pid,
@@ -892,6 +894,7 @@ class ariaDicomClass( ariaClass, ispDicom ):
 
         # variables um configdaten des Tests erweitern diese werden in der test Klasse als metadata verwendet
         variables["testConfig"] = self.config.get( ["GQA", testId ], DotMap() );
+        variables["testConfig"]["testId"] = testId
         current = self.config.get( ["GQA", testId, "current" ], DotMap() )
         variables["testConfig"]["current"] = dict_merge( current, DotMap({
             "testTag":  variables["variante"],
@@ -1010,7 +1013,7 @@ class ariaDicomClass( ariaClass, ispDicom ):
             "pdf_filepath" : ""
         }
         result = []
-
+      
         if testId=="JT-4_2_2_1-A":
             check = checkMlc( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doJT_4_2_2_1_A( df )
@@ -1044,6 +1047,9 @@ class ariaDicomClass( ariaClass, ispDicom ):
         elif testId=="JT-10_3":
             check = checkField( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doJT_10_3( df )
+        elif testId=="JT-4_1_3":
+            check = checkField( self.config, variables, dicomData=dicomData )
+            pdfData, result = check.doJT_4_1_3( df )
         elif testId=="MT-4_1_2":
             check = checkField( self.config, variables, dicomData=dicomData )
             pdfData, result = check.doMT_4_1_2( df )

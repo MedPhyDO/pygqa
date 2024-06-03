@@ -46,7 +46,7 @@ __status__ = "Prototype"
 
 
 import logging
-logger = logging.getLogger( "MQTT" )
+logger = logging.getLogger( "ISP" )
 
 class ispMssql( ):
     '''Database querys on mssql database

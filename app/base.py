@@ -26,7 +26,7 @@ import pandas as pd
 import numpy as np
 
 import logging
-logger = logging.getLogger( "MQTT" )
+logger = logging.getLogger( "ISP" )
 
 class ispBase(  ):
     '''Basis Klasse
@@ -291,7 +291,7 @@ class ispBase(  ):
         if "msg" in errors:
             msg += "\n\n" + errors["msg"]
 
-        self.pdf.markdown( msg )
+        self.pdf.markdown( msg, area)
 
         if "data" in errors:
             self.pdf.pandas( errors["data"], area )

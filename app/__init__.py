@@ -13,8 +13,9 @@ __version__ = "0.1.5"
 __status__ = "Prototype"
 
 import logging
-logger = logging.getLogger( "MQTT" )
+logger = logging.getLogger( "ISP" )
 import os
+from pathlib import Path
 import json
 import time 
 
@@ -42,7 +43,7 @@ class system( system ):
         logger.info("_extendedSystemCheck - START")
         def checkPath( path, info ):
             html = ""
-
+            _path = Path(path)
             if not os.path.exists( path ):
                 try:
                     os.makedirs( path )
@@ -171,7 +172,7 @@ class system( system ):
             html += "</div>"
         html += "</div>"
 
-        # --------------- DICOM
+        # --------------- ariaDicomClass
         from app.ariadicom import ariaDicomClass
 
         _dicom_key = config.get( "dicom.servername", "" )
@@ -195,16 +196,24 @@ class system( system ):
 
         # --------------- resultsPath
         resultsPath = adc.initResultsPath()
-        html += '<div class="alert alert-dark" >Prüfe <span class="badge badge-info">resultsPath</span>: <b>{}</b>'.format( resultsPath )
+        configResultsPath = adc.config.get("resultsPath", ".")
+        path = Path(resultsPath).resolve()
+        html += '<div class="alert alert-dark" >Prüfe <span class="badge badge-info">resultsPath</span>: <b>{}</b> => <b>{}</b>'.format( configResultsPath, path )
         html += checkPath(resultsPath, '<span class="badge badge-info">resultsPath</span>')
+        useFile = adc.pd_results.useFile
+        html += 'Ergebnisse in einer Datei speichern: <span class="badge badge-{}">{}</span>'.format('success' if useFile else 'warning', useFile)
+        useDB = adc.pd_results.useDB
+        html += '<br>Ergebnisse in einer Datenbank speichern: <span class="badge badge-{}">{}</span>'.format('success' if useDB else 'warning', useDB)
         html += "</div>"
-
-        # ---------------      
+       
+        # --------------- DICOM
         html += '<div class="alert alert-dark" >Prüfe Dicom <span class="badge badge-info">dicom.servername</span>: <b>{}</b> - Konfiguration:'.format( _dicom_key )
         html += '<pre>{}</pre>'.format( json.dumps( dicom_config, indent=2 ) )
         html += '<br>Server Settings - AE Title (aec): <b>{aec}</b> - IP (server_ip): <b>{server_ip}</b> - Port (server_port): <b>{server_port}</b><br>'.format( **dicom_config )
         html += '<br>Application Entity Map Entry - AE Title (aet): <b>{aet}</b> - Port (listen_port): <b>{listen_port}</b>'.format( **dicom_config )
-        html += '<div class="alert alert-dark" >Prüfe Verzeichnis: <span class="badge badge-info">dicom.{}.local_dir</span>: <b>{}</b>'.format( _dicom_key, dicom_config.get("local_dir", "notset" ) )        
+        
+        path = Path( adc.dicomPath ).resolve()
+        html += '<div class="alert alert-dark" >Prüfe Verzeichnis: <span class="badge badge-info">dicom.{}.local_dir</span>: <b>{}</b> => <b>{}</b>'.format( _dicom_key, dicom_config.get("local_dir", "notset" ), path )        
         html += checkPath( adc.dicomPath , '<span class="badge badge-info">dicom.{}.local_dir</span>'.format(_dicom_key))
         html += "</div>"
 
@@ -261,15 +270,63 @@ class system( system ):
         adc.closeAE()
         html += "</div>"
 
+        # --------------- logging
+        logging_config = config.get( "server.logging" )
+        baseTopic = config.get( "server.webserver.name", "webapp" )
+        html += '<div class="alert alert-dark" ><span class="badge badge-info">Logging</span> - Konfiguration:'
+        html += '<pre>{}</pre>'.format( json.dumps( logging_config, indent=2 ) )
+
+        # --------------- websocket
+        if not config.get( "server.logging.handler.websocket", False ):
+            html += '<div class="alert alert-info" >Websocket ist deaktiviert'
+        else: 
+            html += '<div class="alert alert-success" >Websocket ist aktiviert '
+            html += '<button type="button" class="btn btn-primary" onClick="websocketTest( this )">Prüfen</button>'
+            # TODO: websocket testen
+            info_class = "info"
+            info_text = ''
+
+            html += '<div id="websocket-results" class="alert alert-{}">{}</div>'.format( info_class, info_text )
+            html += '''
+            <script>
+   
+            var result_box_ws = document.querySelector("#websocket-results");
+            if ( typeof app.socket === "object" ) {
+                if ( !app.socket?._sysinfo ) {
+                    app.socket._sysinfo = true;
+                    app.socket.on('publish', function(msg) {
+                        topics = msg.topic.split('/')
+                        if (msg.topic === app.socket.basetopic + '/stat/echo' ) {
+                            result_box_ws.className = "alert alert-success";
+                            result_box_ws.innerHTML = msg.payload;                
+                        } else if (msg.topic === app.socket.basetopic + '/stat/status' ) {
+                            result_box_ws.className = "alert alert-success";
+                            result_box_ws.innerHTML = 'Websocket Zugriff ist möglich';  
+                        }
+                    })
+                    function websocketTest( btn ){
+                        result_box_ws.className = "alert alert-danger";
+                        result_box_ws.innerHTML = "Websocket Prüfung nicht erfolgreich";
+                        app.socket.emit('publish', {
+                            topic: app.socket.basetopic + '/cmnd/echo',
+                            payload: 'Websocket Prüfung erfolgreich'
+                        })
+                    }
+                }
+            }
+            </script>
+            '''
+            pass
+        html += "</div>"
 
         # --------------- MQTT
         mqtt_config = config.get( "server.mqtt" )
         mqtt_config_copy = mqtt_config.copy()
         mqtt_config_copy.password = "********"
-        if mqtt_config_copy.get("host", "") == "":
-            html += '<div class="alert alert-info" >MQTT deaktiviert'
+        if not config.get( "server.logging.handler.mqtt", False ):
+            html += '<div class="alert alert-info" >MQTT ist deaktiviert'
         else:
-            html += '<div class="alert alert-dark" >Prüfe <span class="badge badge-info">server.mqtt</span> - Konfiguration:'
+            html += '<div class="alert alert-dark" ><span class="badge badge-info">server.mqtt</span> - Konfiguration:'
             html += '<pre>{}</pre>'.format( json.dumps( mqtt_config_copy.toDict(), indent=2 ) )
 
             mqtt = config.mqttGetHandler()
@@ -280,8 +337,9 @@ class system( system ):
                 info_class = "info"
                 info_text = 'MQTT Zugriff ist eingerichtet. <button type="button" class="btn btn-primary" onClick="mqttTest( this )">Prüfen</button>'
 
-            html += '<div id="MQTT-checkline" class="alert alert-{} ">{}<div id="MQTT-results" class"alert"></div></div>'.format( info_class, info_text )
+            html += '<div id="MQTT-checkline" class="alert alert-{} ">{}<div id="MQTT-results" class="alert"></div></div>'.format( info_class, info_text )
 
+        html += "</div>"
         html += "</div>"
         html += '''
             <script>
@@ -291,16 +349,15 @@ class system( system ):
                 app.clientMqtt.subscribe( "MQTT/test", function( msg ) {
                     box.className = "alert alert-success";
                     result_box.className = "alert alert-success";
-                    result_box.innerHTML = "MQTT Test erfolgreich";
+                    result_box.innerHTML = "MQTT Prüfung erfolgreich";
                 } );
             }
             function mqttTest( btn ){
                 box.className = "alert alert-info";
                 result_box.className = "";
-
                 if ( typeof app.clientMqtt === "object" ) {
                     result_box.className = "alert alert-danger";
-                    result_box.innerHTML = "MQTT Test nicht erfolgreich.";
+                    result_box.innerHTML = "MQTT Prüfung nicht erfolgreich.";
                     app.clientMqtt.publish( "MQTT/test", { "test":"MQTT" } );
                 } else {
                     result_box.className = "alert alert-warning";
@@ -309,8 +366,87 @@ class system( system ):
             }
             </script>
         '''
+
         logger.info("_extendedSystemCheck - END")
         return {}, html
+
+def importPandas( filename, conn:str=None ):
+    import pandas as pd
+    from app.results import columns, index
+    gqa = None
+    msg = ""
+    rowcount = 0
+    ok = False
+    if os.access(filename, os.R_OK) is True:
+        try:
+            gqa = pd.read_json( filename, orient="table", precise_float=10 )
+            msg = "import Pandas Datendatei: {}".format(filename)
+            ok = True
+        except:
+            msg = "import fehlgeschlagen: {}".format(filename)
+    else:
+        msg = "import keine Leserechte: {}".format(filename)
+        
+    print( msg )
+    if ok:
+        if not conn:
+            _config = ispConfig( )
+            
+            bind =_config.get("database.main", ["gqa"] )
+            if type( bind ) == list:
+                bind =bind[0]
+            conn = _config.get(["database", bind, "connection"], False)
+        try:
+            # eindeutige id spalte start bei 1
+            gqa = gqa.reset_index()
+            gqa.index = gqa.index + 1
+            gqa.index.rename('id', inplace=True)
+            rowcount = gqa.to_sql('gqadb', conn, 
+                index=True, 
+                if_exists='replace',
+                dtype =columns
+            )
+        except TypeError as e:
+            print( "pandas", e )
+        
+        print( "{} Datensätze in die Datenbank geschrieben".format(rowcount) ) 
+    
+def exportPandas( filename, conn:str=None ):
+    import pandas as pd
+    from app.results import columns, index
+    if not conn:
+        _config = ispConfig( )
+        bind =_config.get("database.main", ["gqa"] )
+        if type( bind ) == list:
+            bind =bind[0]
+        conn = _config.get(["database", bind, "connection"], False)
+   
+    msg = ""
+    # alle columns als string bis auf group das ist integer
+    gqa = pd.read_sql_table('gqadb', conn, 
+        index_col=index,
+    )
+    gqa.drop(columns=['id'], inplace=True)
+    gqa.reset_index( inplace=True )
+    gqa["date"] = gqa["date"].dt.strftime( "%Y%m%d" )
+    gqa.set_index(index, inplace=True)
+  
+    if not os.path.isfile( filename ) or os.access(filename, os.W_OK) is True:
+        try:
+            gqa.to_json( filename, 
+                orient="table", 
+                double_precision=10, 
+                # default_handler=str,
+                indent=2 
+            ) 
+            msg = "export nach: {}".format(filename)
+        except:
+            msg = "export fehlgeschlagen: {}".format(filename)
+    else:
+        msg = "export keine Schreibrechte: {}".format(filename)
+
+    print( msg )
+
 
 # -----------------------------------------------------------------------------
 def run( overlay:dict={}, additionalModels:list=[] ):

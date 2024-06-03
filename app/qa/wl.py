@@ -44,7 +44,7 @@ from isp.plot import plotClass
 
 # logging
 import logging
-logger = logging.getLogger( "MQTT" )
+logger = logging.getLogger( "ISP" )
 
 class qa_wl( ispCheckClass ):
     """

@@ -26,7 +26,7 @@ from matplotlib.patches import Rectangle
 
 # logging
 import logging
-logger = logging.getLogger( "MQTT" )
+logger = logging.getLogger( "ISP" )
 
 class qa_field( ispCheckClass, FieldAnalysis ):
     """Erweitert die Klasse FieldAnalysis mit ispCheckClass
@@ -1811,5 +1811,334 @@ class checkField( ispBase ):
              .groupby( [ 'day', 'SeriesNumber' ] )
              .apply( groupBySeries )
         )
+        # abschließen pdfdaten und result zurückgeben
+        return self.pdf.finish(), result
+
+    def doJT_4_1_3(self, fileData):
+        """Jahrestest: 4.1.3.  ()
+
+        http://192.168.131.66:5010/api/gqa/run?year=2024&month=2&unit=TrueBeamSN2898&testid=JT-4_1_3&energy=6x
+        - Gruppiert nach Doserate, sortiert nach MU
+        -
+
+        Parameters
+        ----------
+        fileData : pandas.DataFrame
+
+        Returns
+        -------
+        pdfFilename : str
+            Name der erzeugten Pdfdatei
+        result : list
+            list mit dicts der Testergebnisse
+
+        """
+        # used on progress
+        filesMax=len( fileData )
+        self.fileCount = 0
+        # holds evaluation results
+        result=[]
+
+        # place for testing parameters
+        md = dict_merge( DotMap( {
+            "_table": { "width" :105, "height": 45, "left":65, "top":210 },
+            "_chart" : {"width" :180, "height" : 35 },
+            "profileSize" : { "width" : 180, "height" : 35 },
+            "profileTitle" : "Gantry: {gantry:.0f}°",
+            "_info" : {  },
+            "analyze" :{
+                "edge_detection_method": "FWHM", # Edge.FWHM
+                "in_field_ratio": 0.8,
+            },
+            "analyze_FFF" :{
+                "edge_detection_method": "Inflection Hill", # Edge.INFLECTION_HILL
+                "in_field_ratio": 0.8,
+            },
+            "table_fields" : [
+                {'field': 'Kennung', 'label':'Kennung' },
+                {'field': 'doserate', 'label':'Doserate', 'format':'{0:.0f}' },
+                {'field': 'ME', 'label':'ME', 'format':'{0:.0f}' },
+
+                {'field': 'c_flat', 'label':'c-flat [%]', 'format':'{0:.2f}' },
+                {'field': 'c_flat_diff', 'label':'c-flat-diff'},
+                {'field': 'c_flat_diff_passed', 'label':'c-flat-diff-passed'},
+                
+                {'field': 'i_flat', 'label':'i-flat [%]', 'format':'{0:.2f}' },
+                {'field': 'i_flat_diff', 'label':'c-flat-diff'},
+                {'field': 'i_flat_diff_passed', 'label':'i-flat-diff-passed'},
+                
+                {'field': 'c_sym', 'label':'c-sym [%]', 'format':'{0:.2f}' },
+                {'field': 'c_sym_diff', 'label':'c-sym-diff'},
+                {'field': 'c_sym_diff_passed', 'label':'c-sym-diff-passed'},
+                
+                {'field': 'i_sym', 'label':'i-sym [%]', 'format':'{0:.2f}' },
+                {'field': 'i_sym_diff', 'label':'c-sym-diff'},
+                {'field': 'i_sym_diff_passed', 'label':'i-sym-diff-passed'},
+
+            ],
+            "table_fields_FFF" : [
+                {'field': 'gantry', 'label':'Gantry', 'format':'{0:.0f}' },
+
+                {'field': 'c_flat', 'label':'c-Inf [%]', 'format':'{0:.1f}' },
+                {'field': 'c_flat_diff', 'label':'c-Inf-diff'},
+                {'field': 'c_flat_diff_passed', 'label':'c-Inf-diff_passed'},
+
+                {'field': 'i_flat', 'label':'i-Inf [%]', 'format':'{0:.1f}' },
+                {'field': 'i_flat_passed', 'label':'i-Inf-diff'},
+                {'field': 'i_flat_diff_passed', 'label':'i-Inf-diff_passed'},
+
+                {'field': 'c_sym', 'label':'c-sym [%]', 'format':'{0:.2f}' },
+                {'field': 'c_sym_diff', 'label':'c-sym-diff'},
+                {'field': 'c_sym_diff_passed', 'label':'c-sym-diff-passed'},
+                
+                {'field': 'i_sym', 'label':'i-sym [%]', 'format':'{0:.2f}' },
+                {'field': 'i_sym_diff', 'label':'c-sym-diff'},
+                {'field': 'i_sym_diff_passed', 'label':'i-sym-diff-passed'},
+            ]
+        } ), self.metadata )
+        print( "************* doJT_4_1_3" )
+        #md.pprint(pformat='json')
+
+        def groupBySeries( df_group ):
+            """Datumsweise Auswertung und PDF Ausgabe
+            Die Daten kommen nach doserate und ME sortiert
+            """
+            # print("doJT_4_1_3", df_group[ ["energy", "doserate", "ME"] ] )
+
+            # get base and fields check number of data
+            ok, df_base, df_fields = self.evaluationPrepare(df_group, md, result)
+            if not ok:
+                return
+
+            result_doserate = []
+
+            def groupByDoserate( df_doserate ):               
+                #print( df_doserate )
+                text = ""
+                # in den Toleranzangaben der config steht die default query
+                openFieldQuery = md.current.tolerance.default.get('flat_c').check.get("query", "")
+                #openFieldQuery = md.current.tolerance.default.flat_c.check.query
+                fieldQuery = openFieldQuery.replace("==", "!=")
+                
+
+                # das offene Feld bestimmen
+                df_base = df_doserate.query( openFieldQuery )
+    
+                # base Field und dosis bereitstellen
+                baseField = qa_field( self.getFullData( df_base.loc[df_base.index[0]] ), normalize="none" )
+
+                # unterschiedliche Auswertung FFF oder nicht
+                analyze_method = "analyze"
+                table_fields = md["table_fields"]
+                if baseField._is_FFF:
+                    analyze_method += "_FFF"
+                    table_fields = md["table_fields_FFF"]
+
+                baseField.analyze( 
+                    protocol=Protocol.VARIAN, 
+                    edge_detection_method=md[analyze_method]["edge_detection_method"], # Edge.FWHM,
+                    in_field_ratio=md[analyze_method]["in_field_ratio"],
+                    is_FFF = baseField._is_FFF,
+                        # penumbra = (20, 80),
+                )
+
+                results = baseField.results_data()
+                # print( "####### results", results.protocol_results )
+
+                # baseField Image anzeigen
+                img =  baseField.plotProfile( metadata=md )
+                self.pdf.image(img, md["_chart"], {"padding":"2mm 0 2mm 0"} )
+
+                c_f_b = results.protocol_results["flatness_horizontal"]
+                i_f_b = results.protocol_results["flatness_vertical"]
+                c_s_b = results.protocol_results["symmetry_horizontal"]
+                i_s_b = results.protocol_results["symmetry_vertical"]               
+
+                '''
+                # Analyse nach DIN (max-min)/center rückgabe in valueiec
+                profile = baseField.getProfileData()
+                # crossplane und inplane
+                f_c_b = profile["flatness"]["horizontal"]["value"]
+               
+                openFieldQuery = md.current.tolerance.default.flat_i.check.query
+                fieldQuery = openFieldQuery.replace("==", "!=")
+                #print( openFieldQuery, fieldQuery )
+
+                # das offene Feld bestimmen
+                df_base = df_doserate.query( openFieldQuery )
+
+                # base Field und dosis bereitstellen
+                baseField = qa_field( self.getFullData( df_base.loc[df_base.index[0]] ), normalize="none" )
+                
+                # Analyse nach DIN (max-min)/center rückgabe in valueiec
+                profile = baseField.getProfileData()
+                
+                f_i_b = profile["flatness"]["vertical"]["value"]
+                
+                s_c_b = profile["symmetry"]["horizontal"]["value"]
+                
+                s_i_b = profile["symmetry"]["vertical"]["value"]
+                
+                '''
+                # 100  referenz Dose 1.0
+                #data = [ {
+                #    'Kennung': baseField.infos["RadiationId"],
+                #    'doserate': baseField.infos["doserate"],
+                #    'ME': baseField.infos["ME"],
+                # #   'baseMeanDose': baseMeanDose,
+                #    'fieldMeanDose': baseMeanDose,
+                #    'diff': (baseMeanDose - 1.0) * 100
+#
+#                }]
+                # print(baseField.infos)
+                data = [ {
+                    'Kennung': baseField.infos["RadiationId"],
+                    'doserate': baseField.infos["doserate"], 
+                    'ME': baseField.infos["ME"],
+                   #'baseMeanDose': baseMeanDose,
+                    'c_flat': c_f_b,
+                    'c_flat_diff': np.nan,
+                    'c_flat_diff_passed': np.nan,
+                    'i_flat': i_f_b,
+                    'i_flat_diff': np.nan,
+                    'i_flat_diff_passed': np.nan,
+                    'c_sym': c_s_b,
+                    'c_sym_diff': np.nan,
+                    'c_sym_diff_passed': np.nan,
+                    'i_sym': i_s_b,
+                    'i_sym_diff': np.nan,
+                    'i_sym_diff_passed': np.nan,
+                }]
+
+                
+                # alle anderen filtern
+                df_fields = df_doserate.query( fieldQuery )
+
+                # alle anderen durchgehen
+                for info in df_fields.itertuples():
+                    # prüft Field und dosis bereitstellen
+                    checkField = qa_field( self.getFullData(info), normalize="none" )
+                    checkField.analyze( 
+                        protocol=Protocol.VARIAN, 
+                        edge_detection_method=md[analyze_method]["edge_detection_method"], # Edge.FWHM,
+                        in_field_ratio=md[analyze_method]["in_field_ratio"],
+                        is_FFF = baseField._is_FFF,
+                        # penumbra = (20, 80),
+                    )
+
+                    results = checkField.results_data()
+
+                    c_f = results.protocol_results["flatness_horizontal"]
+                    i_f = results.protocol_results["flatness_vertical"]
+                    c_s = results.protocol_results["symmetry_horizontal"]
+                    i_s = results.protocol_results["symmetry_vertical"]
+   
+                    data.append( {
+                      'Kennung': checkField.infos["RadiationId"],
+                      'doserate': checkField.infos["doserate"], 
+                      'ME': checkField.infos["ME"],
+                      'c_flat': c_f,
+                      'c_flat_diff': c_f - c_f_b,
+                      'i_flat': i_f,
+                      'i_flat_diff': i_f - i_f_b,
+                      'c_sym': c_s,
+                      'c_sym_diff': c_s - c_s_b,
+                      'i_sym': i_s,
+                      'i_sym_diff': i_s - i_s_b
+                    } )
+                    
+                    # progress
+                    self.fileCount += 1
+                    if hasattr( logger, "progress"):
+                        logger.progress( md["testId"],  40 + ( 40 / filesMax * self.fileCount ) )
+
+                # aus den daten ein DataFrame machen
+                evaluation_df = pd.DataFrame( data )
+                # check tolerance - printout tolerance, evaluation_df -  md["tolerance_field"],
+                
+                # print("########", evaluation_df)
+
+                
+
+                # flat_c  diff_flat_c    flat_i  diff_flat_i    sym_c  diff_sym_c    sym_i  diff_sym_i
+                # 'diff_flat_i_passed', 'diff_sym_c_passed', 'diff_sym_i_passed'
+                #acceptance = self.evaluationResult( evaluation_df, md, result_doserate, md.current.tolerance.default.flat_c.check.field, printResultIcon=False )
+                #acceptance = self.evaluationResult( evaluation_df, md, result_doserate, printResultIcon=False )
+                
+                check = [
+                    { "field": 'c_flat_diff', 'tolerance': 'flatness' },
+                    { "field": 'i_flat_diff', 'tolerance': 'flatness' },
+                    { "field": 'c_sym_diff', 'tolerance': 'symmetry' },
+                    { "field": 'i_sym_diff', 'tolerance': 'symmetry' }
+                ]
+                acceptance = self.check_acceptance( evaluation_df, md, check, withSoll=True )
+                '''
+                # debug pandas ausgabe
+                self.pdf.pandas( 
+                    evaluation_df, 
+                    area=md["_info"]
+                )
+                '''
+                self.pdf.pandas( 
+                    evaluation_df, 
+                    area=md["_info"],
+                    fields=table_fields
+                )
+                # print( md.current.tolerance.items() )
+                '''
+                tolerance_format = '<b>{}</b> <span style="position:absolute;left:75mm;">{}</span> <span style="position:absolute;left:125mm;">{}</span> <br>'
+                infoText = tolerance_format.format("<br>", "<b>Warnung [%]</b>", "<b>Fehler [%]</b>")
+                infos = []
+                for tolerance_name, tolerance in md.current.tolerance.items():
+                    tolerance_check = tolerance.check
+                    infos.append({
+                        "Prüfung" : tolerance.get("label", tolerance_name),
+                        "Warnung" : tolerance.warning.f,
+                        "Fehler" :  tolerance.error.f 
+                    })
+                    tolerance_check["tolerance"] = tolerance_name
+                    check.append( tolerance_check )
+                    infoText += tolerance_format.format( tolerance_name, tolerance.warning.f, tolerance.error.f )
+        
+                df_info = pd.DataFrame(infos)
+                self.pdf.pandas( df_info, area=md["_info"] )
+                
+                            #
+                # Tabelle erzeugen
+                #
+                table_fields = md["table_fields"]
+                
+                self.pdf.pandas( evaluation_df,
+                    area=md["_table"],
+                    attrs={"class":"layout-fill-width", "margin-top": "5mm"},
+                 #   fields=table_fields
+                )
+
+                self.pdf.pandas( df_info, area=md["_info"] )
+                '''
+                # acceptance dieser Gruppe zurückgeben
+                return acceptance
+
+            #
+            # Gruppiert nach doserate abarbeiten und min zurückgeben
+            
+            acceptance = df_group.groupby( [ "doserate" ] ).apply( groupByDoserate ).min()
+            
+            #
+            # Ergebnis in result merken
+            #
+            result.append( self.createResult( result_doserate, md, [],
+                df_group['AcquisitionDateTime'].iloc[0].strftime("%Y%m%d"),
+                len( result ), # bisherige Ergebnisse in result
+                acceptance
+            ) )
+
+            # Gesamt check - das schlechteste von result_doserate
+            self.pdf.resultIcon( acceptance )
+
+        #
+        # Gruppiert nach SeriesNumber abarbeiten
+        fileData.sort_values( md["series_sort_values"] ).groupby( md["series_groupby"] ).apply( groupBySeries )
+
         # abschließen pdfdaten und result zurückgeben
         return self.pdf.finish(), result

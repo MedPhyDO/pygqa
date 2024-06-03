@@ -9,6 +9,7 @@ Flask>=2.2.5
 Flask_Admin>=1.6.1
 Flask_Cors>=4.0.0
 flask_restful_swagger_2>=0.35
+Flask-SocketIO>=5.3.6
 flask_sqlalchemy>=3.0.5
 Jinja2>=3.1.3
 jinja_markdown>=1.210911

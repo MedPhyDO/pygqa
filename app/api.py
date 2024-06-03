@@ -33,7 +33,7 @@ from isp.config import ispConfig
 from app.ariadicom import ariaDicomClass
 
 import logging
-logger = logging.getLogger( "MQTT" )
+logger = logging.getLogger( "ISP" )
 
 from isp.safrs import ispSAFRSDummy
 
@@ -120,7 +120,7 @@ class gqa( ispSAFRSDummy ):
         # name der verwendeten Datenbank und dicom verbindung
         self._database_key = self.config.get( "server.database.servername", "VMSCOM" )
         self._dicom_key = self.config.get( "dicom.servername", "" )
-
+          
         # ariaDicom bereitstellen
         self.ariaDicom = ariaDicomClass(
             database = self._database_key,
@@ -128,8 +128,12 @@ class gqa( ispSAFRSDummy ):
             config = self.config
         )
 
-        self.appInfo( "gqa.resultfile", self.ariaDicom.pd_results.filename )
-        self.appInfo( "gqa.result.error", self.ariaDicom.pd_results.errors )
+        self.appInfo( "gqa.result", {
+            "useDB": self.ariaDicom.pd_results.useDB,
+            "useFile": self.ariaDicom.pd_results.useFile,
+            "filename": self.ariaDicom.pd_results.filename,
+            "errors" : self.ariaDicom.pd_results.errors
+        } )
 
         # unit pid über config Angaben holen
         if not "pid" in kwargs or kwargs["pid"] == None:
@@ -157,12 +161,6 @@ class gqa( ispSAFRSDummy ):
         .. restdoc::
         summary : alle Jahre in denen Test gemacht wurden
         description: alle Jahre in denen Test gemacht wurden
-        parameters:
-            - name : _ispcp
-              type : OrderedMap
-              in : query
-              default : {}
-              description : zusätzliche parameter
 
         ----
 
@@ -170,16 +168,15 @@ class gqa( ispSAFRSDummy ):
         
         """
         _kwargs = cls.init( kwargs )
-        subfolders = [ f.name for f in os.scandir(cls.config.resultsPath) if f.is_dir() ]
 
+        years = cls.ariaDicom.pd_results.getYears( )
         units = {key: value for (key, value) in cls.config.get( "units", {} ).items() if value }
-        
         result = {
             "version" :cls.config.version,
             "resultsPath" :cls.config.resultsPath,
             "units": units,
-            "years": subfolders,
-            "firstYear" : cls.config.get("firstYear", 2017),
+            "years": years,
+            "firstYear" : cls.config.get("firstYear", years[0]),
         }
         
         return  cls._int_json_response( { "data": result } )
@@ -201,15 +198,14 @@ class gqa( ispSAFRSDummy ):
               in : query
               required : false
               description : Id des Tests im Aria [_xxxQA TB, _xxxQA VB]
+            - name : tags
+              in : query
+              required : false
+              description : zu suchende Tags 
             - name : unit
               in : query
               required : false
               description : Name eines Geräts wird nach pid umgewandelt und auch dort gesetzt
-            - name : _ispcp
-              type: OrderedMap
-              in : query
-              default : {}
-              description : zusätzliche parameter
 
         ----
 
@@ -229,6 +225,7 @@ class gqa( ispSAFRSDummy ):
             result = cls.ariaDicom.getAllGQA(
                 pids = _kwargs["pid"],
                 year = _kwargs["year"],
+                testTags = _kwargs["tags"],
                 withResult=True     # Testergebnisse mit ausgeben
             )
 
@@ -267,13 +264,88 @@ class gqa( ispSAFRSDummy ):
 
         """
         
-        # letzte config laden
-        _kwargs = cls.init( )
+        # config laden
+        _kwargs = cls.init( kwargs )
         # Aufruf Paramter in App-Info ablegen
         cls.appInfo( "do_get", _kwargs )     
         result = cls.ariaDicom.pd_results.exportYear( _kwargs.get("year") )
         return cls._int_json_response( { "data": result } )
     
+    @classmethod
+    @jsonapi_rpc( http_methods=['GET'] )
+    def units( cls, **kwargs ):
+        """
+        .. restdoc::
+
+        description: alle möglichen units holen
+        parameters:
+            - name : year
+              in : query
+              required : false
+              description : für das angegebene Jahr
+        ----
+
+        """
+        # config laden
+        _kwargs = cls.init( kwargs )
+        units = {key: value for (key, value) in cls.config.get( "units", {} ).items() if value }
+        return cls._int_json_response( { "data": units } )
+    
+    @classmethod
+    @jsonapi_rpc( http_methods=['GET'] )
+    def years( cls, **kwargs ):
+        """
+        .. restdoc::
+
+        description: alle verwendeten Jahre holen
+        ----
+
+        """
+        # config laden
+        _kwargs = cls.init( kwargs )
+        result = cls.ariaDicom.pd_results.getYears( )
+        return cls._int_json_response( { "data": result } )
+
+    @classmethod
+    @jsonapi_rpc( http_methods=['GET'] )
+    def test_result( cls, **kwargs ):
+        """
+        .. restdoc::
+
+        description: datenbank test
+        summary : 
+        parameters:
+            - name : year
+              in : query
+              required : false
+              description : Das zu exportierende Jahr
+
+        ----
+        
+        Parameters
+        ----------
+        cls : TYPE
+            DESCRIPTION.
+        **kwargs : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        # letzte config laden
+        _kwargs = cls.init( kwargs )
+        # Aufruf Paramter in App-Info ablegen
+        cls.appInfo( "test_result", _kwargs )  
+        cls.appInfo( "test_result", {
+            "useFile": cls.ariaDicom.pd_results.useFile,
+            "useDB": cls.ariaDicom.pd_results.useDB,
+          #  "connection": cls.ariaDicom.pd_results.gqadb._get_connection(),
+        })      
+        result = cls.ariaDicom.pd_results.getYears( )        
+        return cls._int_json_response( { "data": result } )
+      
     @classmethod
     @jsonapi_rpc( http_methods=['GET'] )
     def tagging( cls, **kwargs ):
@@ -338,11 +410,6 @@ class gqa( ispSAFRSDummy ):
         description: alle verwendeten Tags holen
         summary : alle verwendeten Tags holen
         parameters:
-            - name : _ispcp
-              in : query
-              type: OrderedMap
-              default : {}
-              description : zusätzliche parameter
             - name : year
               in : query
               type: integer
@@ -383,11 +450,6 @@ class gqa( ispSAFRSDummy ):
         description: GQA Konfigurationen holen
         summary : Holt alle GQA Konfigurationen aus allen configs als json oder stellt sie in einer Tabelle dar
         parameters:
-            - name : _ispcp
-              in : query
-              type: OrderedMap
-              default : {}
-              description : zusätzliche parameter
             - name : format
               in : query
               required : false
@@ -543,11 +605,6 @@ class gqa( ispSAFRSDummy ):
         description: Einen angegebenen Test durchführen
         summary : Einen angegebenen Test durchführen
         parameters:
-            - name : _ispcp
-              type: OrderedMap
-              in : query
-              default : {}
-              description : zusätzliche parameter
             - name : testid
               in : query
               required : true
@@ -645,7 +702,6 @@ class gqa( ispSAFRSDummy ):
 
             _result = { "runTests": runTests }
 
-
         return cls._int_json_response( { "data": _result } )
 
     @classmethod
@@ -657,10 +713,6 @@ class gqa( ispSAFRSDummy ):
         description: PDF eines Tests zurückgeben
         summary : PDF eines Tests zurückgeben
         parameters:
-            - name : _ispcp
-              in : query
-              default : {}
-              description : zusätzliche parameter
             - name : testid
               in : query
               required : true

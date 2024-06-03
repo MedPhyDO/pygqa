@@ -1,18 +1,18 @@
 <div class="">
-    <div class="GQA " id="{{ id }}" ></div>
-    <div>Erklärung:
-        <span class="gqa-help md-chip green lighten-4">Test ausgewertet und PDF erstellt</span>
-        <span class="gqa-help md-chip yellow lighten-3">Test gemacht. Auswertung starten durch anklicken</span>
-        <span class="gqa-help md-chip grey lighten-1">Test noch nicht vollständig</span>
-				<span class="gqa-help "> <i class="mdi mdi-file-pdf-box green-text pdfIcon"></i>PDF vorhanden</span>
-        <span class="gqa-help "> <i class="mdi mdi-check-outline green-text white resultIcon"></i>Test OK</span>
-        <span class="gqa-help "> <i class="mdi mdi-alert-circle-outline amber-text white resultIcon"></i>Test überschreitet Warnschwelle</span>
-        <span class="gqa-help "> <i class="mdi mdi-close-outline red-text white resultIcon"></i>Test außerhalb der Toleranz</span>
-        <span
-					class="gqa_btn"
-					onClick="allTests(false)"
-				>alle offenen Tests durchführen</span>
-    </div>
+  <div class="GQA " id="{{ id }}" ></div>
+  <div>Erklärung:
+    <span class="gqa-help md-chip green lighten-4">Test ausgewertet und PDF erstellt</span>
+    <span class="gqa-help md-chip yellow lighten-3">Test gemacht. Auswertung starten durch anklicken</span>
+    <span class="gqa-help md-chip grey lighten-1">Test noch nicht vollständig</span>
+    <span class="gqa-help "> <i class="mdi mdi-file-pdf-box green-text pdfIcon"></i>PDF vorhanden</span>
+    <span class="gqa-help "> <i class="mdi mdi-check-outline green-text white resultIcon"></i>Test OK</span>
+    <span class="gqa-help "> <i class="mdi mdi-alert-circle-outline amber-text white resultIcon"></i>Test überschreitet Warnschwelle</span>
+    <span class="gqa-help "> <i class="mdi mdi-close-outline red-text white resultIcon"></i>Test außerhalb der Toleranz</span>
+    <span
+      class="gqa_btn"
+      onClick="allTests(false)"
+    >alle offenen Tests durchführen</span>
+  </div>
 </div>
 <style>
 
@@ -46,10 +46,7 @@
 	.gqa_table .year{
 		margin: 5px;
 	}
-    .gqa_table .info{
-
-    }
-
+    
 	.gqa-help{
 		padding: 2px;
 		margin: 2px;
@@ -116,40 +113,59 @@
 
 var gqaServer = "{{ serverHost }}";
 
+var gqaLogging = {{ logging|tojson|safe }}
 var gqaMQTT = {{ mqtt|tojson|safe }}
+var gqaSocket = {
+  basetopic: "{{ basetopic }}"
+}
 
-app.clientMqtt = app.mqtt( gqaMQTT );
+function viewProgress( msg ){
+  // <AcquisitionYear>-<AcquisitionMonth>-<unit>-<testId>-<energy>
+  var key = "";
+  if ( typeof msg.payload === "string" ){
+    msg.payload = JSON.parse(msg.payload)
+  }
+  if ( typeof msg.payload === "object" ){
+    var p = msg.payload;
+    key = (p.AcquisitionYear||"") + "-" + (p.AcquisitionMonth||0);
+    key += "-" + (p.unit||"") + "-" + (p.testId||"") + "-" + (p.energy||"");
 
-// app.clientMqtt.unsubscribe( gqaMQTT["basetopic"] + "/stat/progress/#" ); // unsubscribe zum testen
-app.clientMqtt.subscribe( gqaMQTT["basetopic"] + "/stat/progress/#", function( msg ){
-    // console.info("progress callback", msg );
+    // progress angaben (maxprogress und progress)
+    var progress = p.progress / p.maxprogress * 100;
+    var style = "background-color:#fff176 !important;";
 
-    // <AcquisitionYear>-<AcquisitionMonth>-<unit>-<testId>-<energy>
-	var key = "";
-	// key zusammenstallen
+    style += "background:linear-gradient(to right, #81C784 " + progress + "% , #fff176 0%) !important;";
+    style += "background:-ms-linear-gradient(left, #81C784 " + progress + "% , #fff176 0%) !important;";
+    // das Element ändern. Gelb als Farbe setzen falls gradient nicht unterstützt wird
+    $("[data-key='" + key + "']").attr("style", style );
 
-	if ( typeof msg.payload === "object" ){
+  }
+}
 
-		var p = msg.payload;
+if ( gqaLogging?.handler?.mqtt ) {
+  app.clientMqtt = app.mqtt( gqaMQTT )
+  // app.clientMqtt.unsubscribe( gqaMQTT["basetopic"] + "/stat/progress/#" ); // unsubscribe zum testen
+  app.clientMqtt.subscribe( gqaMQTT["basetopic"] + "/stat/progress/#", function( msg ){
+    viewProgress( msg )
+  } );
+}
 
-		key = (p.AcquisitionYear||"") + "-" + (p.AcquisitionMonth||0);
-		key += "-" + (p.unit||"") + "-" + (p.testId||"") + "-" + (p.energy||"");
-
-		// progress angaben (maxprogress und progress)
-		var progress = p.progress / p.maxprogress * 100;
-
-		// console.info("gqaMQTTbase subscribe", key, progress);
-
-		var style = "background-color:#fff176 !important;";
-
-		style += "background:linear-gradient(to right, #81C784 " + progress + "% , #fff176 0%) !important;";
-		style += "background:-ms-linear-gradient(left, #81C784 " + progress + "% , #fff176 0%) !important;";
-		// das Element ändern. Gelb als Farbe setzen falls gradient nicht unterstützt wird
-		//
-		$("[data-key='" + key + "']").attr("style", style );
-
-	}
-} );
+if ( gqaLogging?.handler?.websocket ) {
+  app.socket = io('')
+  app.socket.basetopic = gqaSocket["basetopic"]
+  app.socket.on('publish', function( msg ) {
+    let topics = msg.topic.split('/')
+    if (topics.length >= 3 && topics.splice(0,3).join("/") === app.socket.basetopic + "/stat/progress") {    
+      viewProgress( msg )
+    }
+  })
+  app.socket.on('connect', function() {
+    app.socket.emit('publish', {
+      topic:app.socket.basetopic + '/cmnd/connected',
+      payload: 'client connected'
+    })
+  })
+}
 
 app.gqa = {}
 
@@ -160,25 +176,25 @@ async function allTests( all) {
 	tests = []
 	for (const [key, value] of Object.entries( app.gqa )) {
     	
-    	if ( value?.isReady && !value?.hasResults ) {
-        	param = {
-                "year": value?.year,
-                "month": value?.month,
-                "unit": value?.unit,
-                "testid": value?.testId
-            }
-        	test = Object.values( param).join("-") //  value?.year + "-" + value?.month + "-" + value?.unit + "-" value?.testId
-        	if ( !tests.includes( test ) ){
-							tests.push( test )
-            	// todo ohne energy aufrufen und nur einmal pro year, month, unit, testId
-							param.action = "gqa/run"
-            	const elm = $(`[data-key="${key}"]`)
-            	console.info(key, param, elm)
-            	// http://127.0.0.1:8091/api/gqa/run?year=2023&month=1&unit=VitalBeamSN2674&testid=MT-8_02-1-2&energy=6x&uid=lh8szms1
-            	// http://127.0.0.1:8091/api/gqa/run?unit=TrueBeamSN2898&testId=MT-4_1_2&energy=6x&year=2023&month=2
-            	await GQA_loaddata( param, elm );
-            }
-    	}
+    if ( value?.isReady && !value?.hasResults ) {
+      param = {
+        "year": value?.year,
+        "month": value?.month,
+        "unit": value?.unit,
+        "testid": value?.testId
+      }
+      test = Object.values( param).join("-") //  value?.year + "-" + value?.month + "-" + value?.unit + "-" value?.testId
+      if ( !tests.includes( test ) ){
+        tests.push( test )
+        // todo ohne energy aufrufen und nur einmal pro year, month, unit, testId
+        param.action = "gqa/run"
+        const elm = $(`[data-key="${key}"]`)
+        console.info(key, param, elm)
+        // http://127.0.0.1:8091/api/gqa/run?year=2023&month=1&unit=VitalBeamSN2674&testid=MT-8_02-1-2&energy=6x&uid=lh8szms1
+        // http://127.0.0.1:8091/api/gqa/run?unit=TrueBeamSN2898&testId=MT-4_1_2&energy=6x&year=2023&month=2
+        await GQA_loaddata( param, elm );
+      }
+    }
 	}
     
 }
