@@ -15,7 +15,7 @@ from pathlib import Path
 import re
 
 import logging
-logger = logging.getLogger( "MQTT" )
+logger = logging.getLogger( "ISP" )
 
 from isp.mssql import ispMssql
 

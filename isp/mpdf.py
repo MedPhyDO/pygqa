@@ -125,7 +125,7 @@ from isp.config import ispConfig, dict_merge
 from isp.plot import rcParams
 
 import logging
-logger = logging.getLogger( "MQTT" )
+logger = logging.getLogger( "ISP" )
 
 ABSPATH = osp.dirname( osp.abspath( __file__) )
 # weasyprint warnings abschalten
@@ -219,7 +219,7 @@ class PdfGenerator:
         if isinstance( config, ispConfig ):
             self._config = config
         else:
-            self._config = ispConfig( mqttlevel=logging.WARNING )
+            self._config = ispConfig( isplevel=logging.WARNING )
             if isinstance( config, dict):
                 self._config.update( config )
 

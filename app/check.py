@@ -7,14 +7,14 @@ __license__ = "MIT"
 __version__ = "0.2.1"
 __status__ = "Prototype"
 
-import matplotlib.pyplot as plt
+# mathplotlib - use Agg as non-interactive backend
+import matplotlib
+matplotlib.use('agg')
 
 from app.image import DicomImage
 
-from isp.plot import plotClass
-
 import logging
-logger = logging.getLogger( "MQTT" )
+logger = logging.getLogger( "ISP" )
 
 class ispCheckClass(  ):
     """ Hilfsfunktionen für alle check Module

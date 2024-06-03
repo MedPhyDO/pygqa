@@ -38,7 +38,7 @@ help und snippets::
 
 examples ::
 
-    /api/<modul>/?fields[<modul>]=<feld1,feld2>&_ispcp={"Test":"Hallo"}&filter=eq(aktiv,true),in(<modul>,(Rapp,SA43))
+    /api/<modul>/?fields[<modul>]=<feld1,feld2>&filter=eq(aktiv,true),in(<modul>,(Rapp,SA43))
     /api/<modul>/groupby?fields[<modul>]=<feld1,feld2>&groups=Geraet&filter=eq(aktiv,true)
 
     /api/<modul>/groupby?fields[<modul>]=<feld1,feld2>&groups=Geraet&filter=eq(aktiv,true)
@@ -47,6 +47,12 @@ examples ::
 
 CHANGELOG
 =========
+
+0.1.9 / 2024-05-24
+- add _get_engine() function
+- add param flat to _int_query function
+- remove unused _ispcp 
+- add count to ispSAFRS.undefined()
 
 0.1.8 / 2024-03-06
 - change _int_groupby() add order_by
@@ -110,7 +116,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask import Response, request, current_app
 
 import sqlalchemy
-from sqlalchemy import func, text, or_ # , case, or_, inspect
+from sqlalchemy import create_engine, func, text, or_ # , case, or_, inspect
 #from sqlalchemy.orm import InstrumentedAttribute
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.orm import Query as BaseQuery
@@ -426,12 +432,12 @@ def ispSAFRS_decorator( fn ):
             with an object.
             .. code::
 
-                /api/gqadb/?zahl=12 - ( safrs._api.gqadb_API, ) - {}
-                /api/gqadb/2020?zahl=12 - ( safrs._api.gqadb_API, ) - {'gqadbId': '2020'}
-                /api/gqadb/test?zahl=12 - ( safrs._api.method_gqadb_test, ) - {}
-                /api/gqa?zahl=12 -  ( safrs._api.gqa_API, ) - {}
-                /api/gqa/2020?zahl=12 - ( safrs._api.gqa_API, ) - {'gqaId': '2020'}
-                /api/gqa/test?zahl=12 - ( safrs._api.gqa_API, ) - {'gqaId': 'test'}
+                /api/testdb/?zahl=12 - ( safrs._api.testdb_API, ) - {}
+                /api/testdb/2020?zahl=12 - ( safrs._api.testdb_API, ) - {'testId': '2020'}
+                /api/testdb/test?zahl=12 - ( safrs._api.method_testdb_test, ) - {}
+                /api/test?zahl=12 -  ( safrs._api.test_API, ) - {}
+                /api/test/2020?zahl=12 - ( safrs._api.test_API, ) - {'testId': '2020'}
+                /api/test/test?zahl=12 - ( safrs._api.test_API, ) - {'testId': 'test'}
 
         **kwargs : dict
             any parameters. 
@@ -444,21 +450,21 @@ def ispSAFRS_decorator( fn ):
         Tests::
 
             log - q, request.endpoint, safrs_obj._s_object_id, json.dumps(kwargs)
-            /api/gqadb - ['SAFRSRestAPI', 'get'] - api.gqadb - gqadbId - {}
-            /api/gqadb/2020 - ['SAFRSRestAPI', 'get'] - api.gqadbId - gqadbId - {"gqadbId": "2020"}
-            /api/gqadb/test - ['SAFRSJSONRPCAPI', 'get'] - api.gqadb.test - gqadbId - {}
+            /api/testdb - ['SAFRSRestAPI', 'get'] - api.testb - testdbId - {}
+            /api/testdb/2020 - ['SAFRSRestAPI', 'get'] - api.testdbId - testdbId - {"testdbId": "2020"}
+            /api/testdb/test - ['SAFRSJSONRPCAPI', 'get'] - api.testdb.test - testdbId - {}
 
-            /api/gqa - ['SAFRSRestAPI', 'get'] - api.gqa - gqaId - {}
-            /api/gqa/2020 - ['SAFRSRestAPI', 'get'] - api.gqaId - gqaId - {"gqaId": "2020"}
-            /api/gqa/test - ['SAFRSRestAPI', 'get'] - api.gqaId - gqaId - {"gqaId": "test"}
+            /api/test - ['SAFRSRestAPI', 'get'] - api.test - testId - {}
+            /api/test/2020 - ['SAFRSRestAPI', 'get'] - api.testId - testId - {"testId": "2020"}
+            /api/test/test - ['SAFRSRestAPI', 'get'] - api.testId - testId - {"testId": "test"}
 
-            bei /api/gqadb/test
+            bei /api/testdb/test
 
             fn.__name__ - get
             fn.__module__ - safrs.jsonapi
-            request.endpoint - api.gqadb.test
+            request.endpoint - api.testdb.test
             safrs_obj.__module__ - app.db
-            safrs_obj.__name__ - gqadb
+            safrs_obj.__name__ - testdb
             safrs_obj._api.prefix - /api
         """
 
@@ -500,8 +506,8 @@ def ispSAFRS_decorator( fn ):
             objectId = None
             # Argumente parsen
             doArgParse = False
-            # sonderbehandlung bei request.endpoint /api/gqa/<func>
-            #  ist api.gqaId - sollte aber api.gqa.<func> sein
+            # sonderbehandlung bei request.endpoint /api/test/<func>
+            #  ist api.testId - sollte aber api.test.<func> sein
             #  der letzte Teil von request.path ist safrs_obj._s_object_id in kwargs und eine funktion
             name = safrs_obj.__name__.lower()
 
@@ -731,7 +737,8 @@ class ispSAFRS(SAFRSBase):
     custom_decorators = [ispSAFRS_decorator]
 
     _resultUpdate = {
-        "infos": {}
+        "infos": {},
+        "errors": []
     }
 
     exclude_attrs = []  # list of attribute names that should not be serialized
@@ -788,7 +795,21 @@ class ispSAFRS(SAFRSBase):
         else:
             connection = cls.query.session.bind
         return connection
+    
+    @classmethod
+    def _get_engine(cls):
+        """Get engine from connection.
 
+        .. versionadded:: 0.1.9
+
+        Returns
+        -------
+        engine: class
+            _engine.Engine
+        """
+   
+        return create_engine( cls._get_connection() )
+    
     @classmethod
     def _get_session(cls):
         """Get session of query class.
@@ -1095,16 +1116,17 @@ class ispSAFRS(SAFRSBase):
             Das bisherige query Object
         **kwargs : dict
             Beliebige weitere Argumente.
-            verwendet wird type
+            - type : string - Record type angabe 
+            - flat : boolean - result als flaches array ohne attributes und _type statt type   
 
         Returns
         -------
         result : dict::
-
-            - data
-            - count
-            - meta
-            - errors
+            - data : array
+            - count : int
+            - meta : object
+            - errors : array
+            - type: string - nur bei flat=True
 
         _asdict ist in row bei der zusätzlichen Columns durch add_columns
         ohne dies wird die row so verwendet
@@ -1112,8 +1134,11 @@ class ispSAFRS(SAFRSBase):
         """ 
         
         _type = cls.__name__
+        _flat = False
         if 'type' in kwargs:
             _type = kwargs['type']
+        if 'flat' in kwargs:
+            _flat = kwargs['flat']
 
         data = []
         if query:
@@ -1123,16 +1148,18 @@ class ispSAFRS(SAFRSBase):
                     # dies geht nur wenn in row _asdict vorhanden ist (z.B. group)
                     if "_asdict" in dir(row):
                         _row = row._asdict()
-                        _id = None
-                        if "id" in _row:
-                            _id = _row["id"]
-                            del _row["id"]
-                       # _id =
-                        data.append({
-                            "attributes" : _row,
-                            "id": _id,
-                            "type": _type
-                        })
+                        if _flat:
+                            data.append( _row )
+                        else:
+                            _id = None
+                            if "id" in _row:
+                                _id = _row["id"]
+                                del _row["id"]
+                            data.append({
+                                "attributes" : _row,
+                                "id": _id,
+                                "type": _type
+                            })
                     else:
                         data.append( row )
             except Exception as exc:
@@ -1146,6 +1173,8 @@ class ispSAFRS(SAFRSBase):
              "meta": {},
              "errors": [],
         }
+        if _flat:
+            result["type"] = _type 
         
         return result
 
@@ -1704,9 +1733,12 @@ class ispSAFRS(SAFRSBase):
         pageable: False
         filterable: False
         parameters:
-            - name : _ispcp
+            - name : default
+              in : query
+              required : false
               default : {}
-              description : zusätzliche parameter
+              description : default content
+              type: object
         ---
         
         Einen leeren Datensatz zurückgeben ggf. mit parametern füllen.
@@ -1716,8 +1748,13 @@ class ispSAFRS(SAFRSBase):
         **kwargs : dict
             named arguments from restdoc parameters
         """
+        default = {}
+        if "default" in kwargs :
+            default = kwargs['default'] 
+
         _result = {
-            "data" : cls._int_get_empty_record(  )
+            "data" : cls._int_get_empty_record( default ),
+            "count": cls._s_count()
         }
         return cls._int_json_response( _result )
 
@@ -2015,12 +2052,12 @@ class system( ispSAFRSDummy ):
         else: # pragma: no cover
             sysinfo["logger.level"]["ROOT"] = level
 
-        # mqtt logger
-        logger = logging.getLogger( "MQTT" )
+        # isp logger
+        logger = logging.getLogger( "ISP" )
         if logger.level in level:
-            sysinfo["logger.level"]["MQTT"] = "{} - {}".format(logger.level, level[logger.level] )
+            sysinfo["logger.level"]["ISP"] = "{} - {}".format(logger.level, level[logger.level] )
         else: # pragma: no cover
-            sysinfo["logger.level"]["MQTT"] = level
+            sysinfo["logger.level"]["ISP"] = level
 
         import psutil, datetime
         p = psutil.Process()
@@ -2055,14 +2092,14 @@ class system( ispSAFRSDummy ):
                 msg = ""
                 info = ""
                 if str(output).find( fontname ) > -1:
-                    sysinfo["fonts"][fontname] = "OK";
+                    sysinfo["fonts"][fontname] = "OK"
                     msg = "vorhanden"
                     bage = "badge-success"
                     if fontname == "Material Design Icons":
                         has_mdi = True
                    # sysinfo["fonts_msg"] += '<div class="badge badge-pill badge-info mr-1">vorhanden</div><br/>'
                 else: # pragma: no cover
-                    sysinfo["fonts"][fontname] = "MISSING";
+                    sysinfo["fonts"][fontname] = "MISSING"
                     msg = "fehlt"
                     bage = "badge-danger"
                     info = "Dieser Font muss im System installiert werden."
@@ -2190,11 +2227,6 @@ class system( ispSAFRSDummy ):
 
         description: Einfacher test von api Funktionen und Parametern
         parameters:
-            - name : _ispcp
-              in : query
-              default : {}
-              description : zusätzliche parameter
-              type: object
             - name : zahl
               in : query
               required : true

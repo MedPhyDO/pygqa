@@ -12,7 +12,7 @@ logging
 logging verwenden::
 
     import logging
-    logger = logging.getLogger( "MQTT" )
+    logger = logging.getLogger( "ISP" )
 
 debug Meldungen ausgeben::
 
@@ -107,10 +107,22 @@ default_config = {
             "models" : [ ],
             "DBADMIN": False,
             "COVERAGE" : False
+        },
+        "logging": {
+            "isp": 30,
+            "handler": {
+                "mqtt": False,
+                "websocket": False
+            }
+        }, 
+        "mqtt": {
+
         }
     },
     "use_as_variables":{
         "api" : "server.api",
+        "logging" : "server.logging",
+        "basetopic" : "server.webserver.name",
         "mqtt" : "server.mqtt",
         "title" : "server.webserver.title",
         "resources" : "server.webserver.resources"
@@ -146,8 +158,8 @@ class ispConfig( object ):
     _rootlevel:int
         Fehlerlevel für das root logging (console). Default logging.WARNING
 
-    _mqttlevel:int
-        Fehlerlevel für das MQTT logging. Default logging.ERROR
+    _isplevel:int
+        Fehlerlevel für das ISP logging. Default logging.ERROR
 
     _basedir: str
         Verzeichniss des aufgerufenen Programms
@@ -161,14 +173,14 @@ class ispConfig( object ):
     _loadErrors: list
         listet die Dateien auf bei denen es zu einem Fehler beim einlesen kam
 
-    _mqtthdlr: None|cls
-        logger für mqtt zugriff über self._mqtthdlr
+    _handler: None|cls
+        logger für mqtt zugriff über self._handler
 
     """
 
     def __init__( self, lastOverlay:int=None, development:bool=True,
                  rootlevel:int=logging.ERROR,
-                 mqttlevel:int=logging.NOTSET,
+                 isplevel:int=logging.NOTSET,
                  config:dict=None,
                  basedir:str=None
                 ):
@@ -191,7 +203,7 @@ class ispConfig( object ):
         rootlevel: int - logging.ERROR
             NOTSET=0, DEBUG=10, INFO=20, WARN=30, ERROR=40, and CRITICAL=50. Default: ERROR
 
-        mqttlevel: int - logging.NOTSET
+        isplevel: int - logging.NOTSET
             NOTSET=0, DEBUG=10, INFO=20, WARN=30, ERROR=40, and CRITICAL=50. Default: NOTSET
 
         config: dict
@@ -244,11 +256,9 @@ class ispConfig( object ):
         # default logger
         self.rootInitLogger( self._config.server.logging.get("root", rootlevel ) )
 
-        # logger für mqtt zugriff über self._mqtthdlr
-        self._mqtthdlr = None
-
-        # mqtt Logger bereitstellen oder initialisieren
-        self.mqttInitLogger( self._config.server.logging.get("mqtt", mqttlevel ) )
+        if not self._handler and self._config.server.logging.handler.get("mqtt", False):
+            # MQTT LoggerHandler bereitstellen oder initialisieren
+            self.mqttInitLoggerHandler( self._config.server.logging.get("isp", isplevel ) )
 
         # variables vorbelegen
         self.setVariables()
@@ -334,7 +344,7 @@ class ispConfig( object ):
                         # Fehler auch hier anzeigen, da noch kein logger bereitsteht
                         self._loadErrors.append( filename )
                         self._configs.append( osp.basename( filename ) + " - ERROR" )
-                        print( "CONFIG: Fehler bei json.load", filename )
+                        print( " ## CONFIG: Fehler bei json.load", filename )
                         loadOK = False
                         pass
                     if loadOK:
@@ -345,7 +355,7 @@ class ispConfig( object ):
                             # Fehler auch hier anzeigen, da noch kein logger bereitsteht
                             self._loadErrors.append( filename )
                             self._configs.append( osp.basename( filename ) + " - ERROR" )
-                            print( "CONFIG: Fehler bei DotMap( config )", self._config )
+                            print( " ## CONFIG: Fehler bei DotMap( config )", self._config )
                             loadOK = False
                             pass
             return loadOK
@@ -718,8 +728,8 @@ class ispConfig( object ):
 
     # ---- MQTT Logging
     #
-    def mqttInitLogger( self, level:int=None, cleanup:bool=False  ):
-        """Turn on logging via MQTT. 
+    def mqttInitLoggerHandler( self, level:int=logging.NOTSET, cleanup:bool=False  ):
+        """Init logging handlerName via MQTT. 
 
         Parameters
         ----------
@@ -734,20 +744,22 @@ class ispConfig( object ):
 
         """
         # root logger first 
-        self.logger_name = "root"
+        # self.logger_name = "root"
 
         # set up a new handler if desired 
         if cleanup:
             self.mqttCleanup()
 
         if self._config.server.mqtt:
-            # Set MQTT logger 
-            logger = logging.getLogger( "MQTT" )
+            # Set ISP logger 
+            logger = logging.getLogger( "ISP" )
+
+            # print(" - logger.handlers", logger.handlers )
 
             # Handler for MQTT
-            mqtthdlr = self.mqttGetHandler( )
+            handler = self.mqttGetHandler( )
 
-            if not mqtthdlr:
+            if not handler:
 
                 #
                 # if something is changed here, the kernel must be restarted or mqttCleanup called 
@@ -755,10 +767,9 @@ class ispConfig( object ):
 
                 mqtt_init_ready = threading.Event()
 
-                self._thread_mqtthdlr = None
+                self._thread_handler = None
 
                 def signalStartup( msg ):
-
                     mqtt_init_ready.set()
 
                 def startMQTTclass():
@@ -769,9 +780,18 @@ class ispConfig( object ):
                     None.
 
                     """
-                    self._thread_mqtthdlr = MQTTclass( self._config.server.mqtt.toDict() )
+                    config = {
+                        "basetopic": self._config.server.webserver.get('name', 'webapp')
+                    } | self._config.server.mqtt.toDict()
+                   
+                    self._thread_handler = MQTTclass( 
+                        config,
+                        {
+                            "logLevel": level
+                        }
+                    )
                     # wait for signal
-                    self._thread_mqtthdlr.signalStartup.connect( signalStartup )
+                    self._thread_handler.signalStartup.connect( signalStartup )
 
                 # Call as a thread,via mq.get() to get the return of _retrieve 
                 thread = threading.Thread( target=startMQTTclass )
@@ -781,71 +801,46 @@ class ispConfig( object ):
                 while not mqtt_init_ready.wait( timeout=2 ):
                     mqtt_init_ready.set()
 
-                # if mqtt handler has been initialized set logging and _mqtthdlr 
-                if self._thread_mqtthdlr and self._thread_mqtthdlr._mqttc:
-                    _mqtthdlr = self._thread_mqtthdlr
-                    # Initialize the logging handler with the MQTTclass class 
-                    logging.Handler.__init__( _mqtthdlr )
-                    logger.addHandler( _mqtthdlr )
-
-                    # put _mqtthdlr reference and send to logger
-                    logger._mqtthdlr = _mqtthdlr
-                    logger.send = _mqtthdlr.send
-
-                    # provide progress 
-                    logger.progressStart = _mqtthdlr.progress_start
-                    logger.progress = _mqtthdlr.progress_run
-                    logger.progressReady = _mqtthdlr.progress_ready
-
-                    # when everything is ready put reference to _mqtthdlr 
-                    self._mqtthdlr = _mqtthdlr
-
-                    # remember logger name 
-                    self.logger_name = logger.name
-
+                # if mqtt handler has been initialized set logging and _handler 
+                if self._thread_handler and self._thread_handler._handler:
+                    self._handler = self._thread_handler
             else:
-                # logger is available put reference to _mqtthdlr 
-                self._mqtthdlr = mqtthdlr
-                # remember logger name 
-                self.logger_name = logger.name
+                # logger is available put reference to _handler 
+                self._handler = handler
 
-            # set level if specified 
-            if level:
-                logger.setLevel( level )
+            # set logger level 
+            logger.setLevel( level )
 
     def mqttGetHandler(self):
-        """Specifies the mqtt handler when initialized. 
+        """get the mqtt handler when initialized. 
 
         Returns
         -------
-        mqtthdlr.
+        handler
 
         """
-        mqtthdlr = None
-        # If there is no logger in self._mqtthdlr, use logging to determine it 
-        if self._mqtthdlr:
-            mqtthdlr = self._mqtthdlr
+        handler = None
+        # If there is no logger in self._handler, use logging to determine it 
+        if self._handler:
+            handler = self._handler
         else:
-            logger = logging.getLogger( "MQTT" )
-            if hasattr(logger, '_mqtthdlr'):
-                mqtthdlr = logger._mqtthdlr
-        return mqtthdlr
+            logger = logging.getLogger( "ISP" )
+            for h in logger.handlers:
+                if hasattr(h, "handlerName") and h.handlerName == "MQTT":
+                    handler = h
+                    break
+        return handler
 
     def mqttCleanup( self ):
         """shutdown mqtt and remove the logger. 
 
         """
-        if self._mqtthdlr:
+        if self._handler:
             # shutdown mqtt 
-            self._mqtthdlr.shutdown()
-            logger = logging.getLogger( "MQTT" )
-            # remove connection to _mqtthdlr in logger 
-            del( logger._mqtthdlr )
-
-            for h in logger.handlers:
-                logger.removeHandler(h)
-
-            self._mqtthdlr = None
+            self._handler.shutdown()
+            # remove logger Handler
+            self._handler.removeLoggerHandler( self._handler )
+            self._handler = None
 
 # ----  
 

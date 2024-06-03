@@ -72,10 +72,14 @@ from safrs import SAFRSAPI  # , SAFRSRestAPI  # api factory
 from flask import render_template, request
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
+
+from isp.logging import loggingHandlerClass
+from isp.socket import WebSocketClass
+
 import connexion
 
 import logging
-logger = logging.getLogger( "MQTT" )
+logger = logging.getLogger( "ISP" )
 
 import safrs
 from safrs.swagger_doc import parse_object_doc
@@ -203,6 +207,8 @@ class ispBaseWebApp():
     apiurl: string
         url zur api
 
+    webSocket: WebSocketClass
+        initialisierte WebSocketClass
     """
 
     def __init__(self, config=None, db:SQLAlchemy=None, name:str=None, webconfig=None, apiconfig=None, overlay:dict={}):
@@ -264,6 +270,7 @@ class ispBaseWebApp():
         # default status code für templates (routeIndex)
         self.default_header = {'Content-Type': 'text/html; charset=utf-8'}
 
+        self.webSocket = None
         #
         # webserver konfiguration aus config.server erweitern
         #
@@ -289,10 +296,18 @@ class ispBaseWebApp():
             elif type( name ) == list:
                 db_names = name
 
-            for name in db_names:
-                # versuchen eine passende datenbank config zu finden, wenn ja diese verwenden
-                #db_uri = self._config.get("database." + name + ".connection", "").format( **{"BASE_DIR": self._config.BASE_DIR } )
-                db_binds[name] = self._config.get("database." + name + ".connection", "", replaceVariables=True)
+            if len(db_names) > 0:
+                for name in db_names:
+                    # versuchen eine passende datenbank config zu finden, wenn ja diese verwenden
+                    db_uri = self._config.get("database." + name + ".connection", "", replaceVariables=True)
+                    if db_uri != "":
+                        db_binds[name] = db_uri
+            else:
+                name = "db"
+                
+            # without uri use memory database
+            if len(db_binds) == 0:
+                db_binds[name] = "sqlite:///"
 
         self._config.set("database.db_binds", db_binds)
         #
@@ -373,14 +388,25 @@ class ispBaseWebApp():
 
                 # dieser abschnitt wird bei coverage nicht berücksichtigt, da er im testmode nicht ausgeführt wird
                 # nach dem starten der app wird folgender code erst nach dem beenden ausgeführt
-
-                app.run(
-                     host=self._config.get("server.webserver.host"),
-                     port=self._config.get("server.webserver.port"),
-                     use_reloader=self._config.get("server.webserver.reloader"),
-                     threaded=False,
-                     debug=self._config.get("server.webserver.debug")
-                )
+                if self.webSocket and self.webSocket._handler:
+                    self.webSocket._handler.run(
+                        app,
+                        host=self._config.get("server.webserver.host"),
+                        port=self._config.get("server.webserver.port"),
+                        use_reloader=self._config.get("server.webserver.reloader"),
+                        debug=self._config.get("server.webserver.debug"),
+                        log_output=True
+                    #  async_mode='eventlet'
+                    )
+                else:
+                    app.run(
+                        host=self._config.get("server.webserver.host"),
+                        port=self._config.get("server.webserver.port"),
+                        use_reloader=self._config.get("server.webserver.reloader"),
+                        threaded=False,
+                        debug=self._config.get("server.webserver.debug")
+                    )    
+            
 
     def _create_app(self, db:SQLAlchemy=None, binds:dict={} ):
         """Erzeugt die Flask App.
@@ -398,11 +424,28 @@ class ispBaseWebApp():
         #self.app.config['SESSION_TYPE'] = 'memcached'
         self.app.config['SECRET_KEY'] = self._config.get("server.webserver.SECRET_KEY", os.urandom(16) )
 
-
         # config und overlay in app._config merken
         self.app._config = self._config
         self.app._configOverlay = self._configOverlay
 
+        #
+        # add WebSocket 
+        #
+        if self._config.server.logging.handler.get("websocket", False):
+            self.webSocket = WebSocketClass(
+                self.app, 
+                self._config.get("server.webserver").toDict(),
+                {
+                    "logLevel": self._config.server.logging.get( "isp", logging.NOTSET )
+                }
+            )
+        else:
+            # default isp logger aktivieren
+            if self._config.webserver.get( "logging", False):
+                loggingHandlerClass( {}, {
+                    "logLevel": self._config.server.logging.get( "isp", logging.NOTSET )
+                })
+        
         #
         # extend jinja options
         #
@@ -678,13 +721,21 @@ class ispBaseWebApp():
             <!doctype html>
             <html>
             <head>
-                <script type="module" src="/resources/vendor/openapi-explorer/openapi-explorer.min.js"></script>
-           </head>
-            <body>
-                <openapi-explorer server-url="{}" spec-url="{}/{}"> </openapi-explorer>
+                <script type="module" src="/resources/vendor/openapi/rapidoc-min.js"></script>
+            </head>
+            <body>    
+                <rapi-doc
+                    id="openapi-doc"
+                    spec-url="{}/{}"
+                    server-url="{}/"
+                    load-fonts="false"
+                    show-info="true" 
+                    theme="light"
+                    render-style="read"
+                > </rapi-doc>  
             </body>
             </html>
-            """.format( apiurl, apiurl, spec )
+            """.format( apiurl, spec, apiurl )
 
     def routeFile( self, filepath:str="", root="" ):
         """Eine normale Datei laden.

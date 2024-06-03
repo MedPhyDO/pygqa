@@ -37,7 +37,7 @@ from dotmap import DotMap
 
 # logging
 import logging
-logger = logging.getLogger( "MQTT" )
+logger = logging.getLogger( "ISP" )
         
 class qa_vmat( VMATBase, ispCheckClass ):
     '''

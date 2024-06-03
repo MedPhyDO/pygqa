@@ -84,7 +84,7 @@ from pynetdicom.sop_class import (
 from pynetdicom import sop_class
 
 import logging
-logger = logging.getLogger( "MQTT" )
+logger = logging.getLogger( "ISP" )
 # logger.level = 10 # 0 - NOTSET, 10 - DEBUG, 20 - INFO, 30 - WARNING, 40 - ERROR, 50 - CRITICAL
 
 # defaults für die query Rückgaben diese sind gestaffelt IMAGE beinhaltet alle davor

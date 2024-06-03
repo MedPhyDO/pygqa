@@ -27,7 +27,7 @@ from isp.plot import plotClass
 from pylinac.core.geometry import Point
 
 import logging
-logger = logging.getLogger( "MQTT" )
+logger = logging.getLogger( "ISP" )
 
 class plotImage( pyDicomImage, plotClass ):
     """Erweiterung für plotClass (pyplot).

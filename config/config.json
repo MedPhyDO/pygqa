@@ -5,7 +5,9 @@
             "port": 5000,
             "name": "pygqa",
             "title" : "GQA - Geräte-QA",
-            "reloader": false
+            "reloader": false,
+            "debug": false,
+            "logging": true
         },
         "api":{
             "resources" : "{{BASE_DIR}}/resources/",
@@ -15,10 +17,15 @@
         "logging":{
             "__level__" : "0 - NOTSET, 10 - DEBUG, 20 - INFO, 30 - WARNING, 40 - ERROR, 50 - CRITICAL",
             "root" : 40,
+            "isp": 30,
             "mqtt" : 30,
             "safrs": 30,
             "webapp": 30,
-            "sqlalchemy" : 40
+            "sqlalchemy" : 40,
+            "handler": {
+              "mqtt": false,
+              "websocket": true
+            }
         }
     },
     "database": {

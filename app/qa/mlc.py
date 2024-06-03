@@ -25,7 +25,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 import logging
-logger = logging.getLogger( "MQTT" )
+logger = logging.getLogger( "ISP" )
 
 from isp.plot import plotClass
 
@@ -1943,7 +1943,7 @@ class checkMlc( ispBase ):
                 result.append( self.pdf_error_result(
                     md, date=checkDate, group_len=len( result ),
                     msg='<b>Datenfehler</b>: keine Felder gefunden oder das offene Feld fehlt.',
-                    pos={ "top":150 }
+                    area={ "top":130 }
                 ) )
                 return
 
@@ -1980,12 +1980,13 @@ class checkMlc( ispBase ):
             #
             # chart
             #
-            if len( data ) > 12:
+            if len( data ) > 18:
                 result.append( self.pdf_error_result(
                     md, date=checkDate, group_len=len( result ),
-                    msg='<b>Datenfehler</b>: zu viele Felder pro Doserate, Art, Geschw. gefunden. Chart kann nicht angezeigt werden',
-                    pos={ "top":150 }
+                    msg='<b>Datenfehler</b>:<br>Zu viele Felder pro Doserate, Art, Geschw. gefunden. Chart kann nicht angezeigt werden.',
+                    area=md["_chart"] 
                 ) )
+                md["_text"]["left"] = md["_chart"]["left"]
             else:
                 # plot anlegen
                 plot = plotClass( )
@@ -2284,6 +2285,7 @@ class checkMlc( ispBase ):
         """
 
         # metadata defaults vorbereiten
+        # und mit den Angaben aus config (info) ergänzen / überschreiben
         md = dict_merge( DotMap( {
             "series_sort_values" : ['day'],
             "series_groupby": ["day", "SeriesNumber"],
@@ -2314,10 +2316,6 @@ class checkMlc( ispBase ):
                 }
             }
         }), self.metadata )
-
-        # und mit den Angaben aus config (info) ergänzen / überschreiben
-
-
         return self._doLamellenpositioniergenauigkeit(fileData, md)
 
     def _doMLC_VMAT( self, fileData, overrideMD={}, passedOn=True, withOffsets=False ):

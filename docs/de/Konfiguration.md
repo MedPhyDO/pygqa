@@ -50,7 +50,7 @@ Webserver und Api Parameter
 - `webserver:`
   - `host:` IP des Webservers. Default `127.0.0.1` (localhost)
   - `port:` Webserverport. Default `8085`
-  - `name:` Webserver Name für Templates. Default `webapp`
+  - `name:` Webserver Name für Templates. Default `webapp`, wird auch als basetopic Verwendet
   - `title:` Applikations Name für Templates. Default `webapp`
   - `resources:` Pfad zu den Resourcen (Texten, Javascript Bibliotheken, Stylesheets, Fonts).  Default `{BASE_DIR}/resources/`
   - `globals:` Pfad für zusätzliche globalen Resourcen. Default `{BASE_DIR}/resources/`
@@ -66,23 +66,27 @@ Webserver und Api Parameter
   - `DBADMIN:` DB-Admin Zugriff bereitstellen. Default `false`
   - `COVERAGE:` Coverage (Bericht über die Modulnutzung) bereitstellen. (Nur nach einer fehlerfreien Durchführung von `tests/all_unittests.py`). Default `false`
   - `custom_swagger_config:` Ergänzende Sawgger Api Konfiguration für Klassen und Funktionen ohne autom. Anbindung. Nur wenn angegeben.
-  
-- `mqtt:`
+              
+- `logging:` logging level für die Module. 0 - NOTSET, 10 - DEBUG, 20 - INFO, 30 - WARNING, 40 - ERROR, 50 - CRITICAL
+  - `root:` Für den root logger. Default `40`
+  - `isp:` Für den ISP logger. Default `30`
+  - `safrs:` Für die Api Schnittstelle. Default `30`
+  - `webapp:` Für den Webserver. Default `30`
+  - `sqlalchemy:` Für das Datenbankmodul. Default `40`
+  - `handler:` Verwendete handler für den `isp` Logger
+    - `mqtt:` Verwende MQTT Protokoll als handler. Default: `false`
+    - `websocket:` Verwende Websocket Protokoll als handler. Default: `false`
+
+- `mqtt:` Angaben für MQTT, wenn als handler verwendet
   - `host:` IP des MQTT Server. Default `127.0.0.1` (localhost)
   - `port:` Port des MQTT Server. Default `1883`
   - `webclient_port:` Default `9001`
   - `username:` Username für die Autentifizierung. Default ""
   - `password:` Passwort für die Autentifizierung. Default ""
-  - `basetopic:` topic der vor alle topics gesetzt wird. Default ""
-  - `logging:` Aktiviert das logging über MQTT. Der Topic beginnt dabei immer mit `logging/`. Default: `false`
-            
-- `logging:` logging level für die Module. 0 - NOTSET, 10 - DEBUG, 20 - INFO, 30 - WARNING, 40 - ERROR, 50 - CRITICAL
-  - `root:` Für den root logger. Default `40`
-  - `mqtt:` Für den MQTT logger. Default `40`
-  - `safrs:` Für die Api Schnittstelle. Default `40`
-  - `webapp:` Für den Webserver. Default `40`
-  - `sqlalchemy:` Für das Datenbankmodul. Default `40`
-             
+  - `basetopic:` topic der vor alle topics gesetzt wird. Default der Eintrag aus `webserver.name`
+  - `logging:` Aktiviert das logging über MQTT. Der Topic beginnt dabei immer mit `logging/`. Default: `false` 
+
+
 ## Optionen `database`
 
 Datenbank Parameter für verschiedene Datenbanken
@@ -94,6 +98,10 @@ Datenbank Parameter für verschiedene Datenbanken
   - `engine`: Die verwendete Datenbank engine `pytds` oder `pyodbc`
   - `user:` Username für die Autentifizierung. Ausreichend ist ein `nur lese` Zugriff. 
   - `password:` Passwort für die Autentifizierung. 
+
+Zusätzliche Parameter für eine `pandas` Datenspeicherung
+  - `name`: JSON-Datei zum Lesen und Speichern der Ergebnisse (pandas.to_json)
+  Wenn `connection` und `name` angegeben sind, hat die Datenbank Vorrang beim Lesen der Daten.
 
 Zusätzliche Parameter bei der Verwendung von `pytds`
   - `host`:  dsn Angabe für `pytds.connect()` aus `/etc/odbc.ini`
@@ -123,7 +131,9 @@ Eine zusätzliche notwendige Installation für ODBC ist unter [Datenbankverbindu
   - `server_port`: Listen Port des Varian DICOM Servers. Default 105
   - `aet`: Aufrufender AE title unter . Default "GQA"
   - `listen_port`: Der verwendete lokale DICOM Port. Default 50300
-  - `local_dir`:er lokale Speicherort für die geladenen DICOM Dateien Default: **data/DICOM**
+  - `local_dir`: Der lokale Speicherort für die geladenen DICOM Dateien Default: **data/DICOM**
+  - `request_mode`: requestmode für den Server `c_move` oder `c_get` Default `c_get`
+  - `request_query_model`: request_query_model für den Server P-patient S-series O-PS only. Default `S`
 
 ### Aria 13.x
 Die DICOM Optionen müssen denen des `DB Daemon Configuration [DICOM Service Daemon Configuration Wizard]` (DicomController.exe) auf dem Varian Server entsprechen.
@@ -205,7 +215,9 @@ Default:
     "globals" : "server.api.globals",
     "api" : "server.api",
     "mqtt" : "server.mqtt",
-    "title" : "server.webserver.title"
+    "title" : "server.webserver.title",
+    "logging" : "server.logging",
+    "basetopic" : "server.webserver.name",
 }
 ```
 

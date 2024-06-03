@@ -25,7 +25,8 @@ vendors = [
 	"material",
 	"paho-mqtt",
 	"pygment",
-    "openapi-explorer",
+    "socketio",
+    "openapi",
 ]
 
 resources = [
@@ -37,6 +38,10 @@ resources = [
     # d3
     { "from":"https://cdnjs.cloudflare.com/ajax/libs/d3/5.7.0/d3.min.js", "to":"d3/d3-5.7.0.min.js", "typ":"text" },
 	{ "from":"https://code.jquery.com/jquery-3.5.1.min.js", "to":"jquery/jquery-3.5.1.min.js", "typ":"text" },
+    
+    # socketio
+    { "from" : "https://cdn.socket.io/4.7.5/socket.io.esm.min.js", "to":"socketio/socket.io.4.7.x.esm.min.js", "typ":"text" },
+
     # mqtt 
 	{ "from":"https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/paho-mqtt.min.js", "to":"paho-mqtt/paho-mqtt-1.1.0.min.js", "typ":"text" },
 
@@ -48,8 +53,10 @@ resources = [
     { "from":"https://cdnjs.cloudflare.com/ajax/libs/MaterialDesign-Webfont/5.8.55/fonts/materialdesignicons-webfont.woff", "to":"fonts/materialdesignicons-webfont.woff", "typ":"bin" },
     { "from":"https://cdnjs.cloudflare.com/ajax/libs/MaterialDesign-Webfont/5.8.55/fonts/materialdesignicons-webfont.woff2", "to":"fonts/materialdesignicons-webfont.woff2", "typ":"bin" },
 
-    # openapi-explorer
-    { "from":" https://unpkg.com/openapi-explorer@0/dist/browser/openapi-explorer.min.js", "to":"openapi-explorer/openapi-explorer.min.js", "typ":"text" },
+    
+
+    # openapi client
+    { "from" : "https://unpkg.com/rapidoc/dist/rapidoc-min.js", "to":"openapi/rapidoc-min.js", "typ":"text" },
 ]
 
 pygments = {"class": "codehilite", "to":"pygment/codehilite.css"}

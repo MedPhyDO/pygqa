@@ -1,4 +1,23 @@
 # CHANGELOG
+## 0.2.2 / 2024-04-23
+- use Database for results 
+  - change app/db.py
+  - change app/results.py
+  - change app/api.py
+  - change app/ariadicom.py ```__init__()```, ```prepareGQA()```
+  - change app/__init__.py
+- some code cleanups
+- use additional websocket messages
+  - add app/logging.py
+  - add app/socket.py
+  - change app/mqtt.py 
+    - use ```logging.loggingHandlerClass()```
+  - change app/config.py 
+    - modify logging configuration and MQTT handling
+  - change app/webapp.py
+    - add WebSocket Support 
+  - change all ```getLogger( "MQTT" )``` to ```getLogger( "ISP" )``` 
+
 ## 0.2.1 / 2024-03-19
 - change to pylinac 3.20.x
 - change app/aria.py 

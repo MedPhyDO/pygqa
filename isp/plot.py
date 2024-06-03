@@ -25,7 +25,7 @@ import matplotlib.pyplot as plt
 import io
 
 import logging
-logger = logging.getLogger( "MQTT" )
+logger = logging.getLogger( "ISP" )
 
 # Units
 inch = 72.0
